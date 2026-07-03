@@ -11,14 +11,14 @@ export function list() {
 
 export function get(id) {
   const g = repo.getGoal(id);
-  if (!g) throw notFound('goal not found');
+  if (!g) throw notFound('找不到該目標');
   return g;
 }
 
 export async function create({ title, description, assigneeIds } = {}) {
   const assignees = getEmployees(assigneeIds || []);
   if (!title || assignees.length === 0) {
-    throw badRequest('title and at least one assignee are required');
+    throw badRequest('標題與至少一位負責人為必填');
   }
 
   const runtime = getActiveRuntime();
@@ -39,11 +39,11 @@ export async function create({ title, description, assigneeIds } = {}) {
 
 export function update(id, patch = {}) {
   const updated = repo.updateGoal(id, patch);
-  if (!updated) throw notFound('goal not found');
+  if (!updated) throw notFound('找不到該目標');
   return updated;
 }
 
 export function remove(id) {
-  if (!repo.deleteGoal(id)) throw notFound('goal not found');
+  if (!repo.deleteGoal(id)) throw notFound('找不到該目標');
   return { ok: true };
 }

@@ -40,7 +40,7 @@ export function createApp() {
   }
 
   // Unknown API route → 404 JSON.
-  app.use('/api', (_req, res) => res.status(404).json({ error: 'not found' }));
+  app.use('/api', (_req, res) => res.status(404).json({ error: '找不到資源' }));
 
   // Central error handler. Services throw HttpError (with .status); anything
   // else is a 500.
@@ -48,7 +48,7 @@ export function createApp() {
   app.use((err, _req, res, _next) => {
     const status = err.status || 500;
     if (status >= 500) console.error('[error]', err);
-    res.status(status).json({ error: err.message || 'internal error' });
+    res.status(status).json({ error: err.message || '內部錯誤' });
   });
 
   return app;

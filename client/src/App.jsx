@@ -5,13 +5,13 @@ import MeetingsPage from './pages/MeetingsPage.jsx';
 import GoalsPage from './pages/GoalsPage.jsx';
 
 const TABS = [
-  { key: 'employees', label: '👥 Employees' },
-  { key: 'meetings', label: '🗓️ Meetings' },
-  { key: 'goals', label: '🎯 Goals' },
+  { key: 'employees', label: '👥 員工' },
+  { key: 'meetings', label: '🗓️ 會議' },
+  { key: 'goals', label: '🎯 目標' },
 ];
 
 const RUNTIME_LABELS = {
-  simulated: 'Simulated',
+  simulated: '模擬',
   openclaw: 'OpenClaw',
 };
 
@@ -40,14 +40,14 @@ export default function App() {
         <div className="brand">
           <span className="logo">🧑‍💼</span>
           <div>
-            <h1>Virtual Employee System</h1>
-            <p className="subtitle">You are the manager. Build your team of AI employees.</p>
+            <h1>虛擬員工系統</h1>
+            <p className="subtitle">你是主管，打造屬於你的 AI 員工團隊。</p>
           </div>
         </div>
         <div className="topbar-status">
           {settings && (
-            <label className="runtime-switch" title="Which runtime executes your subagents">
-              <span className="runtime-label">Runtime</span>
+            <label className="runtime-switch" title="由哪個執行環境驅動你的子代理">
+              <span className="runtime-label">執行環境</span>
               <select value={settings.runtimeMode} onChange={(e) => switchRuntime(e.target.value)}>
                 {(settings.availableModes || ['simulated']).map((m) => (
                   <option key={m} value={m}>{RUNTIME_LABELS[m] || m}</option>
@@ -57,7 +57,7 @@ export default function App() {
           )}
           {health && (
             <span className={`pill ${health.llm ? 'pill-live' : 'pill-sim'}`}>
-              {health.llm ? 'LLM: live' : 'LLM: simulated'}
+              {health.llm ? 'LLM：即時（Gemma）' : 'LLM：模擬'}
             </span>
           )}
         </div>
@@ -82,7 +82,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        Local MVP · SQLite store · runs fully offline · runtime: {settings?.runtimeMode || '—'}
+        本機 MVP · SQLite 儲存 · 完全離線可用 · 執行環境：{settings ? (RUNTIME_LABELS[settings.runtimeMode] || settings.runtimeMode) : '—'}
       </footer>
     </div>
   );

@@ -2,9 +2,10 @@
 //
 // Employees "reason" via the deterministic engine, grounded with knowledge
 // chunks pulled from the retrieval layer (simple RAG). If a live LLM is
-// configured (ANTHROPIC_API_KEY), the meeting report / goal plan are enriched by
-// Claude — but the transcript, minutes, grounding and every fallback remain the
-// deterministic engine's, so the app never depends on the network.
+// configured (Google Gen AI — GEMINI_API_KEY), the meeting report / goal plan
+// are enriched by the Gemma model — but the transcript, minutes, grounding and
+// every fallback remain the deterministic engine's, so the app never depends on
+// the network.
 import { AgentRuntimeAdapter } from './AgentRuntimeAdapter.js';
 import * as engine from '../reasoning/engine.js';
 import { groundingFor } from '../storage/retrieval.js';
@@ -12,7 +13,7 @@ import { complete, llmEnabled } from '../reasoning/llm.js';
 
 export class SimulatedRuntimeAdapter extends AgentRuntimeAdapter {
   get mode() { return 'simulated'; }
-  get label() { return llmEnabled() ? 'Simulated + LLM' : 'Simulated'; }
+  get label() { return llmEnabled() ? '模擬 ＋ Gemma' : '模擬'; }
 
   async health() {
     return { mode: this.mode, label: this.label, ready: true, llm: llmEnabled() };
@@ -25,11 +26,11 @@ export class SimulatedRuntimeAdapter extends AgentRuntimeAdapter {
 
     if (llmEnabled()) {
       const knowledgeBlock = flat.length
-        ? `\n\nRelevant team knowledge (cite where useful):\n${flat.map((h) => `- (${h.employeeName}) ${h.documentTitle}: ${h.content}`).join('\n')}`
+        ? `\n\n相關團隊知識（適當引用）：\n${flat.map((h) => `- （${h.employeeName}）${h.documentTitle}：${h.content}`).join('\n')}`
         : '';
       const text = await complete(
-        'You are a meeting facilitator producing a concise executive report grounded in the team knowledge provided.',
-        `Topic: ${topic}\nParticipants: ${participants.map((p) => `${p.name} (${p.roleTitle})`).join(', ')}\nTranscript:\n${result.transcript.map((t) => `${t.speaker}: ${t.text}`).join('\n')}${knowledgeBlock}\n\nWrite a concise markdown report with Summary, Decisions, Action Items, Recommendation.`,
+        '你是一位會議主持人，根據提供的團隊知識產出一份精煉的主管級會議報告。請務必以繁體中文撰寫。',
+        `主題：${topic}\n與會者：${participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、')}\n逐字紀錄：\n${result.transcript.map((t) => `${t.speaker}：${t.text}`).join('\n')}${knowledgeBlock}\n\n請以繁體中文撰寫一份精煉的 Markdown 報告，包含「摘要」、「決議」、「行動項目」、「建議」四個章節。`,
       );
       if (text) result.report = text.trim();
     }
@@ -49,11 +50,11 @@ export class SimulatedRuntimeAdapter extends AgentRuntimeAdapter {
 
     if (llmEnabled()) {
       const knowledgeBlock = flat.length
-        ? `\n\nRelevant team knowledge:\n${flat.map((h) => `- (${h.employeeName}) ${h.documentTitle}: ${h.content}`).join('\n')}`
+        ? `\n\n相關團隊知識：\n${flat.map((h) => `- （${h.employeeName}）${h.documentTitle}：${h.content}`).join('\n')}`
         : '';
       const text = await complete(
-        'You are a program manager writing a collaboration plan grounded in the team knowledge provided.',
-        `Goal: ${title}\n${description || ''}\nAssignees: ${assignees.map((p) => `${p.name} (${p.roleTitle})`).join(', ')}${knowledgeBlock}\n\nWrite a concise markdown collaboration output: Plan, per-owner subtasks, Integration, Next Steps.`,
+        '你是一位專案經理，根據提供的團隊知識撰寫一份協作計畫。請務必以繁體中文撰寫。',
+        `目標：${title}\n${description || ''}\n負責人：${assignees.map((p) => `${p.name}（${p.roleTitle}）`).join('、')}${knowledgeBlock}\n\n請以繁體中文撰寫一份精煉的 Markdown 協作產出，包含「計畫」、「各負責人子任務」、「整合」、「後續步驟」。`,
       );
       if (text) result.output = text.trim();
     }

@@ -21,7 +21,7 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
   #fallback = new SimulatedRuntimeAdapter();
 
   get mode() { return 'openclaw'; }
-  get label() { return openclawConfigured() ? 'OpenClaw (live)' : 'OpenClaw (simulated fallback)'; }
+  get label() { return openclawConfigured() ? 'OpenClaw（即時）' : 'OpenClaw（模擬備援）'; }
 
   configured() {
     return openclawConfigured();
@@ -78,7 +78,7 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
         label: this.label,
         grounded: result.grounding?.length || 0,
         fallback: true,
-        note: 'OpenClaw not configured (set OPENCLAW_ENDPOINT); simulated locally.',
+        note: '尚未設定 OpenClaw（請設定 OPENCLAW_ENDPOINT）；已在本機以模擬方式執行。',
       },
     };
   }

@@ -17,7 +17,7 @@ export function getActiveRuntime() {
 
 export function setRuntimeMode(mode) {
   if (!RUNTIME_MODES.includes(mode)) {
-    throw badRequest(`unknown runtime mode "${mode}" — expected one of: ${RUNTIME_MODES.join(', ')}`);
+    throw badRequest(`未知的執行環境模式「${mode}」——預期為下列其中之一：${RUNTIME_MODES.join('、')}`);
   }
   setSetting(RUNTIME_KEY, mode);
   return getSettings();

@@ -6,7 +6,7 @@ const json = (method) => (path, body) =>
     body: body ? JSON.stringify(body) : undefined,
   }).then(async (res) => {
     const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-    if (!res.ok) throw new Error(data?.error || `Request failed (${res.status})`);
+    if (!res.ok) throw new Error(data?.error || `請求失敗（${res.status}）`);
     return data;
   });
 

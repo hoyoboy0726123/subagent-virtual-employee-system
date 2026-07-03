@@ -14,6 +14,6 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     console.log(`\n  🧑‍💼 Virtual Employee System API on http://localhost:${config.port}`);
     console.log(`  Storage : SQLite (${config.dbFile})`);
     console.log(`  Runtime : ${getRuntimeMode()}`);
-    console.log(`  LLM     : ${llmEnabled() ? 'live (Anthropic)' : 'off (deterministic engine)'}\n`);
+    console.log(`  LLM     : ${llmEnabled() ? `live (Google Gen AI · ${config.llm.model})` : 'off (deterministic engine)'}\n`);
   });
 }

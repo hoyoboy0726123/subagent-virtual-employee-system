@@ -7,10 +7,15 @@ base**, pull them into meetings, and assign them collaborative goals — then re
 the transcripts, minutes, reports, and collaboration outputs they produce, each
 **grounded in retrieved knowledge**.
 
+The entire product UI is in **Traditional Chinese (繁體中文)** — buttons, tabs,
+labels, dialogs, empty states, runtime labels, and the generated meeting
+reports / collaboration outputs.
+
 It runs **fully offline with zero API keys**. Every subagent contribution is
 produced by a deterministic, persona-driven engine grounded with a simple RAG
-retrieval layer. An optional live-LLM path (Anthropic) and a (stubbed) real
-**OpenClaw** subagent runtime can be switched on, but nothing requires them.
+retrieval layer. An optional live-LLM path (**Google Gen AI**, model
+`gemma-4-31b-it`) and a (stubbed) real **OpenClaw** subagent runtime can be
+switched on, but nothing requires them.
 
 > **Phase 2** rebuilt the backend on **SQLite** with a clean layered
 > architecture (routes → services → runtime → storage/retrieval), added a
@@ -106,7 +111,7 @@ subagent-virtual-employee-system/
 │   │   ├── reasoning/              ── the "subagent" thinking ──
 │   │   │   ├── engine.js  ★        pure, offline, persona + RAG generators
 │   │   │   ├── chunk.js            sentence-aware text chunker
-│   │   │   └── llm.js              optional Anthropic path (fallback to engine)
+│   │   │   └── llm.js              Google Gen AI path (@google/genai; fallback to engine)
 │   │   │
 │   │   ├── storage/                ── storage / retrieval layer ──
 │   │   │   ├── employees.repo.js   · knowledge.repo.js (documents + chunks + FTS)
@@ -182,7 +187,7 @@ stable interface (`runtime/AgentRuntimeAdapter.js`) so they're interchangeable:
 
 | Adapter | Mode | Behavior |
 |---------|------|----------|
-| `SimulatedRuntimeAdapter` | `simulated` (default) | Deterministic engine + RAG grounding, fully offline. Enriches the report/plan via Claude if `ANTHROPIC_API_KEY` is set. |
+| `SimulatedRuntimeAdapter` | `simulated` (default) | Deterministic engine + RAG grounding, fully offline. Enriches the report/plan via Google's Gemma model if `GEMINI_API_KEY` is set. |
 | `OpenClawRuntimeAdapter` | `openclaw` | **Stubbed.** Where the manager spawns each employee as a real OpenClaw subagent. Until wired up, it transparently falls back to the simulated adapter and labels its output `fallback: true`. |
 
 Switch modes live from the header, or via the API:
@@ -212,18 +217,40 @@ Set `OPENCLAW_ENDPOINT` to flip `configured()` on. Nothing else in the app
 changes — services, routes, storage, and the client all depend only on the
 adapter interface.
 
-### Optional: live LLM
+### Optional: live LLM via Google Gen AI (`@google/genai`)
+
+The optional live path uses the official **[`@google/genai`](https://www.npmjs.com/package/@google/genai)**
+SDK and Google's **`gemma-4-31b-it`** model. Authentication is by API key —
+create one in **[Google AI Studio](https://aistudio.google.com/apikey)** and set
+it in the environment:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...        # enables richer generation
-export ANTHROPIC_MODEL=claude-sonnet-5     # optional, this is the default
+export GEMINI_API_KEY=AIza...              # preferred; enables the live path
+# export GOOGLE_API_KEY=AIza...            # also accepted as a fallback var
+# export GEMINI_MODEL=gemma-4-31b-it       # optional override (this is the default)
 npm run dev
 ```
 
-The header pill flips to **"LLM: live"**. In simulated mode the report/plan are
-then written by Claude, grounded with the retrieved knowledge; the transcript,
-minutes, grounding, and every fallback stay deterministic so the app never
-breaks on a network error.
+The header pill flips to **「LLM：即時（Gemma）」**. In simulated mode the meeting
+**report** and goal **collaboration output** are then written by Gemma (prompted
+in Traditional Chinese), grounded with the retrieved knowledge. The transcript,
+minutes, grounding, and every fallback stay deterministic, so **if the key is
+missing or any Google call fails, the app silently falls back** to the offline
+engine and never breaks on a network error.
+
+**How it's wired** (`server/src/reasoning/llm.js`):
+
+- A single `GoogleGenAI` client is created lazily from `config.llm.apiKey`.
+- All generation goes through `ai.models.generateContent(...)`, wrapped by one
+  `generate()` primitive that returns a normalized `{ text, functionCalls }`
+  shape (or `null` on any failure → deterministic fallback).
+- **Function calling is a first-class extension point**: pass `tools` built with
+  the exported `toolset(...)` helper and `Type` (re-exported from the SDK), then
+  read `.functionCalls` off the result — no call site needs to change to adopt
+  tool-calling later.
+- Because Gemma models on the Gemini API don't take a separate system role, a
+  system instruction is folded into the prompt for Gemma (and passed as a real
+  `systemInstruction` for non-Gemma models).
 
 ---
 

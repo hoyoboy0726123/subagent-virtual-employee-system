@@ -60,12 +60,12 @@ try {
     assert.equal(status, 400);
   });
 
-  await step('ideate a role from a description', async () => {
+  await step('ideate a role from a description (Traditional Chinese output)', async () => {
     const { status, json } = await api('POST', '/api/employees/ideate', {
       description: 'someone to run our marketing campaigns and content',
     });
     assert.equal(status, 200);
-    assert.equal(json.roleTitle, 'Marketing Lead');
+    assert.equal(json.roleTitle, '行銷主管');
     assert.ok(json.profile.length > 20);
   });
 

@@ -23,17 +23,17 @@ export default function EmployeesPage({ refreshKey, onChange }) {
     <div className="page">
       <div className="page-head">
         <div>
-          <h2>Your Team</h2>
-          <p className="muted">{employees.length} employee(s). Click a card to open a profile and knowledge base.</p>
+          <h2>你的團隊</h2>
+          <p className="muted">共 {employees.length} 位員工。點擊卡片可開啟個人檔案與知識庫。</p>
         </div>
         <div className="actions">
-          <button className="btn-ghost" onClick={() => setIdeating(true)}>✨ Ideate a role</button>
-          <button className="btn" onClick={openNew}>+ New employee</button>
+          <button className="btn-ghost" onClick={() => setIdeating(true)}>✨ 發想角色</button>
+          <button className="btn" onClick={openNew}>+ 新增員工</button>
         </div>
       </div>
 
       {employees.length === 0 ? (
-        <Empty>No employees yet. Create one, or use “Ideate a role” to draft one from a description.</Empty>
+        <Empty>尚無員工。請新增一位，或使用「發想角色」由一段描述草擬。</Empty>
       ) : (
         <div className="grid">
           {employees.map((e) => (
@@ -42,7 +42,7 @@ export default function EmployeesPage({ refreshKey, onChange }) {
               <div className="card-main">
                 <h3>{e.name}</h3>
                 <p className="role">{e.roleTitle}</p>
-                <p className="muted clamp">{e.personality || 'No personality set.'}</p>
+                <p className="muted clamp">{e.personality || '尚未設定個性。'}</p>
                 <div className="tags">
                   {(Array.isArray(e.expertise) ? e.expertise : String(e.expertise).split(','))
                     .filter(Boolean).slice(0, 3)
@@ -108,7 +108,7 @@ function EmployeeForm({ initial, onClose, onSaved }) {
 
   const save = async () => {
     setErr('');
-    if (!form.name || !form.roleTitle) { setErr('Name and role title are required.'); return; }
+    if (!form.name || !form.roleTitle) { setErr('姓名與職稱為必填。'); return; }
     setBusy(true);
     try {
       if (form.id) await api.put(`/employees/${form.id}`, payload());
@@ -118,32 +118,32 @@ function EmployeeForm({ initial, onClose, onSaved }) {
   };
 
   return (
-    <Modal title={form.id ? 'Edit employee' : 'New employee'} onClose={onClose} wide>
+    <Modal title={form.id ? '編輯員工' : '新增員工'} onClose={onClose} wide>
       {err && <div className="banner-err">{err}</div>}
       <div className="form-grid">
-        <label>Name*<input value={form.name} onChange={set('name')} placeholder="Aria Chen" /></label>
-        <label>Role title*<input value={form.roleTitle} onChange={set('roleTitle')} placeholder="Product Manager" /></label>
-        <label>Personality / background<input value={form.personality} onChange={set('personality')} placeholder="decisive and outcome-focused" /></label>
-        <label>Communication style<input value={form.communicationStyle} onChange={set('communicationStyle')} placeholder="crisp and narrative" /></label>
-        <label className="col-2">Expertise (comma-separated)<input value={form.expertise} onChange={set('expertise')} placeholder="product strategy, roadmapping, user research" /></label>
-        <label className="col-2">Objectives<input value={form.objectives} onChange={set('objectives')} placeholder="Ship a product customers love." /></label>
+        <label>姓名*<input value={form.name} onChange={set('name')} placeholder="王小明" /></label>
+        <label>職稱*<input value={form.roleTitle} onChange={set('roleTitle')} placeholder="產品經理" /></label>
+        <label>個性／背景<input value={form.personality} onChange={set('personality')} placeholder="果斷且重視成效" /></label>
+        <label>溝通風格<input value={form.communicationStyle} onChange={set('communicationStyle')} placeholder="簡潔且具敘事性" /></label>
+        <label className="col-2">專長（以逗號分隔）<input value={form.expertise} onChange={set('expertise')} placeholder="產品策略, 路線圖規劃, 使用者研究" /></label>
+        <label className="col-2">目標<input value={form.objectives} onChange={set('objectives')} placeholder="交付讓顧客喜愛的產品。" /></label>
       </div>
 
       <div className="profile-head">
-        <label className="profile-label">Generated background / profile</label>
-        <button className="btn-ghost sm" onClick={genProfile} disabled={busy}>↻ Generate from fields</button>
+        <label className="profile-label">自動產生的背景／個人檔案</label>
+        <button className="btn-ghost sm" onClick={genProfile} disabled={busy}>↻ 由欄位產生</button>
       </div>
       <textarea
         className="profile-area"
         rows={8}
         value={form.profile}
         onChange={set('profile')}
-        placeholder="Click “Generate from fields”, then edit freely."
+        placeholder="點擊「由欄位產生」，之後可自由編輯。"
       />
 
       <div className="modal-actions">
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn" onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save employee'}</button>
+        <button className="btn-ghost" onClick={onClose}>取消</button>
+        <button className="btn" onClick={save} disabled={busy}>{busy ? '儲存中…' : '儲存員工'}</button>
       </div>
     </Modal>
   );
@@ -171,17 +171,17 @@ function IdeateModal({ onClose, onDraft }) {
   };
 
   return (
-    <Modal title="✨ Ideate a role" onClose={onClose}>
-      <p className="muted">Describe the kind of employee you need. We’ll draft a full profile you can edit before saving.</p>
+    <Modal title="✨ 發想角色" onClose={onClose}>
+      <p className="muted">描述你需要的員工類型，我們會草擬一份完整檔案，儲存前可自由編輯。</p>
       <textarea
         rows={4}
         value={desc}
         onChange={(e) => setDesc(e.target.value)}
-        placeholder="e.g. Someone to own our backend APIs and database reliability"
+        placeholder="例如：負責我們後端 API 與資料庫可靠性的人選"
       />
       <div className="modal-actions">
-        <button className="btn-ghost" onClick={onClose}>Cancel</button>
-        <button className="btn" onClick={draft} disabled={busy || !desc.trim()}>{busy ? 'Drafting…' : 'Draft profile →'}</button>
+        <button className="btn-ghost" onClick={onClose}>取消</button>
+        <button className="btn" onClick={draft} disabled={busy || !desc.trim()}>{busy ? '草擬中…' : '草擬檔案 →'}</button>
       </div>
     </Modal>
   );
@@ -204,7 +204,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   const delNote = async (kid) => { await api.del(`/knowledge/${kid}`); onChange(); };
 
   const remove = async () => {
-    if (!confirm(`Delete ${employee.name}? This also removes their knowledge base.`)) return;
+    if (!confirm(`確定要刪除 ${employee.name}？此操作會一併移除其知識庫。`)) return;
     await api.del(`/employees/${employee.id}`);
     onDeleted();
   };
@@ -217,29 +217,29 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
             {employee.personality && <span className="tag">🧠 {employee.personality}</span>}
             {employee.communicationStyle && <span className="tag">💬 {employee.communicationStyle}</span>}
           </div>
-          {employee.objectives && <p><strong>Objectives:</strong> {employee.objectives}</p>}
+          {employee.objectives && <p><strong>目標：</strong> {employee.objectives}</p>}
           <div className="tags">
             {(employee.expertise || []).map((t) => <span key={t} className="tag tag-blue">{t}</span>)}
           </div>
-          <h4>Background</h4>
+          <h4>背景</h4>
           <div className="profile-box"><Markdown text={employee.profile} /></div>
         </section>
 
         <section>
-          <h4>📚 Personal knowledge base <span className="count">{employee.knowledge?.length || 0}</span></h4>
+          <h4>📚 個人知識庫 <span className="count">{employee.knowledge?.length || 0}</span></h4>
           <div className="note-form">
             <input
-              placeholder="Note title"
+              placeholder="筆記標題"
               value={note.title}
               onChange={(e) => setNote({ ...note, title: e.target.value })}
             />
             <textarea
               rows={2}
-              placeholder="Add a fact, doc snippet, or context this employee should know…"
+              placeholder="新增一則此員工應知道的事實、文件摘錄或背景…"
               value={note.content}
               onChange={(e) => setNote({ ...note, content: e.target.value })}
             />
-            <button className="btn sm" onClick={addNote} disabled={busy || !note.content.trim()}>+ Add note</button>
+            <button className="btn sm" onClick={addNote} disabled={busy || !note.content.trim()}>+ 新增筆記</button>
           </div>
           <ul className="notes">
             {(employee.knowledge || []).map((k) => (
@@ -247,26 +247,26 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                 <div>
                   <strong>{k.title}</strong>
                   {typeof k.chunkCount === 'number' && (
-                    <span className="count" title="retrievable chunks">{k.chunkCount} chunk{k.chunkCount === 1 ? '' : 's'}</span>
+                    <span className="count" title="可檢索片段">{k.chunkCount} 個片段</span>
                   )}
                   <p className="muted">{k.content}</p>
                   {(k.tags || []).length > 0 && (
                     <div className="tags">{k.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
                   )}
                 </div>
-                <button className="icon-btn" onClick={() => delNote(k.id)} aria-label="Delete note">🗑</button>
+                <button className="icon-btn" onClick={() => delNote(k.id)} aria-label="刪除筆記">🗑</button>
               </li>
             ))}
             {(!employee.knowledge || employee.knowledge.length === 0) && (
-              <li className="muted">No notes yet.</li>
+              <li className="muted">尚無筆記。</li>
             )}
           </ul>
         </section>
       </div>
 
       <div className="modal-actions between">
-        <button className="btn-danger" onClick={remove}>Delete employee</button>
-        <button className="btn" onClick={onEdit}>Edit profile</button>
+        <button className="btn-danger" onClick={remove}>刪除員工</button>
+        <button className="btn" onClick={onEdit}>編輯檔案</button>
       </div>
     </Modal>
   );

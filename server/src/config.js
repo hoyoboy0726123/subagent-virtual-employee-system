@@ -29,10 +29,13 @@ export const config = {
     topK: Number(process.env.RETRIEVAL_TOP_K) || 4,
   },
 
-  // Optional live LLM (Anthropic). Absent by default → deterministic engine.
+  // Optional live LLM via Google Gen AI (@google/genai). Absent by default →
+  // deterministic engine. Auth is by API key: prefer GEMINI_API_KEY, fall back
+  // to GOOGLE_API_KEY. The model id is fixed to gemma-4-31b-it but overridable.
   llm: {
-    apiKey: process.env.ANTHROPIC_API_KEY || '',
-    model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-5',
+    provider: 'google',
+    apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
+    model: process.env.GEMINI_MODEL || 'gemma-4-31b-it',
   },
 
   // Optional OpenClaw runtime wiring. When unset the OpenClaw adapter runs in

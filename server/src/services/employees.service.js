@@ -14,13 +14,13 @@ export function list() {
 // `knowledge` field the existing client reads).
 export function getWithKnowledge(id) {
   const emp = repo.getEmployee(id);
-  if (!emp) throw notFound('employee not found');
+  if (!emp) throw notFound('找不到該員工');
   return { ...emp, knowledge: listDocuments(id) };
 }
 
 export function create(input = {}) {
   if (!input.name || !input.roleTitle) {
-    throw badRequest('name and roleTitle are required');
+    throw badRequest('姓名與職稱為必填');
   }
   const profile = input.profile || engine.generateProfile(input);
   return repo.insertEmployee({ ...input, profile });
@@ -28,12 +28,12 @@ export function create(input = {}) {
 
 export function update(id, patch = {}) {
   const updated = repo.updateEmployee(id, patch);
-  if (!updated) throw notFound('employee not found');
+  if (!updated) throw notFound('找不到該員工');
   return updated;
 }
 
 export function remove(id) {
-  if (!repo.deleteEmployee(id)) throw notFound('employee not found');
+  if (!repo.deleteEmployee(id)) throw notFound('找不到該員工');
   return { ok: true };
 }
 
@@ -45,8 +45,8 @@ export async function ideate(description = '') {
   const draft = engine.ideateRole(description);
   if (llmEnabled()) {
     const text = await complete(
-      'You are an HR assistant that drafts a virtual employee profile. Reply with a vivid 2-paragraph background only.',
-      `Draft a background for an employee described as: ${description}. Role: ${draft.roleTitle}. Expertise: ${draft.expertise.join(', ')}.`,
+      '你是一位人資助理，負責草擬虛擬員工的個人檔案。請務必以繁體中文回覆，僅提供生動的兩段式背景描述。',
+      `請為以下描述的員工草擬背景：${description}。職稱：${draft.roleTitle}。專長：${draft.expertise.join('、')}。`,
     );
     if (text) draft.profile = text.trim();
   }

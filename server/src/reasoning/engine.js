@@ -5,15 +5,16 @@
 // them (simple RAG). Every function here is pure and runs fully offline — this
 // is the default runtime and the guaranteed fallback for the live/OpenClaw paths.
 //
-// `groundingByEmployee` is a map of employeeId → array of retrieved chunks
-// ({documentTitle, content, score, ...}); when empty the engine degrades
+// All user-facing output is Traditional Chinese (繁體中文) to stay coherent with
+// the UI. `groundingByEmployee` is a map of employeeId → array of retrieved
+// chunks ({documentTitle, content, score, ...}); when empty the engine degrades
 // gracefully to persona-only reasoning.
 
 const asList = (v) =>
   (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
 
 function firstName(name = '') {
-  return name.trim().split(/\s+/)[0] || 'Employee';
+  return name.trim().split(/\s+/)[0] || '成員';
 }
 
 const snippet = (text = '', n = 90) => {
@@ -25,59 +26,60 @@ const snippet = (text = '', n = 90) => {
 // 1. Profile / background generation
 // ---------------------------------------------------------------------------
 export function generateProfile(input) {
-  const name = input.name || 'New Employee';
-  const role = input.roleTitle || 'Team Member';
+  const name = input.name || '新進員工';
+  const role = input.roleTitle || '團隊成員';
   const expertise = asList(input.expertise);
-  const personality = input.personality || 'pragmatic and collaborative';
-  const style = input.communicationStyle || 'clear and concise';
-  const objectives = input.objectives || 'help the team ship high-quality work';
+  const personality = input.personality || '務實且善於協作';
+  const style = input.communicationStyle || '清楚且精煉';
+  const objectives = input.objectives || '協助團隊交付高品質的成果';
 
-  const expertiseLine = expertise.length ? expertise.join(', ') : 'general problem solving';
+  const expertiseLine = expertise.length ? expertise.join('、') : '一般問題解決';
 
   return [
-    `${name} is a ${role} on the team.`,
+    `${name} 是團隊中的${role}。`,
     ``,
-    `Background: ${name} brings deep experience in ${expertiseLine}. They are known for being ${personality}, and approach problems by grounding decisions in evidence and the team's goals.`,
+    `背景：${name} 在 ${expertiseLine} 方面擁有深厚經驗，以${personality}著稱，並習慣以證據與團隊目標作為決策依據。`,
     ``,
-    `Working style: ${name} communicates in a ${style} manner. In discussions they focus on ${expertise[0] || 'the core problem'}, surface trade-offs early, and push for concrete next steps.`,
+    `工作風格：${name} 以${style}的方式溝通。在討論中會聚焦於 ${expertise[0] || '核心問題'}，及早點出取捨，並推動具體的下一步。`,
     ``,
-    `Objectives: ${objectives}.`,
+    `目標：${objectives}。`,
     ``,
-    `Operating principles:`,
-    `- Anchor every recommendation to the stated goal and known constraints.`,
-    `- Reference relevant knowledge before opinion.`,
-    `- Prefer small, verifiable steps over big-bang plans.`,
+    `行事原則：`,
+    `- 每項建議都緊扣既定目標與已知限制。`,
+    `- 先參考相關知識，再表達意見。`,
+    `- 偏好小而可驗證的步驟，而非一次到位的大計畫。`,
   ].join('\n');
 }
 
 // ---------------------------------------------------------------------------
 // 2. Role ideation — manager describes what they want, we draft a full role
+//    (keyword matching supports both English and Traditional Chinese input)
 // ---------------------------------------------------------------------------
 const ROLE_LIBRARY = [
-  { match: /(front|ui|ux|design|react|css)/i, roleTitle: 'Frontend Engineer', expertise: ['React', 'UI/UX', 'accessibility', 'design systems'], personality: 'detail-oriented and user-empathetic', style: 'visual and example-driven' },
-  { match: /(back|api|server|database|infra|devops|cloud)/i, roleTitle: 'Backend Engineer', expertise: ['APIs', 'databases', 'scalability', 'reliability'], personality: 'systematic and risk-aware', style: 'precise and structured' },
-  { match: /(\bdata\b|analytics|\bml\b|\bai\b|machine learning|\bmodel\b|scien)/i, roleTitle: 'Data Scientist', expertise: ['statistics', 'machine learning', 'experimentation', 'data storytelling'], personality: 'curious and rigorous', style: 'evidence-first and quantified' },
-  { match: /(product|pm|road|strategy|market fit)/i, roleTitle: 'Product Manager', expertise: ['product strategy', 'roadmapping', 'user research', 'prioritization'], personality: 'decisive and outcome-focused', style: 'crisp and narrative' },
-  { match: /(market|growth|brand|content|seo|campaign)/i, roleTitle: 'Marketing Lead', expertise: ['positioning', 'content', 'growth loops', 'analytics'], personality: 'creative and data-informed', style: 'persuasive and punchy' },
-  { match: /(sales|revenue|account|customer success|deal)/i, roleTitle: 'Sales Lead', expertise: ['pipeline management', 'negotiation', 'discovery', 'relationship building'], personality: 'energetic and persistent', style: 'warm and outcome-driven' },
-  { match: /(finance|budget|account|cfo|cost)/i, roleTitle: 'Finance Analyst', expertise: ['financial modeling', 'budgeting', 'forecasting', 'unit economics'], personality: 'careful and skeptical', style: 'numbers-first and conservative' },
-  { match: /(legal|compliance|risk|policy|privacy)/i, roleTitle: 'Legal & Compliance Advisor', expertise: ['contracts', 'compliance', 'risk assessment', 'privacy'], personality: 'meticulous and cautious', style: 'formal and qualified' },
-  { match: /(ops|operation|project|program|coordinat)/i, roleTitle: 'Operations Manager', expertise: ['process design', 'coordination', 'logistics', 'execution'], personality: 'organized and reliable', style: 'checklist-driven and clear' },
-  { match: /(research|analyst|insight|explore)/i, roleTitle: 'Research Analyst', expertise: ['research', 'synthesis', 'competitive analysis', 'reporting'], personality: 'thorough and objective', style: 'balanced and cited' },
+  { match: /(front|ui|ux|design|react|css|前端|介面|設計)/i, roleTitle: '前端工程師', expertise: ['React', 'UI/UX', '無障礙設計', '設計系統'], personality: '注重細節且富同理心', style: '重視視覺與範例' },
+  { match: /(back|api|server|database|infra|devops|cloud|後端|伺服器|資料庫|架構|維運)/i, roleTitle: '後端工程師', expertise: ['API', '資料庫', '可擴展性', '可靠性'], personality: '有系統且重視風險', style: '精確且結構化' },
+  { match: /(\bdata\b|analytics|\bml\b|\bai\b|machine learning|\bmodel\b|scien|資料|數據|分析|機器學習|模型)/i, roleTitle: '資料科學家', expertise: ['統計', '機器學習', '實驗設計', '數據敘事'], personality: '好奇且嚴謹', style: '以證據為先並量化' },
+  { match: /(product|pm|road|strategy|market fit|產品|策略|路線圖)/i, roleTitle: '產品經理', expertise: ['產品策略', '路線圖規劃', '使用者研究', '優先排序'], personality: '果斷且重視成效', style: '簡潔且具敘事性' },
+  { match: /(market|growth|brand|content|seo|campaign|行銷|成長|品牌|內容|活動)/i, roleTitle: '行銷主管', expertise: ['市場定位', '內容', '成長迴圈', '分析'], personality: '有創意且以數據為本', style: '具說服力且精練' },
+  { match: /(sales|revenue|account|customer success|deal|銷售|業務|營收|客戶成功)/i, roleTitle: '業務主管', expertise: ['管道管理', '談判', '需求探索', '關係經營'], personality: '有活力且堅持不懈', style: '溫暖且以成效為導向' },
+  { match: /(finance|budget|account|cfo|cost|財務|預算|會計|成本)/i, roleTitle: '財務分析師', expertise: ['財務建模', '預算', '預測', '單位經濟'], personality: '謹慎且存疑', style: '以數字為先且保守' },
+  { match: /(legal|compliance|risk|policy|privacy|法務|法律|合規|風險|隱私)/i, roleTitle: '法務與合規顧問', expertise: ['合約', '合規', '風險評估', '隱私'], personality: '一絲不苟且謹慎', style: '正式且謹慎保留' },
+  { match: /(ops|operation|project|program|coordinat|營運|作業|專案|協調)/i, roleTitle: '營運經理', expertise: ['流程設計', '協調', '後勤', '執行'], personality: '有條理且可靠', style: '以檢查清單為本且清楚' },
+  { match: /(research|analyst|insight|explore|研究|分析師|洞察)/i, roleTitle: '研究分析師', expertise: ['研究', '綜整', '競品分析', '報告撰寫'], personality: '徹底且客觀', style: '平衡且引用來源' },
 ];
 
 export function ideateRole(description = '') {
   const desc = String(description);
   const hit = ROLE_LIBRARY.find((r) => r.match.test(desc)) || {
-    roleTitle: 'Generalist Team Member',
-    expertise: ['problem solving', 'communication', 'collaboration'],
-    personality: 'adaptable and pragmatic',
-    style: 'clear and concise',
+    roleTitle: '通用團隊成員',
+    expertise: ['問題解決', '溝通', '協作'],
+    personality: '靈活且務實',
+    style: '清楚且精煉',
   };
 
-  const nameGuess = (desc.match(/named?\s+([A-Z][a-z]+)/) || [])[1];
-  const roleWord = hit.roleTitle.split(' ')[0];
-  const name = nameGuess || `${roleWord} Persona`;
+  // Prefer an explicitly named person (English or Chinese) from the description.
+  const nameGuess = (desc.match(/named?\s+([A-Z][a-z]+)/) || desc.match(/(?:叫做?|名為|名叫)\s*([一-龥]{2,4})/) || [])[1];
+  const name = nameGuess || `${hit.roleTitle}人選`;
 
   const draft = {
     name,
@@ -85,10 +87,10 @@ export function ideateRole(description = '') {
     expertise: hit.expertise,
     personality: hit.personality,
     communicationStyle: hit.style,
-    objectives: `Own the ${hit.roleTitle.toLowerCase()} responsibilities and help the team reach its goals through ${hit.expertise[0]}.`,
+    objectives: `負責${hit.roleTitle}的職責，並透過${hit.expertise[0]}協助團隊達成目標。`,
   };
   draft.profile = generateProfile(draft);
-  draft.rationale = `Drafted from your description "${desc.slice(0, 120)}${desc.length > 120 ? '…' : ''}" — matched to a ${hit.roleTitle} archetype. Edit any field before saving.`;
+  draft.rationale = `根據你的描述「${desc.slice(0, 120)}${desc.length > 120 ? '…' : ''}」草擬——比對到「${hit.roleTitle}」原型。儲存前可自由編輯任何欄位。`;
   return draft;
 }
 
@@ -97,25 +99,25 @@ export function ideateRole(description = '') {
 // ---------------------------------------------------------------------------
 function speak(emp, topic, round, priorSpeakers, hits) {
   const expertise = asList(emp.expertise);
-  const focus = expertise[Math.min(round, expertise.length - 1)] || expertise[0] || 'the problem';
+  const focus = expertise[Math.min(round, expertise.length - 1)] || expertise[0] || '這個問題';
   const hit = hits.length ? hits[round % hits.length] : null;
   const grounded = hit
-    ? ` Drawing on "${hit.documentTitle}" (“${snippet(hit.content)}”), `
-    : ' ';
+    ? `參考「${hit.documentTitle}」（「${snippet(hit.content)}」），`
+    : '';
 
   if (round === 0) {
-    return `From a ${emp.roleTitle} perspective, the key question on "${topic}" is how it affects ${focus}.${grounded}I'd start by clarifying our success criteria and constraints.`;
+    return `從${emp.roleTitle}的角度來看，「${topic}」的關鍵問題在於它如何影響${focus}。${grounded}我會先釐清我們的成功標準與限制條件。`;
   }
   if (round === 1) {
-    const react = priorSpeakers.length ? `Building on ${firstName(priorSpeakers[0])}'s point, ` : '';
-    return `${react}I see the main risk around ${focus}.${grounded}my recommendation is to prototype the smallest viable slice and measure it before committing.`;
+    const react = priorSpeakers.length ? `延續${firstName(priorSpeakers[0])}的觀點，` : '';
+    return `${react}我認為主要風險落在${focus}。${grounded}我的建議是先做出最小可行的原型並加以量測，再決定是否投入。`;
   }
-  return `To wrap up my part on "${topic}": I'll own the ${focus} workstream, define clear acceptance criteria, and report back with results. Let's align on owners and a check-in date.`;
+  return `為「${topic}」做個總結：我會負責${focus}這條工作線，訂定明確的驗收標準，並回報結果。我們來確認各項負責人與檢查點的時間。`;
 }
 
 export function runMeeting({ topic, participants, rounds = 3, groundingByEmployee = {} }) {
   const transcript = [];
-  const roundTitles = ['Opening positions', 'Analysis & risks', 'Decisions & next steps'];
+  const roundTitles = ['開場立場', '分析與風險', '決議與後續步驟'];
 
   for (let r = 0; r < rounds; r++) {
     const priorSpeakers = [];
@@ -124,7 +126,7 @@ export function runMeeting({ topic, participants, rounds = 3, groundingByEmploye
       const text = speak(emp, topic, r, priorSpeakers, hits);
       transcript.push({
         round: r + 1,
-        roundTitle: roundTitles[r] || `Round ${r + 1}`,
+        roundTitle: roundTitles[r] || `第 ${r + 1} 輪`,
         speaker: emp.name,
         role: emp.roleTitle,
         speakerId: emp.id,
@@ -141,21 +143,21 @@ export function runMeeting({ topic, participants, rounds = 3, groundingByEmploye
 }
 
 function buildMinutes({ topic, participants, transcript }) {
-  const attendees = participants.map((p) => `${p.name} (${p.roleTitle})`);
-  const keyPoints = transcript.filter((t) => t.round <= 2).map((t) => `- ${t.speaker}: ${t.text}`);
+  const attendees = participants.map((p) => `${p.name}（${p.roleTitle}）`);
+  const keyPoints = transcript.filter((t) => t.round <= 2).map((t) => `- ${t.speaker}：${t.text}`);
   const decisions = participants.map(
-    (p) => `- ${p.name} to own the ${asList(p.expertise)[0] || 'assigned'} workstream with defined acceptance criteria.`,
+    (p) => `- ${p.name} 負責${asList(p.expertise)[0] || '指定'}工作線，並訂定明確的驗收標準。`,
   );
   const actionItems = participants.map((p) => ({
     owner: p.name,
-    action: `Define acceptance criteria and deliver first slice for "${topic}"`,
-    due: 'next check-in',
+    action: `為「${topic}」訂定驗收標準並交付第一版切片`,
+    due: '下次檢查點',
   }));
 
   return {
     topic,
     attendees,
-    agenda: [`Discuss "${topic}"`, 'Surface risks and trade-offs', 'Agree on owners and next steps'],
+    agenda: [`討論「${topic}」`, '盤點風險與取捨', '確認負責人與後續步驟'],
     keyPoints,
     decisions,
     actionItems,
@@ -163,23 +165,23 @@ function buildMinutes({ topic, participants, transcript }) {
 }
 
 function buildReport({ topic, participants, minutes }) {
-  const names = participants.map((p) => firstName(p.name)).join(', ');
+  const names = participants.map((p) => firstName(p.name)).join('、');
   return [
-    `# Meeting Report: ${topic}`,
+    `# 會議報告：${topic}`,
     ``,
-    `**Attendees:** ${minutes.attendees.join(', ')}`,
+    `**與會者：** ${minutes.attendees.join('、')}`,
     ``,
-    `## Summary`,
-    `${participants.length} team member(s) — ${names} — met to discuss "${topic}". The group aligned on success criteria, surfaced the main risks from each discipline's perspective, and agreed to proceed with a small, measurable first slice before wider investment.`,
+    `## 摘要`,
+    `${participants.length} 位團隊成員——${names}——共同討論「${topic}」。團隊在成功標準上達成共識，並從各自專業的角度盤點了主要風險，決定先以小規模、可量測的第一版切片著手，再擴大投入。`,
     ``,
-    `## Decisions`,
+    `## 決議`,
     ...minutes.decisions,
     ``,
-    `## Action Items`,
-    ...minutes.actionItems.map((a) => `- **${a.owner}** — ${a.action} (due: ${a.due})`),
+    `## 行動項目`,
+    ...minutes.actionItems.map((a) => `- **${a.owner}** — ${a.action}（期限：${a.due}）`),
     ``,
-    `## Recommendation`,
-    `Proceed to a time-boxed prototype. Reconvene at the next check-in to review measured results before committing further resources.`,
+    `## 建議`,
+    `先進行限時的原型驗證。於下次檢查點重新集合，檢視量測結果後，再決定是否投入更多資源。`,
   ].join('\n');
 }
 
@@ -191,14 +193,14 @@ export function executeGoal({ title, description, assignees, groundingByEmployee
     const expertise = asList(emp.expertise);
     const hits = groundingByEmployee[emp.id] || [];
     const groundNote = hits.length
-      ? `, informed by knowledge such as "${hits[0].documentTitle}"`
+      ? `，並參考「${hits[0].documentTitle}」等知識`
       : '';
     return {
       assignee: emp.name,
       assigneeId: emp.id,
       role: emp.roleTitle,
-      subtask: `Lead the ${expertise[0] || 'core'} aspects of "${title}"`,
-      approach: `Apply ${expertise.slice(0, 2).join(' & ') || 'domain expertise'}${groundNote}. Deliver a reviewable artifact and flag dependencies.`,
+      subtask: `主導「${title}」中${expertise[0] || '核心'}相關的部分`,
+      approach: `運用${expertise.slice(0, 2).join('與') || '領域專業'}${groundNote}。交付可供審閱的成果，並標示相依項目。`,
       status: 'in-progress',
       order: i + 1,
     };
@@ -210,20 +212,20 @@ export function executeGoal({ title, description, assignees, groundingByEmployee
 
 function buildCollaborationOutput({ title, description, tasks, assignees }) {
   return [
-    `# Collaboration Output: ${title}`,
+    `# 協作產出：${title}`,
     ``,
-    description ? `**Goal:** ${description}\n` : '',
-    `## Plan`,
-    `The goal was decomposed across ${assignees.length} employee(s), each owning the slice matched to their expertise:`,
+    description ? `**目標：** ${description}\n` : '',
+    `## 計畫`,
+    `此目標依專業拆解給 ${assignees.length} 位員工，各自負責與其專長相符的切片：`,
     ``,
-    ...tasks.map((t) => `- **${t.assignee}** (${t.role}) — ${t.subtask}. ${t.approach}`),
+    ...tasks.map((t) => `- **${t.assignee}**（${t.role}） — ${t.subtask}。${t.approach}`),
     ``,
-    `## Integration`,
-    `Owners deliver their slices in parallel, then integrate at the interfaces they share. ${assignees.length > 1 ? `${firstName(assignees[0].name)} coordinates hand-offs and resolves conflicts.` : 'The single owner drives end-to-end.'}`,
+    `## 整合`,
+    `各負責人平行交付各自的切片，再於共用的介面處整合。${assignees.length > 1 ? `由 ${firstName(assignees[0].name)} 負責協調交接並解決衝突。` : '由單一負責人端到端推動。'}`,
     ``,
-    `## Next Steps`,
-    `1. Each owner confirms acceptance criteria for their slice.`,
-    `2. Deliver first versions and integrate.`,
-    `3. Review against the goal and iterate.`,
+    `## 後續步驟`,
+    `1. 各負責人確認自身切片的驗收標準。`,
+    `2. 交付初版並整合。`,
+    `3. 對照目標進行檢視與迭代。`,
   ].filter(Boolean).join('\n');
 }

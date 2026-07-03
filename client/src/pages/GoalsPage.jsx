@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker } from '../components/ui.jsx';
 
 const STATUSES = ['in-progress', 'blocked', 'done'];
+const STATUS_LABELS = { 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
 
 export default function GoalsPage({ refreshKey }) {
   const [employees, setEmployees] = useState([]);
@@ -25,7 +26,7 @@ export default function GoalsPage({ refreshKey }) {
   const assign = async () => {
     setErr('');
     if (!form.title.trim() || selected.length === 0) {
-      setErr('Enter a goal title and select at least one employee.');
+      setErr('請輸入目標標題並至少選擇一位員工。');
       return;
     }
     setBusy(true);
@@ -47,42 +48,42 @@ export default function GoalsPage({ refreshKey }) {
 
   return (
     <div className="page">
-      <div className="page-head"><div><h2>Goals</h2><p className="muted">Assign a goal to one or more employees. They split the work by expertise and produce a collaboration output.</p></div></div>
+      <div className="page-head"><div><h2>目標</h2><p className="muted">將目標指派給一位或多位員工。他們會依專長分工，並產出協作成果。</p></div></div>
 
       <div className="panel">
-        <h3>Assign a goal</h3>
+        <h3>指派目標</h3>
         {err && <div className="banner-err">{err}</div>}
-        <label className="block">Goal title
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Launch the private beta" />
+        <label className="block">目標標題
+          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="例如：啟動私人測試版" />
         </label>
-        <label className="block">Description (optional)
-          <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="Context, constraints, deadline…" />
+        <label className="block">說明（選填）
+          <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="背景、限制、期限…" />
         </label>
-        <label className="block">Assignees
+        <label className="block">負責人
           {employees.length === 0
-            ? <p className="muted">Create employees first.</p>
+            ? <p className="muted">請先建立員工。</p>
             : <EmployeePicker employees={employees} selected={selected} toggle={toggle} />}
         </label>
         <div className="row end">
-          <button className="btn" onClick={assign} disabled={busy}>{busy ? 'Assigning…' : '🎯 Assign & collaborate'}</button>
+          <button className="btn" onClick={assign} disabled={busy}>{busy ? '指派中…' : '🎯 指派並協作'}</button>
         </div>
       </div>
 
-      <h3 className="section-title">Active goals</h3>
+      <h3 className="section-title">進行中的目標</h3>
       {goals.length === 0 ? (
-        <Empty>No goals yet.</Empty>
+        <Empty>尚無目標。</Empty>
       ) : (
         <div className="list">
           {goals.map((g) => (
             <div key={g.id} className="list-item">
               <button className="list-main" onClick={() => setOpen(g)}>
                 <strong>{g.title}</strong>
-                <span className="muted">{(g.assignees || []).map((p) => p.name).join(', ')} · {g.tasks?.length || 0} task(s)</span>
+                <span className="muted">{(g.assignees || []).map((p) => p.name).join('、')} · {g.tasks?.length || 0} 項任務</span>
               </button>
               <select value={g.status} onChange={(e) => setStatus(g, e.target.value)} className={`status status-${g.status}`}>
-                {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
               </select>
-              <button className="icon-btn" onClick={() => del(g.id)} aria-label="Delete goal">🗑</button>
+              <button className="icon-btn" onClick={() => del(g.id)} aria-label="刪除目標">🗑</button>
             </div>
           ))}
         </div>
@@ -93,13 +94,13 @@ export default function GoalsPage({ refreshKey }) {
           {open.runtime?.mode && (
             <div className="view-meta">
               <span className={`runtime-badge ${open.runtime.fallback ? 'runtime-fallback' : ''}`} title={open.runtime.note || ''}>
-                ⚙ {open.runtime.label || open.runtime.mode}{open.runtime.fallback ? ' · fallback' : ''}
+                ⚙ {open.runtime.label || open.runtime.mode}{open.runtime.fallback ? ' · 備援' : ''}
               </span>
-              {open.grounding?.length > 0 && <span className="runtime-badge">📚 {open.grounding.length} grounded</span>}
+              {open.grounding?.length > 0 && <span className="runtime-badge">📚 {open.grounding.length} 筆知識依據</span>}
             </div>
           )}
           {open.description && <p className="muted">{open.description}</p>}
-          <h4>Task breakdown</h4>
+          <h4>任務拆解</h4>
           <div className="tasks">
             {open.tasks.map((t, i) => (
               <div key={i} className="task">
@@ -109,16 +110,16 @@ export default function GoalsPage({ refreshKey }) {
                   <div><strong>{t.subtask}</strong></div>
                   <div className="muted">{t.approach}</div>
                 </div>
-                <span className={`status status-${t.status}`}>{t.status}</span>
+                <span className={`status status-${t.status}`}>{STATUS_LABELS[t.status] || t.status}</span>
               </div>
             ))}
           </div>
-          <h4>Collaboration output</h4>
+          <h4>協作產出</h4>
           <div className="report"><Markdown text={open.output} /></div>
 
           {open.grounding?.length > 0 && (
             <>
-              <h4>📚 Knowledge used</h4>
+              <h4>📚 使用的知識</h4>
               <ul className="notes">
                 {open.grounding.map((g) => (
                   <li key={g.chunkId} className="note">

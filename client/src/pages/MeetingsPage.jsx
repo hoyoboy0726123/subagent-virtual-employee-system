@@ -24,7 +24,7 @@ export default function MeetingsPage({ refreshKey }) {
   const run = async () => {
     setErr('');
     if (!topic.trim() || selected.length === 0) {
-      setErr('Enter a topic and select at least one employee.');
+      setErr('請輸入主題並至少選擇一位員工。');
       return;
     }
     setBusy(true);
@@ -40,32 +40,32 @@ export default function MeetingsPage({ refreshKey }) {
 
   return (
     <div className="page">
-      <div className="page-head"><div><h2>Meetings</h2><p className="muted">Summon employees, set a topic, and run a discussion. You get a transcript, minutes, and a report.</p></div></div>
+      <div className="page-head"><div><h2>會議</h2><p className="muted">召集員工、設定主題並展開討論。你會得到逐字紀錄、會議記錄與報告。</p></div></div>
 
       <div className="panel">
-        <h3>Convene a meeting</h3>
+        <h3>召開會議</h3>
         {err && <div className="banner-err">{err}</div>}
-        <label className="block">Topic
-          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="e.g. Q3 roadmap trade-offs" />
+        <label className="block">主題
+          <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如：第三季路線圖的取捨" />
         </label>
-        <label className="block">Participants
+        <label className="block">與會者
           {employees.length === 0
-            ? <p className="muted">Create employees first.</p>
+            ? <p className="muted">請先建立員工。</p>
             : <EmployeePicker employees={employees} selected={selected} toggle={toggle} />}
         </label>
         <div className="row">
-          <label className="inline">Rounds
+          <label className="inline">輪數
             <select value={rounds} onChange={(e) => setRounds(e.target.value)}>
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          <button className="btn" onClick={run} disabled={busy}>{busy ? 'Running discussion…' : '▶ Run meeting'}</button>
+          <button className="btn" onClick={run} disabled={busy}>{busy ? '討論進行中…' : '▶ 開始會議'}</button>
         </div>
       </div>
 
-      <h3 className="section-title">Past meetings</h3>
+      <h3 className="section-title">過往會議</h3>
       {meetings.length === 0 ? (
-        <Empty>No meetings yet.</Empty>
+        <Empty>尚無會議。</Empty>
       ) : (
         <div className="list">
           {meetings.map((m) => (
@@ -73,11 +73,11 @@ export default function MeetingsPage({ refreshKey }) {
               <button className="list-main" onClick={() => setOpen(m)}>
                 <strong>{m.topic}</strong>
                 <span className="muted">
-                  {(m.participants || []).map((p) => p.name).join(', ')} · {new Date(m.createdAt).toLocaleString()}
-                  {m.grounding?.length ? ` · 📚 ${m.grounding.length} grounded` : ''}
+                  {(m.participants || []).map((p) => p.name).join('、')} · {new Date(m.createdAt).toLocaleString('zh-Hant')}
+                  {m.grounding?.length ? ` · 📚 ${m.grounding.length} 筆知識依據` : ''}
                 </span>
               </button>
-              <button className="icon-btn" onClick={() => del(m.id)} aria-label="Delete meeting">🗑</button>
+              <button className="icon-btn" onClick={() => del(m.id)} aria-label="刪除會議">🗑</button>
             </div>
           ))}
         </div>
@@ -93,18 +93,18 @@ function RuntimeBadge({ runtime }) {
   const label = runtime.label || runtime.mode;
   return (
     <span className={`runtime-badge ${runtime.fallback ? 'runtime-fallback' : ''}`} title={runtime.note || ''}>
-      ⚙ {label}{runtime.fallback ? ' · fallback' : ''}
+      ⚙ {label}{runtime.fallback ? ' · 備援' : ''}
     </span>
   );
 }
 
 function Grounding({ grounding }) {
   if (!grounding?.length) {
-    return <p className="muted">No knowledge chunks were retrieved for this topic. Add notes to participants’ knowledge bases to ground future runs.</p>;
+    return <p className="muted">此主題未檢索到任何知識片段。為與會者的知識庫新增筆記，即可作為未來討論的依據。</p>;
   }
   return (
     <div className="grounding">
-      <p className="muted">These knowledge chunks were retrieved (scoped to the participants) and used to ground the discussion:</p>
+      <p className="muted">以下知識片段（限定於與會者範圍）已被檢索並用來作為討論的依據：</p>
       <ul className="notes">
         {grounding.map((g) => (
           <li key={g.chunkId} className="note">
@@ -119,6 +119,8 @@ function Grounding({ grounding }) {
   );
 }
 
+const SUBTAB_LABELS = { transcript: '逐字紀錄', minutes: '會議記錄', report: '報告', knowledge: '知識' };
+
 function MeetingView({ meeting, onClose }) {
   const [view, setView] = useState('transcript');
   const rounds = [...new Set(meeting.transcript.map((t) => t.round))];
@@ -129,7 +131,7 @@ function MeetingView({ meeting, onClose }) {
       <div className="subtabs">
         {['transcript', 'minutes', 'report', 'knowledge'].map((v) => (
           <button key={v} className={view === v ? 'subtab on' : 'subtab'} onClick={() => setView(v)}>
-            {v === 'knowledge' ? `Knowledge (${meeting.grounding?.length || 0})` : v[0].toUpperCase() + v.slice(1)}
+            {v === 'knowledge' ? `知識（${meeting.grounding?.length || 0}）` : SUBTAB_LABELS[v]}
           </button>
         ))}
       </div>
@@ -140,7 +142,7 @@ function MeetingView({ meeting, onClose }) {
             const turns = meeting.transcript.filter((t) => t.round === r);
             return (
               <div key={r} className="round">
-                <div className="round-title">Round {r} — {turns[0]?.roundTitle}</div>
+                <div className="round-title">第 {r} 輪 — {turns[0]?.roundTitle}</div>
                 {turns.map((t, i) => (
                   <div key={i} className="turn">
                     <div className="turn-av">{t.speaker.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
@@ -165,16 +167,16 @@ function MeetingView({ meeting, onClose }) {
 
       {view === 'minutes' && (
         <div className="minutes">
-          <h4>Attendees</h4>
+          <h4>與會者</h4>
           <ul>{meeting.minutes.attendees.map((a) => <li key={a}>{a}</li>)}</ul>
-          <h4>Agenda</h4>
+          <h4>議程</h4>
           <ul>{meeting.minutes.agenda.map((a) => <li key={a}>{a}</li>)}</ul>
-          <h4>Key points</h4>
+          <h4>重點</h4>
           <ul>{meeting.minutes.keyPoints.map((a, i) => <li key={i}>{a.replace(/^- /, '')}</li>)}</ul>
-          <h4>Decisions</h4>
+          <h4>決議</h4>
           <ul>{meeting.minutes.decisions.map((a, i) => <li key={i}>{a.replace(/^- /, '')}</li>)}</ul>
-          <h4>Action items</h4>
-          <ul>{meeting.minutes.actionItems.map((a, i) => <li key={i}><strong>{a.owner}</strong> — {a.action} <span className="muted">(due: {a.due})</span></li>)}</ul>
+          <h4>行動項目</h4>
+          <ul>{meeting.minutes.actionItems.map((a, i) => <li key={i}><strong>{a.owner}</strong> — {a.action} <span className="muted">（期限：{a.due}）</span></li>)}</ul>
         </div>
       )}
 

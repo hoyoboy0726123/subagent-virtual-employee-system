@@ -11,14 +11,14 @@ export function list() {
 
 export function get(id) {
   const m = repo.getMeeting(id);
-  if (!m) throw notFound('meeting not found');
+  if (!m) throw notFound('找不到該會議');
   return m;
 }
 
 export async function create({ topic, participantIds, rounds } = {}) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
-    throw badRequest('topic and at least one participant are required');
+    throw badRequest('主題與至少一位與會者為必填');
   }
   const boundedRounds = Math.min(Math.max(Number(rounds) || 3, 1), 5);
 
@@ -39,6 +39,6 @@ export async function create({ topic, participantIds, rounds } = {}) {
 }
 
 export function remove(id) {
-  if (!repo.deleteMeeting(id)) throw notFound('meeting not found');
+  if (!repo.deleteMeeting(id)) throw notFound('找不到該會議');
   return { ok: true };
 }

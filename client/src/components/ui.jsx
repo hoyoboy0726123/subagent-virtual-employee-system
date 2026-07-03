@@ -50,7 +50,7 @@ export function Modal({ title, children, onClose, wide }) {
       <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Close">✕</button>
+          <button className="icon-btn" onClick={onClose} aria-label="關閉">✕</button>
         </div>
         <div className="modal-body">{children}</div>
       </div>

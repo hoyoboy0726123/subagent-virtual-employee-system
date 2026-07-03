@@ -5,18 +5,18 @@ import { search as retrievalSearch } from '../storage/retrieval.js';
 import { badRequest, notFound } from '../util/http.js';
 
 export function listForEmployee(employeeId) {
-  if (!getEmployee(employeeId)) throw notFound('employee not found');
+  if (!getEmployee(employeeId)) throw notFound('找不到該員工');
   return docs.listDocuments(employeeId);
 }
 
 export function addDocument(employeeId, data = {}) {
-  if (!getEmployee(employeeId)) throw notFound('employee not found');
-  if (!data.content) throw badRequest('content is required');
+  if (!getEmployee(employeeId)) throw notFound('找不到該員工');
+  if (!data.content) throw badRequest('內容為必填');
   return docs.insertDocument(employeeId, data);
 }
 
 export function removeDocument(documentId) {
-  if (!docs.deleteDocument(documentId)) throw notFound('document not found');
+  if (!docs.deleteDocument(documentId)) throw notFound('找不到該文件');
   return { ok: true };
 }
 
@@ -25,7 +25,7 @@ export function removeDocument(documentId) {
  * employees. Powers the retrieval demo endpoint and (indirectly) the runtime.
  */
 export function search({ query, employeeIds, limit } = {}) {
-  if (!query || !String(query).trim()) throw badRequest('query is required');
+  if (!query || !String(query).trim()) throw badRequest('查詢字串為必填');
   const ids = Array.isArray(employeeIds)
     ? employeeIds
     : (employeeIds ? String(employeeIds).split(',').map((s) => s.trim()).filter(Boolean) : undefined);
