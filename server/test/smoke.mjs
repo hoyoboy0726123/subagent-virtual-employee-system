@@ -1,13 +1,13 @@
 // End-to-end smoke test. Boots the real Express app on an ephemeral port and
-// exercises every core flow against live HTTP. No external services needed.
-// Run: `npm test`.
+// exercises every core flow against live HTTP — now including SQLite-backed
+// persistence, knowledge chunking + FTS retrieval, employee-scoped search, the
+// runtime adapter switch, and knowledge-grounded meetings/goals.
+// No external services needed. Run: `npm test`.
 import assert from 'node:assert/strict';
-import os from 'node:os';
-import path from 'node:path';
 
-// Point the store at a throwaway file BEFORE importing the app so the smoke
-// test never mutates seeded/real data.
-process.env.DB_FILE = path.join(os.tmpdir(), `ves-smoke-${process.pid}.json`);
+// Use an isolated in-memory database BEFORE importing the app so the smoke test
+// never touches seeded/real data.
+process.env.DB_FILE = ':memory:';
 const { app } = await import('../src/index.js');
 
 const server = app.listen(0);
@@ -32,10 +32,12 @@ const api = async (method, pathname, body) => {
 };
 
 try {
-  await step('health check responds', async () => {
+  await step('health check reports SQLite counts + runtime', async () => {
     const { status, json } = await api('GET', '/api/health');
     assert.equal(status, 200);
     assert.equal(json.ok, true);
+    assert.ok('documents' in json.counts && 'chunks' in json.counts, 'exposes kb stats');
+    assert.equal(json.runtime, 'simulated');
   });
 
   let empId;
@@ -75,32 +77,59 @@ try {
     empId2 = json.id;
   });
 
-  let knId;
-  await step('add a knowledge note', async () => {
+  let docId;
+  await step('add a knowledge document (chunked + indexed)', async () => {
     const { status, json } = await api('POST', `/api/employees/${empId}/knowledge`, {
-      title: 'Test plan', content: 'Always test the happy path and one edge case.',
+      title: 'Regression policy',
+      content: 'Always run the full regression suite before a release. Flaky tests must be quarantined, never deleted. Every bug fix ships with a covering test that fails before the fix and passes after.',
+      tags: ['qa', 'policy'],
     });
     assert.equal(status, 201);
     assert.equal(json.employeeId, empId);
-    knId = json.id;
+    assert.ok(json.chunkCount >= 1, 'document was chunked');
+    docId = json.id;
   });
 
   await step('knowledge shows on employee detail', async () => {
     const { json } = await api('GET', `/api/employees/${empId}`);
     assert.equal(json.knowledge.length, 1);
-    assert.equal(json.knowledge[0].id, knId);
+    assert.equal(json.knowledge[0].id, docId);
   });
 
-  await step('run a meeting and get transcript/minutes/report', async () => {
+  await step('health now counts documents + chunks', async () => {
+    const { json } = await api('GET', '/api/health');
+    assert.ok(json.counts.documents >= 1);
+    assert.ok(json.counts.chunks >= 1);
+  });
+
+  await step('keyword retrieval finds the chunk', async () => {
+    const { status, json } = await api('GET', '/api/knowledge/search?q=regression%20flaky%20tests');
+    assert.equal(status, 200);
+    assert.ok(json.results.length >= 1, 'got a hit');
+    assert.equal(json.results[0].documentTitle, 'Regression policy');
+  });
+
+  await step('retrieval can be scoped to an employee', async () => {
+    // Scoped to the OTHER employee (who has no docs) → no hits.
+    const { json } = await api('GET', `/api/knowledge/search?q=regression&employeeIds=${empId2}`);
+    assert.equal(json.results.length, 0, 'scoping excludes other employees');
+    const { json: mine } = await api('GET', `/api/knowledge/search?q=regression&employeeIds=${empId}`);
+    assert.ok(mine.results.length >= 1, 'scoped to owner returns the hit');
+  });
+
+  await step('run a meeting → transcript/minutes/report + grounding', async () => {
     const { status, json } = await api('POST', '/api/meetings', {
-      topic: 'Release readiness',
+      topic: 'Regression and release readiness',
       participantIds: [empId, empId2],
       rounds: 3,
     });
     assert.equal(status, 201);
     assert.equal(json.transcript.length, 6, '2 participants x 3 rounds');
     assert.ok(json.minutes.actionItems.length >= 2);
-    assert.ok(json.report.includes('Release readiness'));
+    assert.ok(json.report.includes('Regression and release readiness'));
+    assert.ok(Array.isArray(json.grounding), 'grounding attached');
+    assert.ok(json.grounding.length >= 1, 'meeting was grounded in retrieved knowledge');
+    assert.equal(json.runtime.mode, 'simulated');
   });
 
   await step('reject meeting without participants', async () => {
@@ -108,16 +137,43 @@ try {
     assert.equal(status, 400);
   });
 
-  await step('assign a goal and get collaboration output', async () => {
+  await step('assign a goal → tasks + collaboration output', async () => {
     const { status, json } = await api('POST', '/api/goals', {
       title: 'Ship the beta',
-      description: 'Get the beta into 10 teams by Friday.',
+      description: 'Get the beta into 10 teams by Friday with a clean regression run.',
       assigneeIds: [empId, empId2],
     });
     assert.equal(status, 201);
     assert.equal(json.tasks.length, 2);
     assert.equal(json.status, 'in-progress');
     assert.ok(json.output.includes('Ship the beta'));
+    assert.equal(json.runtime.mode, 'simulated');
+  });
+
+  await step('switch runtime to openclaw (simulated fallback)', async () => {
+    const { status, json } = await api('PUT', '/api/settings', { runtimeMode: 'openclaw' });
+    assert.equal(status, 200);
+    assert.equal(json.runtimeMode, 'openclaw');
+
+    const { json: mtg } = await api('POST', '/api/meetings', {
+      topic: 'Runtime switch check', participantIds: [empId], rounds: 1,
+    });
+    assert.equal(mtg.runtime.mode, 'openclaw');
+    assert.equal(mtg.runtime.fallback, true, 'openclaw not configured → falls back but is labeled');
+    // Restore default so ordering never matters.
+    await api('PUT', '/api/settings', { runtimeMode: 'simulated' });
+  });
+
+  await step('reject unknown runtime mode', async () => {
+    const { status } = await api('PUT', '/api/settings', { runtimeMode: 'nonsense' });
+    assert.equal(status, 400);
+  });
+
+  await step('delete knowledge document', async () => {
+    const { status } = await api('DELETE', `/api/knowledge/${docId}`);
+    assert.equal(status, 200);
+    const { json } = await api('GET', `/api/employees/${empId}`);
+    assert.equal(json.knowledge.length, 0);
   });
 
   await step('persistence: employees survive a fresh read', async () => {
@@ -127,7 +183,7 @@ try {
 
   console.log(`\n  All ${passed} smoke checks passed ✅\n`);
 } catch (err) {
-  console.error(`\n  ✗ FAILED after ${passed} checks:`, err.message, '\n');
+  console.error(`\n  ✗ FAILED after ${passed} checks:`, err.message, '\n', err.stack);
   process.exitCode = 1;
 } finally {
   server.close();

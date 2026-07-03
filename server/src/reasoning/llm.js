@@ -1,15 +1,12 @@
-// Optional live-LLM integration.
+// Optional live-LLM integration (Anthropic).
 //
 // The app is fully functional WITHOUT any API key — every feature falls back to
-// the deterministic engine. If ANTHROPIC_API_KEY is set in the environment,
-// the meeting / goal / ideation routes will instead ask Claude to generate
-// richer, persona-grounded output using Node 22's built-in fetch (no SDK dep).
+// the deterministic engine. If ANTHROPIC_API_KEY is set, the Simulated runtime
+// uses Claude to enrich reports/plans (grounded with retrieved knowledge),
+// using Node's built-in fetch (no SDK dependency).
+import { config, llmEnabled } from '../config.js';
 
-const MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-5';
-
-export function llmEnabled() {
-  return Boolean(process.env.ANTHROPIC_API_KEY);
-}
+export { llmEnabled };
 
 export async function complete(system, user, maxTokens = 1500) {
   if (!llmEnabled()) return null;
@@ -18,11 +15,11 @@ export async function complete(system, user, maxTokens = 1500) {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
+        'x-api-key': config.llm.apiKey,
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: config.llm.model,
         max_tokens: maxTokens,
         system,
         messages: [{ role: 'user', content: user }],

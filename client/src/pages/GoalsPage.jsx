@@ -90,6 +90,14 @@ export default function GoalsPage({ refreshKey }) {
 
       {open && (
         <Modal title={`🎯 ${open.title}`} onClose={() => setOpen(null)} wide>
+          {open.runtime?.mode && (
+            <div className="view-meta">
+              <span className={`runtime-badge ${open.runtime.fallback ? 'runtime-fallback' : ''}`} title={open.runtime.note || ''}>
+                ⚙ {open.runtime.label || open.runtime.mode}{open.runtime.fallback ? ' · fallback' : ''}
+              </span>
+              {open.grounding?.length > 0 && <span className="runtime-badge">📚 {open.grounding.length} grounded</span>}
+            </div>
+          )}
           {open.description && <p className="muted">{open.description}</p>}
           <h4>Task breakdown</h4>
           <div className="tasks">
@@ -107,6 +115,22 @@ export default function GoalsPage({ refreshKey }) {
           </div>
           <h4>Collaboration output</h4>
           <div className="report"><Markdown text={open.output} /></div>
+
+          {open.grounding?.length > 0 && (
+            <>
+              <h4>📚 Knowledge used</h4>
+              <ul className="notes">
+                {open.grounding.map((g) => (
+                  <li key={g.chunkId} className="note">
+                    <div>
+                      <strong>{g.documentTitle}</strong> <span className="muted">· {g.employeeName}</span>
+                      <p className="muted">{g.content}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </Modal>
       )}
     </div>

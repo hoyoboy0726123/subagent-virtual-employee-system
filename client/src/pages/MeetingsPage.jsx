@@ -72,7 +72,10 @@ export default function MeetingsPage({ refreshKey }) {
             <div key={m.id} className="list-item">
               <button className="list-main" onClick={() => setOpen(m)}>
                 <strong>{m.topic}</strong>
-                <span className="muted">{(m.participants || []).map((p) => p.name).join(', ')} · {new Date(m.createdAt).toLocaleString()}</span>
+                <span className="muted">
+                  {(m.participants || []).map((p) => p.name).join(', ')} · {new Date(m.createdAt).toLocaleString()}
+                  {m.grounding?.length ? ` · 📚 ${m.grounding.length} grounded` : ''}
+                </span>
               </button>
               <button className="icon-btn" onClick={() => del(m.id)} aria-label="Delete meeting">🗑</button>
             </div>
@@ -85,16 +88,48 @@ export default function MeetingsPage({ refreshKey }) {
   );
 }
 
+function RuntimeBadge({ runtime }) {
+  if (!runtime?.mode) return null;
+  const label = runtime.label || runtime.mode;
+  return (
+    <span className={`runtime-badge ${runtime.fallback ? 'runtime-fallback' : ''}`} title={runtime.note || ''}>
+      ⚙ {label}{runtime.fallback ? ' · fallback' : ''}
+    </span>
+  );
+}
+
+function Grounding({ grounding }) {
+  if (!grounding?.length) {
+    return <p className="muted">No knowledge chunks were retrieved for this topic. Add notes to participants’ knowledge bases to ground future runs.</p>;
+  }
+  return (
+    <div className="grounding">
+      <p className="muted">These knowledge chunks were retrieved (scoped to the participants) and used to ground the discussion:</p>
+      <ul className="notes">
+        {grounding.map((g) => (
+          <li key={g.chunkId} className="note">
+            <div>
+              <strong>{g.documentTitle}</strong> <span className="muted">· {g.employeeName}</span>
+              <p className="muted">{g.content}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MeetingView({ meeting, onClose }) {
   const [view, setView] = useState('transcript');
   const rounds = [...new Set(meeting.transcript.map((t) => t.round))];
 
   return (
     <Modal title={`🗓️ ${meeting.topic}`} onClose={onClose} wide>
+      <div className="view-meta"><RuntimeBadge runtime={meeting.runtime} /></div>
       <div className="subtabs">
-        {['transcript', 'minutes', 'report'].map((v) => (
+        {['transcript', 'minutes', 'report', 'knowledge'].map((v) => (
           <button key={v} className={view === v ? 'subtab on' : 'subtab'} onClick={() => setView(v)}>
-            {v[0].toUpperCase() + v.slice(1)}
+            {v === 'knowledge' ? `Knowledge (${meeting.grounding?.length || 0})` : v[0].toUpperCase() + v.slice(1)}
           </button>
         ))}
       </div>
@@ -112,6 +147,13 @@ function MeetingView({ meeting, onClose }) {
                     <div>
                       <div className="turn-who">{t.speaker} <span className="muted">· {t.role}</span></div>
                       <div className="turn-text">{t.text}</div>
+                      {t.citations?.length > 0 && (
+                        <div className="citations">
+                          {t.citations.map((c, ci) => (
+                            <span key={ci} className="cite" title={c.snippet}>📎 {c.documentTitle}</span>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -137,6 +179,8 @@ function MeetingView({ meeting, onClose }) {
       )}
 
       {view === 'report' && <div className="report"><Markdown text={meeting.report} /></div>}
+
+      {view === 'knowledge' && <Grounding grounding={meeting.grounding} />}
     </Modal>
   );
 }

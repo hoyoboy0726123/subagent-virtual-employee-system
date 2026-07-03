@@ -1,18 +1,25 @@
-// The "subagent" reasoning engine.
+// The deterministic "subagent" reasoning engine.
 //
-// This MVP simulates each virtual employee's contribution deterministically
-// from their persona (role, expertise, personality, communication style) plus
-// their personal knowledge base. No external LLM is required — every function
-// here is pure and runs offline.
+// Each virtual employee's contribution is generated from their persona (role,
+// expertise, personality, comms style) PLUS retrieved knowledge chunks scoped to
+// them (simple RAG). Every function here is pure and runs fully offline — this
+// is the default runtime and the guaranteed fallback for the live/OpenClaw paths.
 //
-// An optional live-LLM path lives in llm.js; routes prefer it when a key is
-// present and fall back to these deterministic generators otherwise.
+// `groundingByEmployee` is a map of employeeId → array of retrieved chunks
+// ({documentTitle, content, score, ...}); when empty the engine degrades
+// gracefully to persona-only reasoning.
 
-const asList = (v) => (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
+const asList = (v) =>
+  (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
 
 function firstName(name = '') {
   return name.trim().split(/\s+/)[0] || 'Employee';
 }
+
+const snippet = (text = '', n = 90) => {
+  const s = String(text).replace(/\s+/g, ' ').trim();
+  return s.length > n ? `${s.slice(0, n)}…` : s;
+};
 
 // ---------------------------------------------------------------------------
 // 1. Profile / background generation
@@ -25,9 +32,7 @@ export function generateProfile(input) {
   const style = input.communicationStyle || 'clear and concise';
   const objectives = input.objectives || 'help the team ship high-quality work';
 
-  const expertiseLine = expertise.length
-    ? expertise.join(', ')
-    : 'general problem solving';
+  const expertiseLine = expertise.length ? expertise.join(', ') : 'general problem solving';
 
   return [
     `${name} is a ${role} on the team.`,
@@ -70,7 +75,6 @@ export function ideateRole(description = '') {
     style: 'clear and concise',
   };
 
-  // Try to lift a proper-noun-ish name out of the description; otherwise coin one.
   const nameGuess = (desc.match(/named?\s+([A-Z][a-z]+)/) || [])[1];
   const roleWord = hit.roleTitle.split(' ')[0];
   const name = nameGuess || `${roleWord} Persona`;
@@ -89,42 +93,35 @@ export function ideateRole(description = '') {
 }
 
 // ---------------------------------------------------------------------------
-// 3. Meeting orchestration
+// 3. Meeting orchestration (retrieval-grounded)
 // ---------------------------------------------------------------------------
-function knowledgeFor(emp, knowledge) {
-  return knowledge.filter((k) => k.employeeId === emp.id);
-}
-
-// One persona-flavored contribution given the topic, round and prior remarks.
-function speak(emp, topic, round, priorSpeakers, notes) {
+function speak(emp, topic, round, priorSpeakers, hits) {
   const expertise = asList(emp.expertise);
   const focus = expertise[Math.min(round, expertise.length - 1)] || expertise[0] || 'the problem';
-  const noteRef = notes.length
-    ? ` Drawing on my notes ("${notes[round % notes.length].title}"), `
+  const hit = hits.length ? hits[round % hits.length] : null;
+  const grounded = hit
+    ? ` Drawing on "${hit.documentTitle}" (“${snippet(hit.content)}”), `
     : ' ';
 
   if (round === 0) {
-    return `From a ${emp.roleTitle} perspective, the key question on "${topic}" is how it affects ${focus}.${noteRef}I'd start by clarifying our success criteria and constraints.`;
+    return `From a ${emp.roleTitle} perspective, the key question on "${topic}" is how it affects ${focus}.${grounded}I'd start by clarifying our success criteria and constraints.`;
   }
   if (round === 1) {
-    const react = priorSpeakers.length
-      ? `Building on ${firstName(priorSpeakers[0])}'s point, `
-      : '';
-    return `${react}I see the main risk around ${focus}.${noteRef}my recommendation is to prototype the smallest viable slice and measure it before committing.`;
+    const react = priorSpeakers.length ? `Building on ${firstName(priorSpeakers[0])}'s point, ` : '';
+    return `${react}I see the main risk around ${focus}.${grounded}my recommendation is to prototype the smallest viable slice and measure it before committing.`;
   }
-  // Final round: converge on an action.
   return `To wrap up my part on "${topic}": I'll own the ${focus} workstream, define clear acceptance criteria, and report back with results. Let's align on owners and a check-in date.`;
 }
 
-export function runMeeting({ topic, participants, knowledge, rounds = 3 }) {
+export function runMeeting({ topic, participants, rounds = 3, groundingByEmployee = {} }) {
   const transcript = [];
   const roundTitles = ['Opening positions', 'Analysis & risks', 'Decisions & next steps'];
 
   for (let r = 0; r < rounds; r++) {
     const priorSpeakers = [];
     for (const emp of participants) {
-      const notes = knowledgeFor(emp, knowledge);
-      const text = speak(emp, topic, r, priorSpeakers, notes);
+      const hits = groundingByEmployee[emp.id] || [];
+      const text = speak(emp, topic, r, priorSpeakers, hits);
       transcript.push({
         round: r + 1,
         roundTitle: roundTitles[r] || `Round ${r + 1}`,
@@ -132,6 +129,7 @@ export function runMeeting({ topic, participants, knowledge, rounds = 3 }) {
         role: emp.roleTitle,
         speakerId: emp.id,
         text,
+        citations: hits.slice(0, 2).map((h) => ({ documentTitle: h.documentTitle, snippet: snippet(h.content, 60) })),
       });
       priorSpeakers.push(emp.name);
     }
@@ -144,11 +142,9 @@ export function runMeeting({ topic, participants, knowledge, rounds = 3 }) {
 
 function buildMinutes({ topic, participants, transcript }) {
   const attendees = participants.map((p) => `${p.name} (${p.roleTitle})`);
-  const keyPoints = transcript
-    .filter((t) => t.round <= 2)
-    .map((t) => `- ${t.speaker}: ${t.text}`);
+  const keyPoints = transcript.filter((t) => t.round <= 2).map((t) => `- ${t.speaker}: ${t.text}`);
   const decisions = participants.map(
-    (p) => `- ${p.name} to own the ${asList(p.expertise)[0] || 'assigned'} workstream with defined acceptance criteria.`
+    (p) => `- ${p.name} to own the ${asList(p.expertise)[0] || 'assigned'} workstream with defined acceptance criteria.`,
   );
   const actionItems = participants.map((p) => ({
     owner: p.name,
@@ -188,18 +184,21 @@ function buildReport({ topic, participants, minutes }) {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Goal assignment & collaborative execution
+// 4. Goal assignment & collaborative execution (retrieval-grounded)
 // ---------------------------------------------------------------------------
-export function executeGoal({ title, description, assignees, knowledge }) {
+export function executeGoal({ title, description, assignees, groundingByEmployee = {} }) {
   const tasks = assignees.map((emp, i) => {
     const expertise = asList(emp.expertise);
-    const notes = knowledgeFor(emp, knowledge);
+    const hits = groundingByEmployee[emp.id] || [];
+    const groundNote = hits.length
+      ? `, informed by knowledge such as "${hits[0].documentTitle}"`
+      : '';
     return {
       assignee: emp.name,
       assigneeId: emp.id,
       role: emp.roleTitle,
       subtask: `Lead the ${expertise[0] || 'core'} aspects of "${title}"`,
-      approach: `Apply ${expertise.slice(0, 2).join(' & ') || 'domain expertise'}${notes.length ? `, informed by ${notes.length} knowledge note(s)` : ''}. Deliver a reviewable artifact and flag dependencies.`,
+      approach: `Apply ${expertise.slice(0, 2).join(' & ') || 'domain expertise'}${groundNote}. Deliver a reviewable artifact and flag dependencies.`,
       status: 'in-progress',
       order: i + 1,
     };

@@ -246,7 +246,13 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
               <li key={k.id} className="note">
                 <div>
                   <strong>{k.title}</strong>
+                  {typeof k.chunkCount === 'number' && (
+                    <span className="count" title="retrievable chunks">{k.chunkCount} chunk{k.chunkCount === 1 ? '' : 's'}</span>
+                  )}
                   <p className="muted">{k.content}</p>
+                  {(k.tags || []).length > 0 && (
+                    <div className="tags">{k.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
+                  )}
                 </div>
                 <button className="icon-btn" onClick={() => delNote(k.id)} aria-label="Delete note">🗑</button>
               </li>

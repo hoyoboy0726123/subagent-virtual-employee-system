@@ -10,16 +10,29 @@ const TABS = [
   { key: 'goals', label: '🎯 Goals' },
 ];
 
+const RUNTIME_LABELS = {
+  simulated: 'Simulated',
+  openclaw: 'OpenClaw',
+};
+
 export default function App() {
   const [tab, setTab] = useState('employees');
   const [health, setHealth] = useState(null);
+  const [settings, setSettings] = useState(null);
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
 
   useEffect(() => {
     api.get('/health').then(setHealth).catch(() => setHealth({ ok: false }));
+    api.get('/settings').then(setSettings).catch(() => setSettings(null));
   }, [refreshKey]);
+
+  const switchRuntime = async (mode) => {
+    const next = await api.put('/settings', { runtimeMode: mode });
+    setSettings((s) => ({ ...s, ...next }));
+    refresh();
+  };
 
   return (
     <div className="app">
@@ -31,7 +44,17 @@ export default function App() {
             <p className="subtitle">You are the manager. Build your team of AI employees.</p>
           </div>
         </div>
-        <div className="status">
+        <div className="topbar-status">
+          {settings && (
+            <label className="runtime-switch" title="Which runtime executes your subagents">
+              <span className="runtime-label">Runtime</span>
+              <select value={settings.runtimeMode} onChange={(e) => switchRuntime(e.target.value)}>
+                {(settings.availableModes || ['simulated']).map((m) => (
+                  <option key={m} value={m}>{RUNTIME_LABELS[m] || m}</option>
+                ))}
+              </select>
+            </label>
+          )}
           {health && (
             <span className={`pill ${health.llm ? 'pill-live' : 'pill-sim'}`}>
               {health.llm ? 'LLM: live' : 'LLM: simulated'}
@@ -59,7 +82,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        Local MVP · data persists to <code>server/data/db.json</code> · runs fully offline
+        Local MVP · SQLite store · runs fully offline · runtime: {settings?.runtimeMode || '—'}
       </footer>
     </div>
   );

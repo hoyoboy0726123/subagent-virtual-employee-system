@@ -184,6 +184,21 @@ textarea { resize: vertical; }
 .footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
 .footer code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
 
+/* topbar status area (runtime switch + LLM pill) */
+.topbar-status { display: flex; align-items: center; gap: 10px; }
+.runtime-switch { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.runtime-label { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+.runtime-switch select { background: var(--panel-2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+/* runtime badge + grounding (meetings/goals) */
+.view-meta { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.runtime-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--brand); background: rgba(109, 139, 255, 0.12); border: 1px solid rgba(109, 139, 255, 0.3); border-radius: 999px; padding: 3px 10px; }
+.runtime-badge.runtime-fallback { color: var(--amber); background: rgba(244, 182, 74, 0.12); border-color: rgba(244, 182, 74, 0.3); }
+.grounding { font-size: 14px; }
+.citations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.cite { font-size: 11px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: default; }
+.note .count { margin-left: 8px; }
+
 @media (max-width: 680px) {
   .detail, .form-grid { grid-template-columns: 1fr; }
   .grid { grid-template-columns: 1fr; }
