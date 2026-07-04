@@ -38,6 +38,12 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 > layered architecture and a chunked + full-text RAG knowledge base; **Phase 3**
 > made the UI Traditional Chinese and added the Google Gen AI path; **Phase 4**
 > turned the (then-optional) OpenClaw path into a real subagent runtime.
+>
+> **Phase 6 (shipped).** Meeting reports and goal collaboration outputs are now
+> **downloadable** as polished **Word `.docx`** documents (or portable Markdown)
+> with structured sections. The full productization plan — Phase 6 through the
+> planned Phases 7–10 (document upload/ingestion, output-quality polish,
+> history/search management, final packaging) — lives in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---
 
