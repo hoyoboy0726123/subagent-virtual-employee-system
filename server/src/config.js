@@ -17,10 +17,12 @@ export const config = {
           : path.resolve(process.env.DB_FILE))
       : path.join(__dirname, '..', 'data', 'app.db'),
 
-  // Default agent-execution runtime. 'simulated' works fully offline; 'openclaw'
-  // is the (currently stubbed) real-subagent runtime. This is only the default —
-  // it can be changed at runtime via the settings API and is persisted in the DB.
-  defaultRuntime: process.env.RUNTIME_MODE || 'simulated',
+  // Default agent-execution runtime. 'standalone' is the built-in multi-agent
+  // orchestration and requires no external services; 'openclaw' is the optional
+  // external-subagent adapter. This is only the default — it can be changed at
+  // runtime via the settings API and is persisted in the DB. (The legacy value
+  // 'simulated' is transparently normalized to 'standalone'.)
+  defaultRuntime: process.env.RUNTIME_MODE || 'standalone',
 
   // Retrieval defaults.
   retrieval: {

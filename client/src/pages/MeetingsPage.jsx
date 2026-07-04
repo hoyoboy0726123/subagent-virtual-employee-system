@@ -91,7 +91,11 @@ export default function MeetingsPage({ refreshKey }) {
 function RuntimeBadge({ runtime }) {
   if (!runtime?.mode) return null;
   const label = runtime.label || runtime.mode;
-  const live = runtime.engine === 'openclaw-cli' && !runtime.fallback;
+  const live = runtime.live && !runtime.fallback;
+  const isOpenClaw = runtime.engine === 'openclaw-cli';
+  const liveText = isOpenClaw
+    ? `🦞 真實子代理 ${runtime.liveTurns}/${runtime.totalTurns} 回合${runtime.model ? ` · ${runtime.model}` : ''}`
+    : `🤖 內建多代理即時 ${runtime.liveTurns}/${runtime.totalTurns} 回合${runtime.model ? ` · ${runtime.model}` : ''}`;
   return (
     <>
       <span className={`runtime-badge ${runtime.fallback ? 'runtime-fallback' : ''}`} title={runtime.note || ''}>
@@ -99,7 +103,7 @@ function RuntimeBadge({ runtime }) {
       </span>
       {live && (
         <span className="runtime-badge" title={runtime.note || ''}>
-          🦞 真實子代理 {runtime.liveTurns}/{runtime.totalTurns} 回合{runtime.model ? ` · ${runtime.model}` : ''}
+          {liveText}
         </span>
       )}
     </>

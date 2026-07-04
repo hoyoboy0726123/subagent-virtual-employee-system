@@ -1,33 +1,33 @@
-// OpenClaw runtime — REAL subagent orchestration.
+// OpenClaw runtime — OPTIONAL external adapter (real subagent orchestration).
 //
-// This adapter executes each virtual employee as a genuine OpenClaw subagent
-// (an isolated, persistent Gateway *session*) driven through the `openclaw` CLI.
-// The manager (this backend / the main agent) seeds each employee with its
-// persona + retrieved knowledge, runs the meeting/goal as real multi-turn agent
-// turns, threads the subagents' contributions into one another, and asks a
-// manager session to synthesize the final artifact. See ./openclaw/cli.js and
-// ./openclaw/orchestrator.js for the mechanics.
+// This is NOT the product's default path. The default is the built-in standalone
+// runtime (see StandaloneRuntimeAdapter). This adapter is an opt-in integration
+// for teams that already run an OpenClaw Gateway and want each virtual employee
+// executed as a genuine OpenClaw subagent (an isolated, persistent Gateway
+// *session*) driven through the `openclaw` CLI. When selected, the manager seeds
+// each employee with its persona + retrieved knowledge, runs the meeting/goal as
+// real multi-turn agent turns threading the subagents' contributions into one
+// another, and asks a manager session to synthesize the final artifact. See
+// ./openclaw/cli.js and ./openclaw/orchestrator.js for the mechanics.
 //
-// Live is the default success path. The SimulatedRuntimeAdapter is used ONLY as
-// a fallback — when the OpenClaw CLI/Gateway is unreachable (or explicitly
-// disabled via OPENCLAW_DISABLE) — and every fallback is clearly flagged in the
-// returned `runtime` metadata (`fallback: true`, `live: false`, a note) so the
-// UI and stored records never present a simulation as real execution.
+// When this adapter is active but the CLI/Gateway is unreachable (or explicitly
+// disabled via OPENCLAW_DISABLE), it degrades to the built-in deterministic
+// engine, and every fallback is clearly flagged in the returned `runtime`
+// metadata (`fallback: true`, `live: false`, a note) so the UI and stored records
+// never present a fallback as real OpenClaw execution.
 import { AgentRuntimeAdapter } from './AgentRuntimeAdapter.js';
-import { SimulatedRuntimeAdapter } from './SimulatedRuntimeAdapter.js';
+import { deterministicMeeting, deterministicGoal } from '../orchestration/deterministic.js';
 import * as cli from './openclaw/cli.js';
 import * as orchestrator from './openclaw/orchestrator.js';
 import { config } from '../config.js';
 
 export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
-  #fallback = new SimulatedRuntimeAdapter();
-
   get mode() { return 'openclaw'; }
 
   get label() {
     // Sync best-effort: reflects the last probe (health() refreshes it).
     const live = cli.availableSync();
-    if (live === false) return 'OpenClaw（模擬備援）';
+    if (live === false) return 'OpenClaw（離線備援）';
     if (live === true) return 'OpenClaw（即時子代理）';
     return 'OpenClaw';
   }
@@ -54,7 +54,7 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
   }
 
   async runMeeting(req) {
-    if (!(await cli.available())) return this.#simulatedFallback('runMeeting', req);
+    if (!(await cli.available())) return this.#offlineFallback('meeting', req);
     try {
       const r = await orchestrator.runMeeting(req);
       return {
@@ -65,12 +65,12 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
         runtime: this.#liveRuntime(r.stats, r.grounding.length),
       };
     } catch (err) {
-      return this.#simulatedFallback('runMeeting', req, err);
+      return this.#offlineFallback('meeting', req, err);
     }
   }
 
   async executeGoal(req) {
-    if (!(await cli.available())) return this.#simulatedFallback('executeGoal', req);
+    if (!(await cli.available())) return this.#offlineFallback('goal', req);
     try {
       const r = await orchestrator.executeGoal(req);
       return {
@@ -80,7 +80,7 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
         runtime: this.#liveRuntime(r.stats, r.grounding.length),
       };
     } catch (err) {
-      return this.#simulatedFallback('executeGoal', req, err);
+      return this.#offlineFallback('goal', req, err);
     }
   }
 
@@ -92,7 +92,7 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
     return {
       mode: this.mode,
       label: this.label,
-      engine: allDegraded ? 'simulated' : 'openclaw-cli',
+      engine: allDegraded ? 'deterministic' : 'openclaw-cli',
       live: !allDegraded,
       fallback: allDegraded,
       grounded,
@@ -101,26 +101,27 @@ export class OpenClawRuntimeAdapter extends AgentRuntimeAdapter {
       model: stats.model,
       provider: stats.provider,
       note: allDegraded
-        ? '所有子代理回合皆未能連上 OpenClaw，已以本機備援產出。'
+        ? '所有子代理回合皆未能連上 OpenClaw，已以本機離線引擎產出。'
         : `由 OpenClaw 真實子代理執行（${stats.live}/${stats.total} 回合為即時${stats.model ? `，模型：${stats.model}` : ''}）。`,
     };
   }
 
-  // Full offline fallback: run the simulated adapter but relabel the result as an
-  // OpenClaw fallback so the distinction is visible everywhere it is shown/stored.
-  async #simulatedFallback(method, req, err) {
-    const result = await this.#fallback[method](req);
+  // Whole-run offline fallback: produce the result with the built-in deterministic
+  // engine but relabel it as an OpenClaw fallback so the distinction is visible
+  // everywhere it is shown/stored.
+  #offlineFallback(kind, req, err) {
+    const result = kind === 'meeting' ? deterministicMeeting(req) : deterministicGoal(req);
     const reason = config.openclaw.disabled
-      ? 'OpenClaw 已停用（OPENCLAW_DISABLE）；已在本機以模擬方式執行。'
+      ? 'OpenClaw 已停用（OPENCLAW_DISABLE）；已在本機以離線引擎執行。'
       : err
-        ? `OpenClaw 執行失敗（${err.message}）；已改用本機模擬備援。`
-        : '找不到可用的 OpenClaw CLI／Gateway；已在本機以模擬方式執行。';
+        ? `OpenClaw 執行失敗（${err.message}）；已改用本機離線引擎備援。`
+        : '找不到可用的 OpenClaw CLI／Gateway；已在本機以離線引擎執行。';
     return {
       ...result,
       runtime: {
         mode: this.mode,
-        label: 'OpenClaw（模擬備援）',
-        engine: 'simulated',
+        label: 'OpenClaw（離線備援）',
+        engine: 'deterministic',
         live: false,
         grounded: result.grounding?.length || 0,
         liveTurns: 0,

@@ -7,12 +7,14 @@
 // it asks the currently-selected runtime adapter to do the work.
 //
 // Concrete adapters:
-//   • SimulatedRuntimeAdapter — deterministic, offline, retrieval-grounded (default)
-//   • OpenClawRuntimeAdapter   — real OpenClaw subagent orchestration (stubbed)
+//   • StandaloneRuntimeAdapter — built-in multi-agent orchestration, DEFAULT.
+//     Runs each employee as an in-app agent via Google Gen AI, with a
+//     deterministic offline fallback. No external runtime required.
+//   • OpenClawRuntimeAdapter   — OPTIONAL external adapter: each employee runs as
+//     a real OpenClaw subagent/session via the `openclaw` CLI → Gateway.
 //
-// This abstraction is intentionally small and stable so the two implementations
-// are interchangeable and a third (e.g. a raw LLM-loop runtime) could be added
-// without touching services or routes.
+// This abstraction is intentionally small and stable so the implementations are
+// interchangeable and a third could be added without touching services or routes.
 
 /**
  * @typedef {Object} MeetingRequest
@@ -40,7 +42,7 @@
  */
 
 export class AgentRuntimeAdapter {
-  /** Stable identifier, e.g. 'simulated' | 'openclaw'. */
+  /** Stable identifier, e.g. 'standalone' | 'openclaw'. */
   get mode() {
     throw new Error('AgentRuntimeAdapter.mode must be implemented');
   }

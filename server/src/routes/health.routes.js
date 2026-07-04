@@ -13,15 +13,23 @@ export const healthRouter = Router();
 healthRouter.get('/health', asyncHandler(async (_req, res) => {
   const kb = retrievalStats();
   const settings = getSettings();
-  // Live probe of the OpenClaw runtime so callers can show whether real
-  // subagent execution is actually available right now (independent of which
-  // mode is selected).
+  // The default standalone runtime is always ready; report whether its agent
+  // turns run on the live model (Gemma) or the offline deterministic engine.
+  const standalone = await getRuntimeAdapter('standalone').health();
+  // Live probe of the OPTIONAL OpenClaw integration so callers can show whether
+  // real subagent execution is available right now (independent of which mode is
+  // selected).
   const openclaw = await getRuntimeAdapter('openclaw').health();
   res.json({
     ok: true,
     llm: llmEnabled(),
     runtime: settings.runtimeMode,
     runtimeLabel: settings.runtimeLabel,
+    standalone: {
+      live: standalone.live,
+      engine: standalone.engine,
+      model: standalone.model,
+    },
     openclaw: {
       live: openclaw.live,
       engine: openclaw.engine,

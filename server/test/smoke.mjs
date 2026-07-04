@@ -36,12 +36,15 @@ const api = async (method, pathname, body) => {
 };
 
 try {
-  await step('health check reports SQLite counts + runtime', async () => {
+  await step('health check reports SQLite counts + standalone runtime', async () => {
     const { status, json } = await api('GET', '/api/health');
     assert.equal(status, 200);
     assert.equal(json.ok, true);
     assert.ok('documents' in json.counts && 'chunks' in json.counts, 'exposes kb stats');
-    assert.equal(json.runtime, 'simulated');
+    assert.equal(json.runtime, 'standalone', 'default runtime is standalone (no external deps)');
+    assert.ok(json.standalone, 'health exposes the standalone runtime block');
+    // No API key in the hermetic test → agent turns run on the offline engine.
+    assert.equal(json.standalone.engine, 'deterministic');
   });
 
   let empId;
@@ -133,7 +136,12 @@ try {
     assert.ok(json.report.includes('Regression and release readiness'));
     assert.ok(Array.isArray(json.grounding), 'grounding attached');
     assert.ok(json.grounding.length >= 1, 'meeting was grounded in retrieved knowledge');
-    assert.equal(json.runtime.mode, 'simulated');
+    assert.equal(json.runtime.mode, 'standalone');
+    // Multi-agent orchestration ran; without an API key every turn used the
+    // offline engine, which is honestly flagged (not presented as a live model).
+    assert.equal(json.runtime.engine, 'deterministic');
+    assert.equal(json.runtime.live, false);
+    assert.ok(json.runtime.totalTurns >= 6, 'a turn per participant per round was orchestrated');
   });
 
   await step('reject meeting without participants', async () => {
@@ -151,7 +159,7 @@ try {
     assert.equal(json.tasks.length, 2);
     assert.equal(json.status, 'in-progress');
     assert.ok(json.output.includes('Ship the beta'));
-    assert.equal(json.runtime.mode, 'simulated');
+    assert.equal(json.runtime.mode, 'standalone');
   });
 
   await step('health reports OpenClaw runtime liveness (disabled here)', async () => {
@@ -161,7 +169,7 @@ try {
     assert.equal(json.openclaw.disabled, true);
   });
 
-  await step('switch runtime to openclaw (flagged simulated fallback)', async () => {
+  await step('switch runtime to openclaw (flagged offline fallback)', async () => {
     const { status, json } = await api('PUT', '/api/settings', { runtimeMode: 'openclaw' });
     assert.equal(status, 200);
     assert.equal(json.runtimeMode, 'openclaw');
@@ -171,10 +179,17 @@ try {
     });
     assert.equal(mtg.runtime.mode, 'openclaw');
     assert.equal(mtg.runtime.fallback, true, 'openclaw disabled → falls back but is labeled');
-    assert.equal(mtg.runtime.engine, 'simulated', 'fallback is honestly labeled as simulated');
+    assert.equal(mtg.runtime.engine, 'deterministic', 'fallback is honestly labeled as the offline engine');
     assert.equal(mtg.runtime.live, false);
     // Restore default so ordering never matters.
-    await api('PUT', '/api/settings', { runtimeMode: 'simulated' });
+    await api('PUT', '/api/settings', { runtimeMode: 'standalone' });
+  });
+
+  await step('legacy "simulated" mode is normalized to standalone', async () => {
+    const { status, json } = await api('PUT', '/api/settings', { runtimeMode: 'simulated' });
+    assert.equal(status, 200);
+    assert.equal(json.runtimeMode, 'standalone', 'legacy alias maps forward');
+    await api('PUT', '/api/settings', { runtimeMode: 'standalone' });
   });
 
   await step('reject unknown runtime mode', async () => {

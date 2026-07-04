@@ -6,7 +6,7 @@ import { insertEmployee } from '../storage/employees.repo.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
 import { insertMeeting } from '../storage/meetings.repo.js';
 import { generateProfile } from '../reasoning/engine.js';
-import { SimulatedRuntimeAdapter } from '../runtime/SimulatedRuntimeAdapter.js';
+import { getRuntimeAdapter } from '../runtime/index.js';
 
 export async function seed() {
   resetDb();
@@ -62,8 +62,8 @@ export async function seed() {
     insertDocument(emp.id, { title, content, tags, source: 'note' });
   }
 
-  // One grounded demo meeting through the default runtime.
-  const runtime = new SimulatedRuntimeAdapter();
+  // One grounded demo meeting through the default (standalone) runtime.
+  const runtime = getRuntimeAdapter('standalone');
   const participants = [aria, marcus, lena];
   const topic = '虛擬員工系統的 MVP 範疇與持久化';
   const result = await runtime.runMeeting({ topic, participants, rounds: 3 });

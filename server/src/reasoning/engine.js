@@ -97,7 +97,9 @@ export function ideateRole(description = '') {
 // ---------------------------------------------------------------------------
 // 3. Meeting orchestration (retrieval-grounded)
 // ---------------------------------------------------------------------------
-function speak(emp, topic, round, priorSpeakers, hits) {
+// `speak` is exported so the standalone orchestration layer can reuse it as the
+// per-turn *deterministic fallback* when a live model turn is unavailable.
+export function speak(emp, topic, round, priorSpeakers, hits) {
   const expertise = asList(emp.expertise);
   const focus = expertise[Math.min(round, expertise.length - 1)] || expertise[0] || '這個問題';
   const hit = hits.length ? hits[round % hits.length] : null;
@@ -142,7 +144,7 @@ export function runMeeting({ topic, participants, rounds = 3, groundingByEmploye
   return { transcript, minutes, report };
 }
 
-function buildMinutes({ topic, participants, transcript }) {
+export function buildMinutes({ topic, participants, transcript }) {
   const attendees = participants.map((p) => `${p.name}（${p.roleTitle}）`);
   const keyPoints = transcript.filter((t) => t.round <= 2).map((t) => `- ${t.speaker}：${t.text}`);
   const decisions = participants.map(
@@ -164,7 +166,7 @@ function buildMinutes({ topic, participants, transcript }) {
   };
 }
 
-function buildReport({ topic, participants, minutes }) {
+export function buildReport({ topic, participants, minutes }) {
   const names = participants.map((p) => firstName(p.name)).join('、');
   return [
     `# 會議報告：${topic}`,
@@ -190,17 +192,14 @@ function buildReport({ topic, participants, minutes }) {
 // ---------------------------------------------------------------------------
 export function executeGoal({ title, description, assignees, groundingByEmployee = {} }) {
   const tasks = assignees.map((emp, i) => {
-    const expertise = asList(emp.expertise);
     const hits = groundingByEmployee[emp.id] || [];
-    const groundNote = hits.length
-      ? `，並參考「${hits[0].documentTitle}」等知識`
-      : '';
+    const expertise = asList(emp.expertise);
     return {
       assignee: emp.name,
       assigneeId: emp.id,
       role: emp.roleTitle,
-      subtask: `主導「${title}」中${expertise[0] || '核心'}相關的部分`,
-      approach: `運用${expertise.slice(0, 2).join('與') || '領域專業'}${groundNote}。交付可供審閱的成果，並標示相依項目。`,
+      subtask: goalSubtask(emp, title),
+      approach: goalApproach(emp, title, hits),
       status: 'in-progress',
       order: i + 1,
     };
@@ -210,7 +209,20 @@ export function executeGoal({ title, description, assignees, groundingByEmployee
   return { tasks, output };
 }
 
-function buildCollaborationOutput({ title, description, tasks, assignees }) {
+// The subtask/approach for one assignee. Exported so the standalone orchestration
+// layer can reuse them as the per-turn deterministic fallback for a goal.
+export function goalSubtask(emp, title) {
+  const expertise = asList(emp.expertise);
+  return `主導「${title}」中${expertise[0] || '核心'}相關的部分`;
+}
+
+export function goalApproach(emp, title, hits = []) {
+  const expertise = asList(emp.expertise);
+  const groundNote = hits.length ? `，並參考「${hits[0].documentTitle}」等知識` : '';
+  return `運用${expertise.slice(0, 2).join('與') || '領域專業'}${groundNote}。交付可供審閱的成果，並標示相依項目。`;
+}
+
+export function buildCollaborationOutput({ title, description, tasks, assignees }) {
   return [
     `# 協作產出：${title}`,
     ``,

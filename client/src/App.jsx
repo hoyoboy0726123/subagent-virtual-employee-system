@@ -11,8 +11,8 @@ const TABS = [
 ];
 
 const RUNTIME_LABELS = {
-  simulated: '模擬',
-  openclaw: 'OpenClaw（真實子代理）',
+  standalone: '內建多代理',
+  openclaw: 'OpenClaw（外部整合）',
 };
 
 export default function App() {
@@ -57,17 +57,20 @@ export default function App() {
           )}
           {health && (
             <span
-              className={`pill ${health.openclaw?.live ? 'pill-live' : 'pill-sim'}`}
-              title={health.openclaw?.live
-                ? `OpenClaw Gateway：${health.openclaw.gateway}${health.openclaw.version ? ` · ${health.openclaw.version}` : ''}`
-                : (health.openclaw?.disabled ? 'OpenClaw 已停用（OPENCLAW_DISABLE）' : '找不到可用的 OpenClaw CLI／Gateway')}
+              className={`pill ${health.standalone?.live ? 'pill-live' : 'pill-sim'}`}
+              title={health.standalone?.live
+                ? `內建多代理以即時模型執行每個代理回合${health.standalone.model ? `（${health.standalone.model}）` : ''}`
+                : '未設定 Google API 金鑰；內建多代理以離線推理引擎（persona + RAG）執行'}
             >
-              {health.openclaw?.live ? 'OpenClaw：即時子代理' : 'OpenClaw：離線'}
+              {health.standalone?.live ? `內建多代理：即時（${health.standalone.model || 'Gemma'}）` : '內建多代理：離線推理'}
             </span>
           )}
-          {health && (
-            <span className={`pill ${health.llm ? 'pill-live' : 'pill-sim'}`}>
-              {health.llm ? 'LLM：即時（Gemma）' : 'LLM：模擬'}
+          {health?.openclaw?.live && (
+            <span
+              className="pill pill-live"
+              title={`可選的 OpenClaw 整合可用：Gateway ${health.openclaw.gateway}${health.openclaw.version ? ` · ${health.openclaw.version}` : ''}`}
+            >
+              OpenClaw：可用（可選）
             </span>
           )}
         </div>
@@ -92,7 +95,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        本機 MVP · SQLite 儲存 · 完全離線可用 · 執行環境：{settings ? (RUNTIME_LABELS[settings.runtimeMode] || settings.runtimeMode) : '—'}
+        獨立運作 · 內建多代理編排 · SQLite 儲存 · 無需外部服務 · 執行環境：{settings ? (RUNTIME_LABELS[settings.runtimeMode] || settings.runtimeMode) : '—'}
       </footer>
     </div>
   );
