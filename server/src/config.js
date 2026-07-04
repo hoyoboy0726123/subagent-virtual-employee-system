@@ -38,9 +38,32 @@ export const config = {
     model: process.env.GEMINI_MODEL || 'gemma-4-31b-it',
   },
 
-  // Optional OpenClaw runtime wiring. When unset the OpenClaw adapter runs in
-  // simulated-fallback mode so flows never break offline.
+  // Real OpenClaw runtime wiring. Employees are executed as real OpenClaw
+  // subagents/sessions driven through the `openclaw` CLI, which talks to the
+  // local OpenClaw Gateway. Nothing here needs to be set for it to work as long
+  // as the `openclaw` binary is on PATH and a Gateway is running — the defaults
+  // are sensible. Every value is env-overridable for deployment/testing.
   openclaw: {
+    // CLI binary used to drive subagent turns (`openclaw agent ... --json`).
+    cli: process.env.OPENCLAW_CLI || 'openclaw',
+    // Optional explicit agent id to route turns to (`--agent`). Empty → the
+    // Gateway's default agent/routing. Employees are still isolated per-session.
+    agentId: process.env.OPENCLAW_AGENT || '',
+    // Agent id used for the manager synthesis pass. Falls back to `agentId`.
+    managerAgentId: process.env.OPENCLAW_MANAGER_AGENT || process.env.OPENCLAW_AGENT || '',
+    // Per-turn timeout (seconds) passed to the CLI and enforced locally.
+    timeoutSec: Number(process.env.OPENCLAW_TIMEOUT_SEC) || 300,
+    // Thinking level for subagent turns: off|minimal|low|medium|high.
+    thinking: process.env.OPENCLAW_THINKING || 'low',
+    // Namespacing prefix for the session ids we create (keeps them scannable in
+    // the Gateway session store, e.g. veemp-emp-…, veemp-mgr-…).
+    sessionPrefix: process.env.OPENCLAW_SESSION_PREFIX || 'veemp',
+    // Hard kill-switch: set OPENCLAW_DISABLE=1 to force the OpenClaw adapter into
+    // simulated-fallback even when the CLI is present (used by the hermetic
+    // smoke test so it never spends real subagent turns).
+    disabled: /^(1|true|yes|on)$/i.test(process.env.OPENCLAW_DISABLE || ''),
+    // Legacy HTTP wiring, retained for reference/compatibility. Not required by
+    // the CLI path and no longer what gates "configured".
     endpoint: process.env.OPENCLAW_ENDPOINT || '',
     apiKey: process.env.OPENCLAW_API_KEY || '',
   },
@@ -48,8 +71,4 @@ export const config = {
 
 export function llmEnabled() {
   return Boolean(config.llm.apiKey);
-}
-
-export function openclawConfigured() {
-  return Boolean(config.openclaw.endpoint);
 }

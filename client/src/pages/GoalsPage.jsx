@@ -96,6 +96,11 @@ export default function GoalsPage({ refreshKey }) {
               <span className={`runtime-badge ${open.runtime.fallback ? 'runtime-fallback' : ''}`} title={open.runtime.note || ''}>
                 ⚙ {open.runtime.label || open.runtime.mode}{open.runtime.fallback ? ' · 備援' : ''}
               </span>
+              {open.runtime.engine === 'openclaw-cli' && !open.runtime.fallback && (
+                <span className="runtime-badge" title={open.runtime.note || ''}>
+                  🦞 真實子代理 {open.runtime.liveTurns}/{open.runtime.totalTurns} 回合{open.runtime.model ? ` · ${open.runtime.model}` : ''}
+                </span>
+              )}
               {open.grounding?.length > 0 && <span className="runtime-badge">📚 {open.grounding.length} 筆知識依據</span>}
             </div>
           )}

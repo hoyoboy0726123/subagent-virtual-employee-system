@@ -12,7 +12,7 @@ const TABS = [
 
 const RUNTIME_LABELS = {
   simulated: '模擬',
-  openclaw: 'OpenClaw',
+  openclaw: 'OpenClaw（真實子代理）',
 };
 
 export default function App() {
@@ -54,6 +54,16 @@ export default function App() {
                 ))}
               </select>
             </label>
+          )}
+          {health && (
+            <span
+              className={`pill ${health.openclaw?.live ? 'pill-live' : 'pill-sim'}`}
+              title={health.openclaw?.live
+                ? `OpenClaw Gateway：${health.openclaw.gateway}${health.openclaw.version ? ` · ${health.openclaw.version}` : ''}`
+                : (health.openclaw?.disabled ? 'OpenClaw 已停用（OPENCLAW_DISABLE）' : '找不到可用的 OpenClaw CLI／Gateway')}
+            >
+              {health.openclaw?.live ? 'OpenClaw：即時子代理' : 'OpenClaw：離線'}
+            </span>
           )}
           {health && (
             <span className={`pill ${health.llm ? 'pill-live' : 'pill-sim'}`}>

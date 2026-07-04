@@ -8,6 +8,10 @@ import assert from 'node:assert/strict';
 // Use an isolated in-memory database BEFORE importing the app so the smoke test
 // never touches seeded/real data.
 process.env.DB_FILE = ':memory:';
+// Keep this test hermetic and fast: force the OpenClaw runtime into its
+// simulated fallback so we never spend real subagent turns here. The REAL
+// OpenClaw path is exercised by the opt-in test/smoke.openclaw.mjs.
+process.env.OPENCLAW_DISABLE = '1';
 const { app } = await import('../src/index.js');
 
 const server = app.listen(0);
@@ -150,7 +154,14 @@ try {
     assert.equal(json.runtime.mode, 'simulated');
   });
 
-  await step('switch runtime to openclaw (simulated fallback)', async () => {
+  await step('health reports OpenClaw runtime liveness (disabled here)', async () => {
+    const { json } = await api('GET', '/api/health');
+    assert.ok(json.openclaw, 'health exposes openclaw block');
+    assert.equal(json.openclaw.live, false, 'OPENCLAW_DISABLE → not live in this test');
+    assert.equal(json.openclaw.disabled, true);
+  });
+
+  await step('switch runtime to openclaw (flagged simulated fallback)', async () => {
     const { status, json } = await api('PUT', '/api/settings', { runtimeMode: 'openclaw' });
     assert.equal(status, 200);
     assert.equal(json.runtimeMode, 'openclaw');
@@ -159,7 +170,9 @@ try {
       topic: 'Runtime switch check', participantIds: [empId], rounds: 1,
     });
     assert.equal(mtg.runtime.mode, 'openclaw');
-    assert.equal(mtg.runtime.fallback, true, 'openclaw not configured → falls back but is labeled');
+    assert.equal(mtg.runtime.fallback, true, 'openclaw disabled → falls back but is labeled');
+    assert.equal(mtg.runtime.engine, 'simulated', 'fallback is honestly labeled as simulated');
+    assert.equal(mtg.runtime.live, false);
     // Restore default so ordering never matters.
     await api('PUT', '/api/settings', { runtimeMode: 'simulated' });
   });

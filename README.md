@@ -11,17 +11,26 @@ The entire product UI is in **Traditional Chinese (繁體中文)** — buttons, 
 labels, dialogs, empty states, runtime labels, and the generated meeting
 reports / collaboration outputs.
 
-It runs **fully offline with zero API keys**. Every subagent contribution is
+It runs **fully offline with zero API keys** — every subagent contribution can be
 produced by a deterministic, persona-driven engine grounded with a simple RAG
-retrieval layer. An optional live-LLM path (**Google Gen AI**, model
-`gemma-4-31b-it`) and a (stubbed) real **OpenClaw** subagent runtime can be
-switched on, but nothing requires them.
+retrieval layer. But when the **OpenClaw** runtime is selected and a Gateway is
+reachable, employees are executed as **real OpenClaw subagents** (isolated,
+persistent Gateway sessions driven through the `openclaw` CLI) — genuine
+multi-turn model execution, not a simulation. An optional live-LLM enrichment
+path (**Google Gen AI**, model `gemma-4-31b-it`) is also available.
 
-> **Phase 2** rebuilt the backend on **SQLite** with a clean layered
-> architecture (routes → services → runtime → storage/retrieval), added a
-> chunked + full-text knowledge base ready for RAG, and introduced a pluggable
-> **runtime adapter** abstraction so the app can grow into real OpenClaw
-> subagent orchestration. See [Architecture](#️-architecture).
+> **Phase 4 (real runtime).** The OpenClaw runtime is no longer stubbed. The
+> manager (this backend / the main agent) now spawns each virtual employee as a
+> real OpenClaw subagent session, seeds it with the employee's persona +
+> retrieved knowledge, runs meetings/goals as genuine multi-turn agent turns
+> (threading the subagents' contributions into one another), and asks a manager
+> session to synthesize the final report/output. The simulated engine is kept
+> **only as a clearly-flagged fallback**. See
+> [The OpenClaw runtime](#-the-openclaw-runtime-real-subagents).
+>
+> Earlier phases: **Phase 2** rebuilt the backend on **SQLite** with a clean
+> layered architecture and a chunked + full-text RAG knowledge base; **Phase 3**
+> made the UI Traditional Chinese and added the Google Gen AI path.
 
 ---
 
@@ -35,7 +44,7 @@ switched on, but nothing requires them.
 | 4 | **Goal assignment** — assign a goal to one or more employees; work is split by expertise into tasks, grounded in their knowledge, with a **collaboration output** | Goals |
 | 5 | **New-role ideation** — describe the employee you want; the system drafts a full profile you can edit before saving | Employees → *Ideate a role* |
 | 6 | **Retrieval search** — keyword/FTS search across the knowledge base, scoped to one or many employees | `GET /api/knowledge/search` |
-| 7 | **Runtime switch** — choose how subagents execute: **Simulated** (offline, default) or **OpenClaw** (stubbed, falls back to simulated) | Header → *Runtime* |
+| 7 | **Runtime switch** — choose how subagents execute: **Simulated** (offline, default) or **OpenClaw** (real subagent/session execution via the `openclaw` CLI → Gateway; falls back to simulated only if unreachable) | Header → *Runtime* |
 | 8 | **SQLite persistence** — everything survives restarts in a single `.db` file | `server/data/app.db` |
 
 ---
@@ -63,7 +72,8 @@ npm run serve        # builds the client, then serves API + UI on :3001
 ### Other scripts
 
 ```bash
-npm test             # end-to-end smoke test (boots the app, exercises every flow)
+npm test             # hermetic end-to-end smoke test (boots the app, exercises every flow)
+npm run test:openclaw # opt-in REAL OpenClaw runtime smoke test (needs a live Gateway; slow)
 npm run migrate      # apply pending DB migrations + print schema version
 npm run seed         # RESET the DB and load sample data
 npm run build        # build the client into client/dist
@@ -104,8 +114,11 @@ subagent-virtual-employee-system/
 │   │   │
 │   │   ├── runtime/                ── orchestration / runtime adapters ──
 │   │   │   ├── AgentRuntimeAdapter.js      base interface
-│   │   │   ├── SimulatedRuntimeAdapter.js  default, offline, retrieval-grounded
-│   │   │   ├── OpenClawRuntimeAdapter.js   real subagent runtime (STUBBED)
+│   │   │   ├── SimulatedRuntimeAdapter.js  offline, retrieval-grounded (fallback)
+│   │   │   ├── OpenClawRuntimeAdapter.js   REAL OpenClaw subagent runtime
+│   │   │   ├── openclaw/
+│   │   │   │   ├── cli.js  ★               execFile client for `openclaw agent --json`
+│   │   │   │   └── orchestrator.js  ★      multi-subagent meeting/goal orchestration
 │   │   │   └── index.js                    adapter registry + factory
 │   │   │
 │   │   ├── reasoning/              ── the "subagent" thinking ──
@@ -126,7 +139,9 @@ subagent-virtual-employee-system/
 │   │   │
 │   │   └── util/                   ids.js · http.js (asyncHandler, HttpError)
 │   │   └── data/app.db             SQLite database (git-ignored)
-│   └── test/smoke.mjs              end-to-end HTTP smoke test (in-memory DB)
+│   └── test/
+│       ├── smoke.mjs               hermetic end-to-end HTTP smoke test (in-memory DB)
+│       └── smoke.openclaw.mjs      opt-in REAL OpenClaw runtime smoke test
 └── client/                         Vite + React SPA
     └── src/ App.jsx · api.js · components/ui.jsx · pages/
 ```
@@ -179,16 +194,16 @@ style) **plus its retrieved knowledge chunks** into behavior:
 The engine is pure and deterministic, so the app is instant, free, and offline —
 and it's the guaranteed fallback for every richer runtime.
 
-### Runtime adapters (the path to real OpenClaw subagents)
+### Runtime adapters
 
 The service layer never calls the engine directly. It asks the **active runtime
-adapter** to `runMeeting` / `executeGoal`. All adapters share one small,
-stable interface (`runtime/AgentRuntimeAdapter.js`) so they're interchangeable:
+adapter** to `runMeeting` / `executeGoal`. All adapters share one small, stable
+interface (`runtime/AgentRuntimeAdapter.js`) so they're interchangeable:
 
 | Adapter | Mode | Behavior |
 |---------|------|----------|
 | `SimulatedRuntimeAdapter` | `simulated` (default) | Deterministic engine + RAG grounding, fully offline. Enriches the report/plan via Google's Gemma model if `GEMINI_API_KEY` is set. |
-| `OpenClawRuntimeAdapter` | `openclaw` | **Stubbed.** Where the manager spawns each employee as a real OpenClaw subagent. Until wired up, it transparently falls back to the simulated adapter and labels its output `fallback: true`. |
+| `OpenClawRuntimeAdapter` | `openclaw` | **Real subagent execution.** Runs each employee as an OpenClaw subagent session via the `openclaw` CLI → Gateway. Falls back to the simulated engine **only** if the CLI/Gateway is unreachable — and flags it (`fallback: true`, `engine: 'simulated'`). |
 
 Switch modes live from the header, or via the API:
 
@@ -198,24 +213,97 @@ curl -X PUT localhost:3001/api/settings -d '{"runtimeMode":"openclaw"}' \
 ```
 
 The chosen mode is persisted in the `settings` table, and each stored
-meeting/goal records which runtime produced it (`runtime: {mode,label,fallback}`).
+meeting/goal records which runtime produced it, honestly labeled:
 
-#### Wiring up real OpenClaw subagents later
+```jsonc
+"runtime": {
+  "mode": "openclaw",
+  "engine": "openclaw-cli",      // "simulated" when it fell back
+  "live": true,                   // false when fallback
+  "fallback": false,
+  "liveTurns": 5, "totalTurns": 5,// how many turns actually ran on OpenClaw
+  "model": "gpt-5.4", "provider": "openai-codex",
+  "note": "由 OpenClaw 真實子代理執行（5/5 回合為即時，模型：gpt-5.4）。"
+}
+```
 
-`OpenClawRuntimeAdapter` documents exactly where the live integration plugs in.
-Three private methods are the *only* thing a real implementation needs to fill:
+---
 
-- `#spawnSubagent(employee, grounding)` — create one OpenClaw subagent per
-  virtual employee, seeded with its persona (system prompt) and retrieved
-  knowledge.
-- `#dispatchTurn(agent, turnContext)` — send a discussion/work turn and await
-  the subagent's reply (this is the real multi-agent loop).
-- `#collectArtifact(kind, rawTurns)` — have the manager (main) agent synthesize
-  the final minutes/report or tasks/output.
+## 🦞 The OpenClaw runtime (real subagents)
 
-Set `OPENCLAW_ENDPOINT` to flip `configured()` on. Nothing else in the app
-changes — services, routes, storage, and the client all depend only on the
-adapter interface.
+When the `openclaw` runtime is active, execution is **real**:
+
+- **One subagent per employee.** Each employee is mapped to an isolated,
+  persistent OpenClaw **session** (`veemp-emp-<employeeId>-<runId>`). The session
+  remembers its own turns, so an employee stays in character across meeting
+  rounds — this is the "subagent" mechanism the CLI/Gateway already provides.
+- **Deriving execution context.** On its first turn a subagent is seeded with a
+  persona header built from the stored profile (role, expertise, personality,
+  comms style, objectives) **plus the knowledge retrieved for it** (RAG). Later
+  turns rely on the session's memory.
+- **Real multi-turn, multi-agent loop.** For a meeting, the orchestrator runs
+  `rounds` × `participants` genuine agent turns, injecting the *other* subagents'
+  latest contributions into each prompt so they actually respond to one another.
+  For a goal, each assignee produces its real subtask + approach.
+- **Manager-side synthesis.** A dedicated manager session (`veemp-mgr-…`, the
+  main agent) synthesizes the final **report** (meeting) / **collaboration
+  output** (goal) from the *real* transcript. Minutes are derived deterministically
+  from that same real transcript.
+- **Honest fallback.** Turn failures retry once, then degrade to a flagged
+  deterministic line; the run is only marked `fallback: true` if **zero** turns
+  ran live. Nothing simulated is ever presented as real.
+
+**Mechanics** live in two small modules:
+
+- `runtime/openclaw/cli.js` — the only place that shells out. Uses `execFile`
+  (never a shell, so persona/topic text can't be interpreted as shell syntax) to
+  run `openclaw agent --session-id <id> --message <text> --json`, parses the
+  reply + run metadata, and exposes `probe()/available()/status()/runTurn()`.
+- `runtime/openclaw/orchestrator.js` — persona/context building and the
+  meeting/goal orchestration described above.
+
+### Requirements
+
+- The **`openclaw` CLI** on `PATH` (`openclaw --version`).
+- A **running OpenClaw Gateway** with at least one agent
+  (`openclaw health`, `openclaw agents list`).
+- Model-provider credentials configured **in OpenClaw itself** (the Gateway owns
+  model execution — this app never sees provider keys).
+
+If any of those are missing, the app still works — the OpenClaw adapter simply
+falls back to the simulated engine and says so.
+
+### Configuration (all optional, env-overridable)
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `OPENCLAW_CLI` | `openclaw` | CLI binary used to drive turns |
+| `OPENCLAW_AGENT` | *(gateway default)* | route turns to a specific agent (`--agent`) |
+| `OPENCLAW_MANAGER_AGENT` | `OPENCLAW_AGENT` | agent used for the manager synthesis pass |
+| `OPENCLAW_TIMEOUT_SEC` | `300` | per-turn timeout |
+| `OPENCLAW_THINKING` | `low` | thinking level: `off\|minimal\|low\|medium\|high` |
+| `OPENCLAW_SESSION_PREFIX` | `veemp` | namespacing prefix for created sessions |
+| `OPENCLAW_DISABLE` | *(unset)* | hard kill-switch → force simulated fallback (used by the hermetic test) |
+
+### Health / liveness visibility
+
+Whether real execution is available is surfaced everywhere:
+
+- `GET /api/health` → `openclaw: { live, engine, gateway, version, disabled }`.
+- `GET /api/settings` → `runtimes.openclaw` with the full probe
+  (`live`, `agents`, `version`, `gateway`).
+- The header shows an **「OpenClaw：即時子代理 / 離線」** pill, and each
+  meeting/goal shows a **「🦞 真實子代理 N/N 回合 · <model>」** badge when live.
+
+### Limits & caveats
+
+- Each turn is a real model call, so an OpenClaw meeting is **slow** (tens of
+  seconds for a few participants × rounds) and consumes provider tokens/quota via
+  your Gateway. Meetings are bounded to ≤ 5 rounds.
+- Requests are processed sequentially per run; there's no streaming to the UI yet
+  (results appear when the run completes).
+- Sessions accumulate in the Gateway's session store (one per employee per run);
+  prune with the OpenClaw CLI if desired.
 
 ### Optional: live LLM via Google Gen AI (`@google/genai`)
 
@@ -258,7 +346,7 @@ engine and never breaks on a network error.
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/health` | status, LLM/runtime mode, counts (employees, documents, chunks, meetings, goals) |
+| GET | `/api/health` | status, LLM flag, runtime mode, **OpenClaw liveness** (`openclaw.live/engine/gateway/version`), counts |
 | GET/PUT | `/api/settings` | read settings + per-runtime health / switch runtime mode |
 | GET/POST | `/api/employees` | list / create employees |
 | GET/PUT/DELETE | `/api/employees/:id` | read (with knowledge) / update / delete |
@@ -281,8 +369,23 @@ engine and never breaks on a network error.
 every core flow: SQLite-backed persistence, employee creation + profile
 generation, required-field validation, role ideation, **document chunking**,
 **keyword retrieval + employee scoping**, a **knowledge-grounded meeting**
-(transcript/minutes/report/grounding), goal assignment, the **runtime switch**
-(including the labeled OpenClaw fallback), and document deletion.
+(transcript/minutes/report/grounding), goal assignment, OpenClaw runtime health
+reporting, and the **runtime switch** (asserting the OpenClaw fallback is
+honestly flagged `engine: 'simulated'`, `fallback: true`). This test forces
+`OPENCLAW_DISABLE=1` so it stays hermetic and fast.
+
+`npm run test:openclaw` is the **real** validation: it boots the app with the
+OpenClaw runtime active and drives a genuine 2-subagent meeting + a goal through
+the CLI → Gateway, asserting the results are flagged `engine: 'openclaw-cli'`,
+`fallback: false`, with live turns and real transcript text. It **skips (exit 0)**
+if no Gateway is reachable, and is not part of `npm test` because each turn is a
+real, billable model call. A sample real run:
+
+```
+  ✓ health reports OpenClaw live — gateway=ok version=OpenClaw 2026.3.8
+  ✓ run a REAL OpenClaw meeting (2 subagents × 2 rounds) — model=gpt-5.4 liveTurns=5/5
+  ✓ assign a REAL OpenClaw goal (1 subagent)
+```
 
 ---
 
@@ -292,7 +395,9 @@ generation, required-field validation, role ideation, **document chunking**,
   for concurrent multi-writer deployments.
 - Retrieval is keyword/FTS (BM25) today — deliberately dependency-free. The
   `search()` seam is designed for a vector retriever to drop in later.
-- The OpenClaw runtime is stubbed; it falls back to the simulated adapter (and
-  says so) until the three plug-point methods are implemented.
+- The OpenClaw runtime is **real** — it drives subagents via the `openclaw` CLI →
+  Gateway. It falls back to the simulated engine (and clearly says so) only when
+  the CLI/Gateway is unreachable or `OPENCLAW_DISABLE` is set. Real runs are slow
+  (a model call per turn) and consume your Gateway's provider quota.
 - Data lives in `server/data/app.db`. Delete it (or re-run `npm run seed`) to
   reset.
