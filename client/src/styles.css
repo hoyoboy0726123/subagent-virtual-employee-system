@@ -194,6 +194,9 @@ textarea { resize: vertical; }
 .view-meta { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .runtime-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; color: var(--brand); background: rgba(109, 139, 255, 0.12); border: 1px solid rgba(109, 139, 255, 0.3); border-radius: 999px; padding: 3px 10px; }
 .runtime-badge.runtime-fallback { color: var(--amber); background: rgba(244, 182, 74, 0.12); border-color: rgba(244, 182, 74, 0.3); }
+.export-buttons { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.btn-sm { padding: 6px 11px; font-size: 13px; }
+.btn-ghost.btn-sm { padding: 6px 11px; font-size: 13px; }
 .grounding { font-size: 14px; }
 .citations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .cite { font-size: 11px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: default; }

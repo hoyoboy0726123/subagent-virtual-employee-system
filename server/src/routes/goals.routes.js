@@ -1,11 +1,23 @@
 import { Router } from 'express';
-import { asyncHandler } from '../util/http.js';
+import { asyncHandler, sendDownload } from '../util/http.js';
 import * as goals from '../services/goals.service.js';
+import { buildGoalExport } from '../export/reportDoc.js';
 
 export const goalsRouter = Router();
 
 goalsRouter.get('/goals', asyncHandler(async (_req, res) => {
   res.json(goals.list());
+}));
+
+goalsRouter.get('/goals/:id', asyncHandler(async (req, res) => {
+  res.json(goals.get(req.params.id));
+}));
+
+// Download the collaboration output as a Word document (default) or Markdown/plain text.
+goalsRouter.get('/goals/:id/export', asyncHandler(async (req, res) => {
+  const goal = goals.get(req.params.id);
+  const artifact = await buildGoalExport(goal, String(req.query.format || 'docx'));
+  sendDownload(res, artifact);
 }));
 
 goalsRouter.post('/goals', asyncHandler(async (req, res) => {

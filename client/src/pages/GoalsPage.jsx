@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, EmployeePicker } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
 
 const STATUSES = ['in-progress', 'blocked', 'done'];
 const STATUS_LABELS = { 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
@@ -83,6 +83,7 @@ export default function GoalsPage({ refreshKey }) {
               <select value={g.status} onChange={(e) => setStatus(g, e.target.value)} className={`status status-${g.status}`}>
                 {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
               </select>
+              <ExportButtons path={`/goals/${g.id}`} compact />
               <button className="icon-btn" onClick={() => del(g.id)} aria-label="刪除目標">🗑</button>
             </div>
           ))}
@@ -91,6 +92,7 @@ export default function GoalsPage({ refreshKey }) {
 
       {open && (
         <Modal title={`🎯 ${open.title}`} onClose={() => setOpen(null)} wide>
+          <div className="view-meta"><ExportButtons path={`/goals/${open.id}`} /></div>
           {open.runtime?.mode && (
             <div className="view-meta">
               <span className={`runtime-badge ${open.runtime.fallback ? 'runtime-fallback' : ''}`} title={open.runtime.note || ''}>

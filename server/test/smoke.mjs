@@ -35,6 +35,18 @@ const api = async (method, pathname, body) => {
   return { status: res.status, json };
 };
 
+// Raw fetch that keeps headers + bytes — used to assert file downloads.
+const download = async (pathname) => {
+  const res = await fetch(base + pathname);
+  const buf = Buffer.from(await res.arrayBuffer());
+  return {
+    status: res.status,
+    contentType: res.headers.get('content-type'),
+    disposition: res.headers.get('content-disposition') || '',
+    buf,
+  };
+};
+
 try {
   await step('health check reports SQLite counts + standalone runtime', async () => {
     const { status, json } = await api('GET', '/api/health');
@@ -124,6 +136,7 @@ try {
     assert.ok(mine.results.length >= 1, 'scoped to owner returns the hit');
   });
 
+  let meetingId;
   await step('run a meeting → transcript/minutes/report + grounding', async () => {
     const { status, json } = await api('POST', '/api/meetings', {
       topic: 'Regression and release readiness',
@@ -131,6 +144,7 @@ try {
       rounds: 3,
     });
     assert.equal(status, 201);
+    meetingId = json.id;
     assert.equal(json.transcript.length, 6, '2 participants x 3 rounds');
     assert.ok(json.minutes.actionItems.length >= 2);
     assert.ok(json.report.includes('Regression and release readiness'));
@@ -149,6 +163,7 @@ try {
     assert.equal(status, 400);
   });
 
+  let goalId;
   await step('assign a goal → tasks + collaboration output', async () => {
     const { status, json } = await api('POST', '/api/goals', {
       title: 'Ship the beta',
@@ -156,10 +171,45 @@ try {
       assigneeIds: [empId, empId2],
     });
     assert.equal(status, 201);
+    goalId = json.id;
     assert.equal(json.tasks.length, 2);
     assert.equal(json.status, 'in-progress');
     assert.ok(json.output.includes('Ship the beta'));
     assert.equal(json.runtime.mode, 'standalone');
+  });
+
+  await step('export meeting report as .docx (valid OOXML + filename)', async () => {
+    const { status, contentType, disposition, buf } = await download(`/api/meetings/${meetingId}/export`);
+    assert.equal(status, 200);
+    assert.ok(contentType.includes('wordprocessingml'), 'docx mime type');
+    assert.ok(/attachment/.test(disposition) && /\.docx/.test(disposition), 'attachment .docx filename');
+    assert.ok(/filename\*=UTF-8''/.test(disposition), 'RFC 5987 UTF-8 filename for non-ASCII titles');
+    // OOXML files are ZIP archives → must start with the "PK" magic bytes.
+    assert.equal(buf.slice(0, 2).toString(), 'PK', 'docx body is a real ZIP/OOXML package');
+    assert.ok(buf.length > 1000, 'non-trivial document produced');
+  });
+
+  await step('export meeting report as Markdown', async () => {
+    const { status, contentType, buf } = await download(`/api/meetings/${meetingId}/export?format=md`);
+    assert.equal(status, 200);
+    assert.ok(contentType.includes('markdown'), 'markdown mime type');
+    const md = buf.toString('utf-8');
+    assert.ok(md.includes('會議報告'), 'has the report title');
+    assert.ok(md.includes('Regression and release readiness'), 'includes the topic');
+    assert.ok(md.includes('## 逐字紀錄'), 'includes the transcript section');
+  });
+
+  await step('export goal collaboration output as .docx', async () => {
+    const { status, contentType, disposition, buf } = await download(`/api/goals/${goalId}/export`);
+    assert.equal(status, 200);
+    assert.ok(contentType.includes('wordprocessingml'), 'docx mime type');
+    assert.ok(/協作成果/.test(decodeURIComponent(disposition)), 'goal filename prefix');
+    assert.equal(buf.slice(0, 2).toString(), 'PK', 'valid OOXML package');
+  });
+
+  await step('export of a missing report → 404', async () => {
+    const { status } = await download('/api/meetings/mtg_does_not_exist/export');
+    assert.equal(status, 404);
   });
 
   await step('health reports OpenClaw runtime liveness (disabled here)', async () => {

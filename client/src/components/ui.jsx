@@ -1,4 +1,23 @@
 import React from 'react';
+import { download } from '../api.js';
+
+// Report download controls. `path` is the export endpoint (e.g. `/meetings/ID`);
+// we request `.docx` by default and offer Markdown as a portable alternative.
+// `compact` renders the icon-only variant used inside list rows.
+export function ExportButtons({ path, compact = false }) {
+  const go = (format) => (e) => { e.stopPropagation(); download(`${path}/export?format=${format}`); };
+  if (compact) {
+    return (
+      <button className="icon-btn" onClick={go('docx')} title="下載 Word 報告（.docx）" aria-label="下載 Word 報告">⬇</button>
+    );
+  }
+  return (
+    <span className="export-buttons">
+      <button className="btn btn-sm" onClick={go('docx')} title="下載 Word 文件">⬇ 下載 Word（.docx）</button>
+      <button className="btn-ghost btn-sm" onClick={go('md')} title="下載 Markdown">Markdown</button>
+    </span>
+  );
+}
 
 // Minimal, dependency-free markdown renderer — good enough for the reports the
 // engine produces (headings, bold, list items, paragraphs).

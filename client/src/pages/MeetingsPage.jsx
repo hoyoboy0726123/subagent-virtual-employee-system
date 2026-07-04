@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, EmployeePicker } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
 
 export default function MeetingsPage({ refreshKey }) {
   const [employees, setEmployees] = useState([]);
@@ -77,6 +77,7 @@ export default function MeetingsPage({ refreshKey }) {
                   {m.grounding?.length ? ` · 📚 ${m.grounding.length} 筆知識依據` : ''}
                 </span>
               </button>
+              <ExportButtons path={`/meetings/${m.id}`} compact />
               <button className="icon-btn" onClick={() => del(m.id)} aria-label="刪除會議">🗑</button>
             </div>
           ))}
@@ -139,7 +140,10 @@ function MeetingView({ meeting, onClose }) {
 
   return (
     <Modal title={`🗓️ ${meeting.topic}`} onClose={onClose} wide>
-      <div className="view-meta"><RuntimeBadge runtime={meeting.runtime} /></div>
+      <div className="view-meta">
+        <RuntimeBadge runtime={meeting.runtime} />
+        <ExportButtons path={`/meetings/${meeting.id}`} />
+      </div>
       <div className="subtabs">
         {['transcript', 'minutes', 'report', 'knowledge'].map((v) => (
           <button key={v} className={view === v ? 'subtab on' : 'subtab'} onClick={() => setView(v)}>

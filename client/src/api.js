@@ -16,3 +16,16 @@ export const api = {
   put: json('PUT'),
   del: json('DELETE'),
 };
+
+// Trigger a browser download for a server export endpoint. The server sends
+// `Content-Disposition: attachment` with a clean UTF-8 filename, so clicking an
+// anchor downloads the file (with that filename) without navigating the page.
+// Works both in dev (Vite proxies /api) and in single-server production.
+export function download(path) {
+  const a = document.createElement('a');
+  a.href = `/api${path}`;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
