@@ -1,8 +1,20 @@
-// Service: knowledge base (documents + retrieval).
+// Service: knowledge base (documents + retrieval + file ingestion).
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import * as docs from '../storage/knowledge.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
 import { search as retrievalSearch } from '../storage/retrieval.js';
-import { badRequest, notFound } from '../util/http.js';
+import { badRequest, notFound, HttpError } from '../util/http.js';
+import { id } from '../util/ids.js';
+import { config } from '../config.js';
+import {
+  extractToMarkdown,
+  detectType,
+  SUPPORTED_TYPES,
+  SUPPORTED_EXTENSIONS,
+} from '../ingest/extract.js';
+import * as markitdown from '../ingest/markitdown.js';
 
 export function listForEmployee(employeeId) {
   if (!getEmployee(employeeId)) throw notFound('找不到該員工');
@@ -18,6 +30,97 @@ export function addDocument(employeeId, data = {}) {
 export function removeDocument(documentId) {
   if (!docs.deleteDocument(documentId)) throw notFound('找不到該文件');
   return { ok: true };
+}
+
+/**
+ * Ingest an uploaded knowledge file (Phase 7): convert it to canonical Markdown
+ * via MarkItDown (with a built-in fallback for text-like types), then feed the
+ * Markdown through the SAME chunking + FTS indexing path as pasted notes — so an
+ * uploaded PDF/DOCX/TXT/MD/HTML behaves identically in retrieval and grounding.
+ *
+ * `file` is the multer file object: { originalname, mimetype, size, buffer }.
+ */
+export async function ingestUpload(employeeId, file) {
+  if (!getEmployee(employeeId)) throw notFound('找不到該員工');
+  if (!file || !file.buffer || !file.buffer.length) throw badRequest('請選擇要上傳的檔案');
+
+  const originalFilename = file.originalname || 'upload';
+  const sourceType = detectType(originalFilename, file.mimetype);
+  if (!sourceType) {
+    throw badRequest(
+      `不支援的檔案類型「${path.extname(originalFilename) || file.mimetype || '未知'}」。`
+      + `目前支援：PDF、DOCX、TXT、MD、HTML。`,
+    );
+  }
+  if (file.size > config.ingest.maxBytes) {
+    const mb = Math.round(config.ingest.maxBytes / (1024 * 1024));
+    throw badRequest(`檔案過大（上限 ${mb} MB）。`);
+  }
+
+  // Constrain the ingestion surface to this one explicit upload: write the bytes
+  // to a private temp file (with the correct extension so MarkItDown detects the
+  // type), parse it, then always delete it.
+  const ext = SUPPORTED_TYPES[sourceType].ext;
+  const tmpPath = path.join(os.tmpdir(), `veemp-upload-${id('up')}${ext}`);
+  await fs.writeFile(tmpPath, file.buffer, { mode: 0o600 });
+
+  try {
+    const parsed = await extractToMarkdown({
+      filePath: tmpPath,
+      filename: originalFilename,
+      mimeType: file.mimetype,
+    });
+
+    if (!parsed.ok || !String(parsed.markdown).trim()) {
+      // Surface a clear, actionable error (Traditional Chinese) rather than
+      // persisting an empty/broken document.
+      throw new HttpError(422, parsed.parseError || '無法從此檔案擷取內容。');
+    }
+
+    const title = (parsed.title && parsed.title.trim())
+      || path.basename(originalFilename, path.extname(originalFilename))
+      || originalFilename;
+
+    const metadata = {
+      originalFilename,
+      mimeType: parsed.mimeType,
+      sourceType,
+      byteSize: file.size,
+      parser: parsed.parser, // 'markitdown' | 'builtin-text' | 'builtin-html'
+      parseStatus: parsed.parseStatus, // 'parsed' | 'fallback'
+      parseError: parsed.parseError || null, // note when a fallback kicked in
+      // Preserve the raw/plain-text extraction alongside the canonical Markdown.
+      rawText: parsed.text || '',
+    };
+
+    // Canonical Markdown becomes the document content and is chunked
+    // section-aware; tag with the source type for scannability.
+    return docs.insertDocument(employeeId, {
+      title,
+      content: parsed.markdown,
+      source: 'file',
+      format: 'markdown',
+      tags: [sourceType],
+      metadata,
+    });
+  } finally {
+    await fs.unlink(tmpPath).catch(() => {});
+  }
+}
+
+/**
+ * Ingestion capability probe for health/settings: whether MarkItDown is
+ * reachable, plus the statically supported types (always available via the
+ * built-in fallback for text-like formats).
+ */
+export async function ingestCapability() {
+  const md = await markitdown.probe();
+  return {
+    markitdown: { available: md.available, version: md.version || null },
+    supportedTypes: Object.keys(SUPPORTED_TYPES),
+    supportedExtensions: SUPPORTED_EXTENSIONS,
+    maxBytes: config.ingest.maxBytes,
+  };
 }
 
 /**

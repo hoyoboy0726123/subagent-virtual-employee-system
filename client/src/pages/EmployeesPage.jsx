@@ -1,6 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown } from '../components/ui.jsx';
+
+// The upload types Phase 7 accepts. Kept in sync with the server's SUPPORTED_TYPES.
+const ACCEPT = '.pdf,.docx,.txt,.md,.markdown,.html,.htm';
+const TYPE_LABELS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', md: 'Markdown', html: 'HTML' };
 
 const BLANK = {
   name: '', roleTitle: '', personality: '', expertise: '',
@@ -190,6 +194,8 @@ function IdeateModal({ onClose, onDraft }) {
 function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   const [note, setNote] = useState({ title: '', content: '' });
   const [busy, setBusy] = useState(false);
+  const [upload, setUpload] = useState({ busy: false, err: '', ok: '' });
+  const fileRef = useRef(null);
 
   const addNote = async () => {
     if (!note.content.trim()) return;
@@ -199,6 +205,21 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
       setNote({ title: '', content: '' });
       onChange();
     } finally { setBusy(false); }
+  };
+
+  const onPickFile = async (ev) => {
+    const file = ev.target.files?.[0];
+    if (fileRef.current) fileRef.current.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    setUpload({ busy: true, err: '', ok: '' });
+    try {
+      const doc = await api.upload(`/employees/${employee.id}/knowledge/upload`, file);
+      const via = doc.metadata?.parser === 'markitdown' ? 'MarkItDown' : '內建擷取';
+      setUpload({ busy: false, err: '', ok: `已匯入「${doc.title}」（${via}，${doc.chunkCount} 個片段）` });
+      onChange();
+    } catch (e) {
+      setUpload({ busy: false, err: e.message, ok: '' });
+    }
   };
 
   const delNote = async (kid) => { await api.del(`/knowledge/${kid}`); onChange(); };
@@ -227,6 +248,29 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
 
         <section>
           <h4>📚 個人知識庫 <span className="count">{employee.knowledge?.length || 0}</span></h4>
+
+          <div className="upload-box">
+            <div className="upload-row">
+              <button
+                className="btn-ghost sm"
+                onClick={() => fileRef.current?.click()}
+                disabled={upload.busy}
+              >
+                {upload.busy ? '解析中…' : '⬆ 上傳文件'}
+              </button>
+              <span className="muted upload-hint">支援 PDF、DOCX、TXT、Markdown、HTML；經 MarkItDown 轉為 Markdown 後匯入。</span>
+              <input
+                ref={fileRef}
+                type="file"
+                accept={ACCEPT}
+                onChange={onPickFile}
+                style={{ display: 'none' }}
+              />
+            </div>
+            {upload.err && <div className="banner-err sm">{upload.err}</div>}
+            {upload.ok && <div className="banner-ok sm">{upload.ok}</div>}
+          </div>
+
           <div className="note-form">
             <input
               placeholder="筆記標題"
@@ -235,7 +279,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
             />
             <textarea
               rows={2}
-              placeholder="新增一則此員工應知道的事實、文件摘錄或背景…"
+              placeholder="或手動新增一則此員工應知道的事實、文件摘錄或背景…"
               value={note.content}
               onChange={(e) => setNote({ ...note, content: e.target.value })}
             />
@@ -246,19 +290,30 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
               <li key={k.id} className="note">
                 <div>
                   <strong>{k.title}</strong>
+                  {k.source === 'file' && (
+                    <span className="tag tag-blue" title={k.metadata?.originalFilename || ''}>
+                      📄 {TYPE_LABELS[k.metadata?.sourceType] || '檔案'}
+                    </span>
+                  )}
+                  {k.metadata?.parseStatus === 'fallback' && (
+                    <span className="tag" title={k.metadata?.parseError || ''}>內建擷取</span>
+                  )}
                   {typeof k.chunkCount === 'number' && (
                     <span className="count" title="可檢索片段">{k.chunkCount} 個片段</span>
                   )}
-                  <p className="muted">{k.content}</p>
+                  {k.source === 'file' && k.metadata?.originalFilename && (
+                    <p className="muted upload-file">來源：{k.metadata.originalFilename}</p>
+                  )}
+                  <p className="muted clamp">{k.content}</p>
                   {(k.tags || []).length > 0 && (
-                    <div className="tags">{k.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
+                    <div className="tags">{k.tags.map((t) => <span key={t} className="tag">{TYPE_LABELS[t] || t}</span>)}</div>
                   )}
                 </div>
-                <button className="icon-btn" onClick={() => delNote(k.id)} aria-label="刪除筆記">🗑</button>
+                <button className="icon-btn" onClick={() => delNote(k.id)} aria-label="刪除文件">🗑</button>
               </li>
             ))}
             {(!employee.knowledge || employee.knowledge.length === 0) && (
-              <li className="muted">尚無筆記。</li>
+              <li className="muted">尚無文件。上傳檔案或手動新增筆記皆可。</li>
             )}
           </ul>
         </section>

@@ -66,7 +66,9 @@ export function insertDocument(employeeId, data) {
     createdAt: now(),
   };
 
-  const chunks = chunkText(doc.content);
+  // Uploaded documents arrive as canonical Markdown → chunk section-aware; pasted
+  // notes stay on the plain sentence packer. `format` is set by the ingestion path.
+  const chunks = chunkText(doc.content, { format: data.format });
 
   withTx(db, () => {
     db.prepare(`INSERT INTO documents

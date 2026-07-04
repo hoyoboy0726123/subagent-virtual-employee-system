@@ -1,9 +1,19 @@
 import { Router } from 'express';
-import { asyncHandler } from '../util/http.js';
+import multer from 'multer';
+import { asyncHandler, badRequest } from '../util/http.js';
+import { config } from '../config.js';
 import * as employees from '../services/employees.service.js';
 import * as knowledge from '../services/knowledge.service.js';
 
 export const employeesRouter = Router();
+
+// In-memory multipart handling for knowledge uploads. The size cap is enforced
+// here (before the whole file is buffered) as well as in the service; the
+// service owns type validation + MarkItDown conversion.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: config.ingest.maxBytes, files: 1 },
+});
 
 employeesRouter.get('/employees', asyncHandler(async (_req, res) => {
   res.json(employees.list());
@@ -43,3 +53,21 @@ employeesRouter.get('/employees/:id/knowledge', asyncHandler(async (req, res) =>
 employeesRouter.post('/employees/:id/knowledge', asyncHandler(async (req, res) => {
   res.status(201).json(knowledge.addDocument(req.params.id, req.body || {}));
 }));
+
+// Upload a knowledge FILE (multipart, field name `file`): PDF / DOCX / TXT / MD /
+// HTML → MarkItDown → canonical Markdown → chunked + indexed like a pasted note.
+employeesRouter.post(
+  '/employees/:id/knowledge/upload',
+  (req, res, next) =>
+    upload.single('file')(req, res, (err) => {
+      if (err) {
+        // Normalize multer errors (e.g. LIMIT_FILE_SIZE) into a 400 JSON.
+        const mb = Math.round(config.ingest.maxBytes / (1024 * 1024));
+        return next(err.code === 'LIMIT_FILE_SIZE' ? badRequest(`檔案過大（上限 ${mb} MB）。`) : err);
+      }
+      next();
+    }),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await knowledge.ingestUpload(req.params.id, req.file));
+  }),
+);

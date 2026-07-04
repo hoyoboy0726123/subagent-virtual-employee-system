@@ -41,9 +41,20 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 >
 > **Phase 6 (shipped).** Meeting reports and goal collaboration outputs are now
 > **downloadable** as polished **Word `.docx`** documents (or portable Markdown)
-> with structured sections. The full productization plan — Phase 6 through the
-> planned Phases 7–10 (document upload/ingestion, output-quality polish,
-> history/search management, final packaging) — lives in **[ROADMAP.md](./ROADMAP.md)**.
+> with structured sections.
+>
+> **Phase 7 (shipped).** An employee's knowledge base can now grow by **uploading
+> documents** — PDF / DOCX / TXT / Markdown / HTML — not just pasting text. Each
+> upload is converted to canonical **Markdown** by **[Microsoft MarkItDown](https://github.com/microsoft/markitdown)**,
+> then chunked (section-aware) and indexed through the *same* retrieval path as a
+> pasted note, so uploaded knowledge grounds meetings/goals/RAG identically.
+> MarkItDown is an **optional enhancement** (like the live LLM): without it,
+> text-like formats still ingest via a pure-JS fallback, keeping the app
+> standalone-first. See [Document ingestion](#-document-ingestion-markitdown).
+>
+> The full productization plan — through the planned Phases 8–10 (output-quality
+> polish, history/search management, final packaging) — lives in
+> **[ROADMAP.md](./ROADMAP.md)**.
 
 ---
 
@@ -52,7 +63,7 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 | # | Capability | Where |
 |---|------------|-------|
 | 1 | **Create an employee role** — name, role, personality, expertise, objectives, comms style, plus an auto-generated background you can edit | Employees → *New employee* |
-| 2 | **Personal knowledge base** — add/remove documents per employee; each is chunked + full-text indexed and retrieved when the employee reasons | Employees → open a card → *knowledge base* |
+| 2 | **Personal knowledge base** — paste notes *or* **upload documents** (PDF / DOCX / TXT / MD / HTML) per employee; uploads are converted to Markdown by **MarkItDown**, then chunked + full-text indexed and retrieved when the employee reasons | Employees → open a card → *knowledge base* → *⬆ 上傳文件* |
 | 3 | **Multi-agent meetings** — pick employees, set a topic + rounds; each participant runs as its own agent grounded in *its* retrieved knowledge and responds to the others across rounds → **transcript + minutes + report + knowledge used** | Meetings |
 | 4 | **Collaborative goals** — assign a goal to one or more employees; each produces its own subtask/approach as an agent, then a manager agent integrates them into a **collaboration output** | Goals |
 | 5 | **New-role ideation** — describe the employee you want; the system drafts a full profile you can edit before saving | Employees → *Ideate a role* |
@@ -78,7 +89,14 @@ Then open **http://localhost:5173**.
 
 It works immediately with **no configuration**. To have the employee agents run
 on the live model instead of the offline engine, set a Google API key (see
-[Live model](#-the-live-model-google-gen-ai-googlegenai)).
+[Live model](#-the-live-model-google-gen-ai-googlegenai)). To parse **uploaded
+PDF/DOCX** knowledge files, install MarkItDown once (optional — text formats work
+without it; see [Document ingestion](#-document-ingestion-markitdown)):
+
+```bash
+python3 -m venv .venv && ./.venv/bin/pip install 'markitdown[all]'
+# the backend auto-detects a project-local .venv — no other config needed
+```
 
 ### Production-style run (single server)
 
@@ -92,6 +110,7 @@ npm run serve        # builds the client, then serves API + UI on :3001
 ```bash
 npm test             # hermetic end-to-end smoke test (boots the app, exercises every flow)
 npm run test:openclaw # opt-in test for the OPTIONAL OpenClaw integration (needs a live Gateway; slow)
+npm run test:markitdown # opt-in test for the REAL MarkItDown ingestion path (needs Python + markitdown)
 npm run migrate      # apply pending DB migrations + print schema version
 npm run seed         # RESET the DB and load sample data
 npm run build        # build the client into client/dist
@@ -150,10 +169,15 @@ subagent-virtual-employee-system/
 │   │   │   ├── ConversationState.js         AgentTurn log + prompt context (cross-threading)
 │   │   │   └── deterministic.js             fully-offline meeting/goal (shared fallback)
 │   │   │
+│   │   ├── ingest/                ── document ingestion (Phase 7) ──
+│   │   │   ├── extract.js  ★         file → canonical Markdown (+ raw text, metadata)
+│   │   │   ├── markitdown.js         Node ↔ MarkItDown bridge (probe + convert via execFile)
+│   │   │   └── markitdown_helper.py  tiny Python helper (JSON in/out) driving MarkItDown
+│   │   │
 │   │   ├── reasoning/              ── reasoning backends ──
 │   │   │   ├── llm.js  ★            Google Gen AI path (@google/genai)
 │   │   │   ├── engine.js            pure, offline, persona + RAG generators (fallback)
-│   │   │   └── chunk.js             sentence-aware text chunker
+│   │   │   └── chunk.js             sentence-aware + section-aware (Markdown) chunker
 │   │   │
 │   │   ├── storage/                ── storage / retrieval layer ──
 │   │   │   ├── employees.repo.js   · knowledge.repo.js (documents + chunks + FTS)
@@ -177,7 +201,9 @@ subagent-virtual-employee-system/
 
 **Stack:** Vite + React (client) · Express (API) · **SQLite via `node:sqlite`**
 (built into Node — no native module, nothing to compile) with **FTS5** for
-full-text retrieval · **Google Gen AI** (`@google/genai`) for the agent turns.
+full-text retrieval · **Google Gen AI** (`@google/genai`) for the agent turns ·
+**multer** for knowledge-file uploads · **Microsoft MarkItDown** (optional Python
+helper) as the document → Markdown ingestion pipeline.
 
 ### Storage & migrations
 
@@ -192,8 +218,10 @@ Data model: `employees`, `documents`, `chunks`, `chunks_fts` (FTS5), `meetings`,
 
 ### Knowledge base & retrieval (simple RAG)
 
-Each employee owns **documents**. On write, a document is split into overlapping,
-sentence-aware **chunks** (`reasoning/chunk.js`) and mirrored into an **FTS5**
+Each employee owns **documents** (pasted notes or uploaded files — see
+[Document ingestion](#-document-ingestion-markitdown)). On write, a document is
+split into overlapping **chunks** (`reasoning/chunk.js`) — sentence-aware for
+prose, **section-aware** for Markdown from uploads — and mirrored into an **FTS5**
 index. `storage/retrieval.js` ranks chunks with **BM25** and can **scope results
 to one or many employees** — the core primitive that grounds each agent in the
 *right* person's knowledge:
@@ -408,17 +436,81 @@ out), wired through `GET /api/meetings/:id/export` and `/api/goals/:id/export`.
 
 ---
 
+## 📥 Document ingestion (MarkItDown)
+
+Grow an employee's knowledge base by **uploading real documents**, not just
+pasting text. Open an employee → **📚 個人知識庫** → **⬆ 上傳文件** and pick a
+file; it is converted to canonical **Markdown**, chunked, indexed, and instantly
+usable for retrieval/grounding — behaving identically to a pasted note.
+
+**Supported types:** `PDF` · `DOCX` · `TXT` · `Markdown` · `HTML` (≤ 15 MB by
+default, `UPLOAD_MAX_BYTES`-overridable).
+
+**Markdown is the canonical ingestion format.** The pipeline
+(`server/src/ingest/`) is:
+
+```
+upload (multipart) ─▶ type + size guard ─▶ extract.js ─▶ canonical Markdown
+                                                │              │
+                                    MarkItDown (primary)       ├─▶ raw/plain text (fallback copy)
+                                    built-in JS (fallback)     └─▶ metadata (filename, mime, sourceType,
+                                                                    parser, parseStatus, byteSize)
+                                                          ▼
+                              section-aware Markdown chunking ─▶ FTS5 index (same path as notes)
+```
+
+- **Microsoft [MarkItDown](https://github.com/microsoft/markitdown) is the
+  primary parser/canonicalizer** for every supported type. The Node backend
+  drives it through a tiny Python helper (`markitdown_helper.py`) via `execFile`
+  (never a shell) — the only place the app shells out to Python. It auto-detects
+  the interpreter: an explicit `MARKITDOWN_PYTHON`, then a project-local `.venv`,
+  then a system `python3`.
+- **Standalone-first fallback.** MarkItDown is an *enhancement*, exactly like the
+  live LLM. If no Python/markitdown is reachable, text-like formats (TXT / MD /
+  HTML) still ingest via a pure-JS extractor; binary formats (PDF / DOCX) surface
+  a clear Traditional Chinese error explaining MarkItDown is required. `MARKITDOWN_DISABLE=1`
+  forces the fallback (used by the hermetic test).
+- **Both forms preserved.** The document stores the **canonical Markdown** (its
+  `content`, what gets chunked) *and* a **raw/plain-text** copy in `metadata`,
+  plus `originalFilename`, `mimeType`, `sourceType`, `parser`, `parseStatus`, and
+  `byteSize`. The employee panel shows a source-type badge and the origin file.
+- **Section-aware chunking.** Markdown is split on its heading hierarchy first,
+  so a chunk never straddles two unrelated sections and each chunk is prefixed
+  with its heading breadcrumb (e.g. `產品規格 › 安全`) — the heading's terms travel
+  with its body, improving retrieval precision (`reasoning/chunk.js`
+  `chunkMarkdown`).
+- **Security.** Ingestion is constrained to the single explicit uploaded file:
+  bytes are written to a private temp file (`0600`), parsed, and always deleted;
+  only the documented types/extensions are accepted; size is capped at the route
+  *and* service.
+
+Configuration (all optional, env-overridable):
+
+| Env var | Default | Purpose |
+|---------|---------|---------|
+| `MARKITDOWN_PYTHON` | *(auto: `.venv` → `python3`)* | Python interpreter that has `markitdown` |
+| `UPLOAD_MAX_BYTES` | `15728640` (15 MiB) | per-file upload ceiling |
+| `MARKITDOWN_TIMEOUT_SEC` | `120` | per-conversion subprocess timeout |
+| `MARKITDOWN_DISABLE` | *(unset)* | force the pure-JS fallback (used by the hermetic test) |
+
+`GET /api/health` reports `ingest: { markitdown: { available, version },
+supportedTypes, supportedExtensions, maxBytes }` so the UI/ops can see whether
+the primary parser is live.
+
+---
+
 ## 🔌 API reference
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| GET | `/api/health` | status, LLM flag, runtime mode, **standalone** + **OpenClaw** liveness, counts |
+| GET | `/api/health` | status, LLM flag, runtime mode, **standalone** + **OpenClaw** liveness, **ingest capability** (MarkItDown + supported types), counts |
 | GET/PUT | `/api/settings` | read settings + per-runtime health / switch runtime mode |
 | GET/POST | `/api/employees` | list / create employees |
 | GET/PUT/DELETE | `/api/employees/:id` | read (with knowledge) / update / delete |
 | POST | `/api/employees/generate-profile` | draft a background from fields |
 | POST | `/api/employees/ideate` | draft a full role from a description |
 | GET/POST | `/api/employees/:id/knowledge` | list / add knowledge documents (chunked + indexed) |
+| POST | `/api/employees/:id/knowledge/upload` | **upload a knowledge file** (multipart `file`): PDF/DOCX/TXT/MD/HTML → MarkItDown → Markdown → chunked + indexed |
 | GET | `/api/knowledge/search` | keyword/FTS search (`?q=`, optional `?employeeIds=a,b`, `?limit=`) |
 | DELETE | `/api/knowledge/:id` | delete a document (and its chunks/index) |
 | GET/POST | `/api/meetings` | list / run a multi-agent meeting |
@@ -437,7 +529,11 @@ out), wired through `GET /api/meetings/:id/export` and `/api/goals/:id/export`.
 **in-memory SQLite database** (so it never touches your saved data) and asserts
 every core flow: SQLite-backed persistence, employee creation + profile
 generation, required-field validation, role ideation, **document chunking**,
-**keyword retrieval + employee scoping**, a **multi-agent meeting** through the
+**keyword retrieval + employee scoping**, **document ingestion** (uploads a TXT,
+Markdown, and HTML file — asserting canonical-Markdown conversion via the built-in
+fallback, section-aware chunking with heading breadcrumbs, retrievability, stored
+metadata, and that binary/unsupported types are rejected with a clear error), a
+**multi-agent meeting** through the
 standalone runtime (transcript/minutes/report/grounding, with the offline turns
 honestly flagged `engine: 'deterministic'`, `live: false`), collaborative goal
 assignment, **report export** (asserts the `.docx` download is a valid OOXML/ZIP
@@ -453,6 +549,13 @@ a goal through the CLI → Gateway, asserting `engine: 'openclaw-cli'`,
 if no Gateway is reachable, and is not part of `npm test` because each turn is a
 real, billable model call.
 
+`npm run test:markitdown` validates the **primary** ingestion path: it generates
+a real `.docx` in-process and uploads it, asserting it was converted by
+**MarkItDown** (`parser: 'markitdown'`, not the fallback), section-chunked, and
+made retrievable. It **skips (exit 0)** if no Python + `markitdown` is reachable,
+so it's safe anywhere; it isn't part of `npm test` (which forces the pure-JS
+fallback to stay hermetic).
+
 ---
 
 ## Notes & limitations
@@ -463,7 +566,14 @@ real, billable model call.
 - Single-user, local-first. SQLite in WAL mode is fine for one node; not built for
   concurrent multi-writer deployments.
 - Retrieval is keyword/FTS (BM25) today — deliberately dependency-free. The
-  `search()` seam is designed for a vector retriever to drop in later.
+  `search()` seam is designed for a vector retriever to drop in later. (FTS5's
+  `unicode61` tokenizer segments CJK coarsely, so Chinese retrieval matches whole
+  runs rather than sub-phrases — a known limitation shared by pasted and uploaded
+  knowledge alike.)
+- **Document ingestion via MarkItDown is optional** (like the live LLM). Without
+  Python/markitdown, TXT/MD/HTML still ingest via a pure-JS fallback; PDF/DOCX
+  need MarkItDown installed and otherwise return a clear error. No OCR of
+  image-only PDFs in this phase.
 - Runs are processed sequentially per request; there's no streaming to the UI yet
   (results appear when the run completes).
 - OpenClaw is an **optional** adapter — the app never depends on it. Selecting it

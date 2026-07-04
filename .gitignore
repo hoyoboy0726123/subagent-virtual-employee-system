@@ -7,3 +7,7 @@ server/data/db.json
 *.log
 .DS_Store
 .env
+
+# Optional local Python env for MarkItDown document ingestion (Phase 7).
+.venv/
+__pycache__/

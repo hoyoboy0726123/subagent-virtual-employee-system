@@ -10,11 +10,24 @@ const json = (method) => (path, body) =>
     return data;
   });
 
+// Multipart upload (a File/Blob) to a server endpoint. We deliberately do NOT
+// set a Content-Type header — the browser adds the multipart boundary itself.
+const uploadFile = (path, file, field = 'file') => {
+  const body = new FormData();
+  body.append(field, file, file.name);
+  return fetch(`/api${path}`, { method: 'POST', body }).then(async (res) => {
+    const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+    if (!res.ok) throw new Error(data?.error || `上傳失敗（${res.status}）`);
+    return data;
+  });
+};
+
 export const api = {
   get: json('GET'),
   post: json('POST'),
   put: json('PUT'),
   del: json('DELETE'),
+  upload: uploadFile,
 };
 
 // Trigger a browser download for a server export endpoint. The server sends

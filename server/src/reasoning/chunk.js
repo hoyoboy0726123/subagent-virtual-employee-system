@@ -8,6 +8,12 @@
 import { config } from '../config.js';
 
 export function chunkText(text, opts = {}) {
+  // Markdown-aware ingestion (Phase 7): when the canonical form is Markdown we
+  // chunk section-by-section so a heading's context travels with its body and a
+  // chunk never straddles two unrelated sections. Falls through to the plain
+  // sentence packer for prose.
+  if (opts.format === 'markdown') return chunkMarkdown(text, opts);
+
   const size = opts.chunkSize || config.retrieval.chunkSize;
   const overlap = opts.chunkOverlap || config.retrieval.chunkOverlap;
 
@@ -40,6 +46,69 @@ export function chunkText(text, opts = {}) {
   if (buf.trim()) chunks.push(buf.trim());
 
   return chunks.filter(Boolean);
+}
+
+// Section-aware Markdown chunker (Phase 7).
+//
+// Splits Markdown on its heading hierarchy first, then packs each section's body
+// with the same sentence-aware logic — but never across a heading boundary. Each
+// emitted chunk is prefixed with its heading breadcrumb (e.g. "產品規格 › 安全"),
+// so the heading's terms travel with the body: retrieval that matches a section
+// title still surfaces the right passage, and a returned chunk is self-describing.
+export function chunkMarkdown(text, opts = {}) {
+  const size = opts.chunkSize || config.retrieval.chunkSize;
+  const overlap = opts.chunkOverlap || config.retrieval.chunkOverlap;
+
+  const clean = String(text || '').replace(/\r\n/g, '\n').trim();
+  if (!clean) return [];
+
+  const lines = clean.split('\n');
+  const headingRe = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
+  const sections = [];
+  const stack = []; // ancestor headings: { level, text }
+  let heading = null;
+  let body = [];
+
+  const flush = () => {
+    const bodyText = body.join('\n').trim();
+    if (!bodyText && !heading) return;
+    sections.push({ path: stack.map((h) => h.text), bodyText });
+  };
+
+  let inFence = false;
+  for (const line of lines) {
+    if (/^\s*(```|~~~)/.test(line)) inFence = !inFence;
+    const m = !inFence && line.match(headingRe);
+    if (m) {
+      flush();
+      const lvl = m[1].length;
+      while (stack.length && stack[stack.length - 1].level >= lvl) stack.pop();
+      stack.push({ level: lvl, text: m[2].trim() });
+      heading = m[2].trim();
+      body = [];
+    } else {
+      body.push(line);
+    }
+  }
+  flush();
+
+  // No real heading structure → treat it as prose (avoids a single giant chunk).
+  if (!sections.some((s) => s.path.length)) {
+    return chunkText(clean, { ...opts, format: undefined });
+  }
+
+  const out = [];
+  for (const sec of sections) {
+    const crumb = sec.path.join(' › ');
+    const prefix = crumb ? `${crumb}\n\n` : '';
+    const budget = Math.max(120, size - prefix.length);
+    const bodyChunks = sec.bodyText
+      ? chunkText(sec.bodyText, { chunkSize: budget, chunkOverlap: overlap })
+      : [];
+    if (!bodyChunks.length && crumb) out.push(crumb); // heading-only section stays searchable
+    for (const c of bodyChunks) out.push(prefix + c);
+  }
+  return out.filter(Boolean);
 }
 
 function tail(s, n) {

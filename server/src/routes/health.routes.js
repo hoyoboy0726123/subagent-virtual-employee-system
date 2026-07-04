@@ -7,6 +7,7 @@ import { retrievalStats } from '../storage/retrieval.js';
 import { llmEnabled } from '../reasoning/llm.js';
 import { getSettings } from '../services/settings.service.js';
 import { getRuntimeAdapter } from '../runtime/index.js';
+import { ingestCapability } from '../services/knowledge.service.js';
 
 export const healthRouter = Router();
 
@@ -20,6 +21,9 @@ healthRouter.get('/health', asyncHandler(async (_req, res) => {
   // real subagent execution is available right now (independent of which mode is
   // selected).
   const openclaw = await getRuntimeAdapter('openclaw').health();
+  // Document-ingestion capability (Phase 7): whether MarkItDown is reachable and
+  // which upload types are supported (text-like types always work via fallback).
+  const ingest = await ingestCapability();
   res.json({
     ok: true,
     llm: llmEnabled(),
@@ -37,6 +41,7 @@ healthRouter.get('/health', asyncHandler(async (_req, res) => {
       version: openclaw.version,
       disabled: openclaw.disabled,
     },
+    ingest,
     counts: {
       employees: listEmployees().length,
       documents: kb.documents,

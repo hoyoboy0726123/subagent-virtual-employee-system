@@ -12,6 +12,11 @@ process.env.DB_FILE = ':memory:';
 // simulated fallback so we never spend real subagent turns here. The REAL
 // OpenClaw path is exercised by the opt-in test/smoke.openclaw.mjs.
 process.env.OPENCLAW_DISABLE = '1';
+// Force the document-ingestion pipeline onto its built-in JS fallback so this
+// test is hermetic regardless of whether MarkItDown (Python) is installed on the
+// machine. The REAL MarkItDown path is exercised by the opt-in
+// test/smoke.markitdown.mjs (it needs Python + the markitdown package).
+process.env.MARKITDOWN_DISABLE = '1';
 const { app } = await import('../src/index.js');
 
 const server = app.listen(0);
@@ -31,6 +36,16 @@ const api = async (method, pathname, body) => {
     headers: { 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
+  const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+  return { status: res.status, json };
+};
+
+// Multipart upload of an in-memory buffer — used to exercise knowledge-file
+// ingestion. Content-Type is left to the browser/undici (multipart boundary).
+const upload = async (pathname, { filename, content, type }) => {
+  const fd = new FormData();
+  fd.append('file', new Blob([content], type ? { type } : undefined), filename);
+  const res = await fetch(base + pathname, { method: 'POST', body: fd });
   const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
   return { status: res.status, json };
 };
@@ -134,6 +149,97 @@ try {
     assert.equal(json.results.length, 0, 'scoping excludes other employees');
     const { json: mine } = await api('GET', `/api/knowledge/search?q=regression&employeeIds=${empId}`);
     assert.ok(mine.results.length >= 1, 'scoped to owner returns the hit');
+  });
+
+  // --- Phase 7: document upload → Markdown → chunk/index (built-in fallback) ---
+  await step('health advertises the ingestion capability + supported types', async () => {
+    const { json } = await api('GET', '/api/health');
+    assert.ok(json.ingest, 'health exposes an ingest block');
+    for (const t of ['pdf', 'docx', 'txt', 'md', 'html']) {
+      assert.ok(json.ingest.supportedTypes.includes(t), `supports ${t}`);
+    }
+    // MarkItDown is force-disabled here → the fallback is what runs.
+    assert.equal(json.ingest.markitdown.available, false, 'MarkItDown disabled in the hermetic test');
+    assert.ok(json.ingest.maxBytes > 0, 'exposes an upload size cap');
+  });
+
+  let uploadDocId;
+  await step('upload a TXT file → parsed to Markdown, chunked + indexed', async () => {
+    const { status, json } = await upload(`/api/employees/${empId2}/knowledge/upload`, {
+      filename: 'onboarding.txt',
+      type: 'text/plain',
+      content: 'Deployments freeze on Fridays. Incident retros are blameless and shipped within two business days.',
+    });
+    assert.equal(status, 201);
+    assert.equal(json.source, 'file', 'stored as a file-sourced document');
+    assert.equal(json.metadata.sourceType, 'txt');
+    assert.equal(json.metadata.originalFilename, 'onboarding.txt');
+    assert.equal(json.metadata.parseStatus, 'fallback', 'used the built-in extractor');
+    assert.ok(json.metadata.parser.startsWith('builtin'), 'parser is the built-in one');
+    assert.ok(json.chunkCount >= 1, 'the uploaded file was chunked');
+    uploadDocId = json.id;
+  });
+
+  await step('uploaded file is retrievable like a pasted note', async () => {
+    const { json } = await api('GET', `/api/knowledge/search?q=deployments%20freeze&employeeIds=${empId2}`);
+    assert.ok(json.results.length >= 1, 'the uploaded doc is searchable');
+    assert.equal(json.results[0].documentId, uploadDocId);
+  });
+
+  await step('upload a Markdown file → section-aware chunking preserves headings', async () => {
+    const { status, json } = await upload(`/api/employees/${empId2}/knowledge/upload`, {
+      filename: 'runbook.md',
+      type: 'text/markdown',
+      content: '# Runbook\n\n## Rollback\nRevert the release tag and redeploy the prior build.\n\n## Escalation\nPage the on-call SRE after ten minutes of downtime.',
+    });
+    assert.equal(status, 201);
+    assert.equal(json.metadata.sourceType, 'md');
+    assert.ok(json.chunkCount >= 2, 'markdown split into multiple sections');
+    // A section heading term should retrieve its section, breadcrumb-prefixed.
+    const { json: hit } = await api('GET', `/api/knowledge/search?q=Escalation&employeeIds=${empId2}`);
+    assert.ok(hit.results.length >= 1, 'heading term retrieves its section');
+    assert.ok(hit.results.some((r) => r.content.includes('Runbook')), 'chunk carries its heading breadcrumb');
+  });
+
+  await step('upload an HTML file → tags stripped to Markdown', async () => {
+    const { status, json } = await upload(`/api/employees/${empId2}/knowledge/upload`, {
+      filename: 'policy.html',
+      type: 'text/html',
+      content: '<html><body><h1>Security Policy</h1><p>Rotate <strong>all</strong> API keys every ninety days.</p></body></html>',
+    });
+    assert.equal(status, 201);
+    assert.equal(json.metadata.sourceType, 'html');
+    assert.ok(/Security Policy/.test(json.content), 'heading survived extraction');
+    assert.ok(!/<[a-z]/i.test(json.content), 'html tags were stripped');
+  });
+
+  await step('binary upload without MarkItDown fails with a clear error', async () => {
+    // PDF needs MarkItDown; with it disabled the guardrail returns a 4xx.
+    const { status, json } = await upload(`/api/employees/${empId2}/knowledge/upload`, {
+      filename: 'report.pdf',
+      type: 'application/pdf',
+      content: '%PDF-1.4 not-really-a-pdf',
+    });
+    assert.ok(status === 422 || status === 400, 'binary-without-parser is rejected');
+    assert.ok(json.error && json.error.length > 0, 'surfaces a Traditional Chinese error');
+  });
+
+  await step('unsupported file type is rejected', async () => {
+    const { status } = await upload(`/api/employees/${empId2}/knowledge/upload`, {
+      filename: 'malware.exe',
+      type: 'application/octet-stream',
+      content: 'MZ',
+    });
+    assert.equal(status, 400, 'unknown type → 400');
+  });
+
+  await step('uploaded knowledge shows on employee detail then cleans up', async () => {
+    const { json } = await api('GET', `/api/employees/${empId2}`);
+    assert.ok(json.knowledge.length >= 3, 'txt + md + html are all listed');
+    // Remove the uploads so later assertions about empId2 stay predictable.
+    for (const k of json.knowledge) await api('DELETE', `/api/knowledge/${k.id}`);
+    const { json: after } = await api('GET', `/api/employees/${empId2}`);
+    assert.equal(after.knowledge.length, 0, 'uploads removed');
   });
 
   let meetingId;

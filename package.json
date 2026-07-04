@@ -14,7 +14,8 @@
     "start": "node server/src/index.js",
     "serve": "npm run build && npm run start",
     "test": "node server/test/smoke.mjs",
-    "test:openclaw": "node server/test/smoke.openclaw.mjs"
+    "test:openclaw": "node server/test/smoke.openclaw.mjs",
+    "test:markitdown": "node server/test/smoke.markitdown.mjs"
   },
   "engines": {
     "node": ">=22.5"
@@ -29,6 +30,7 @@
     "cors": "^2.8.5",
     "docx": "^9.7.1",
     "express": "^4.21.2",
+    "multer": "^2.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   }

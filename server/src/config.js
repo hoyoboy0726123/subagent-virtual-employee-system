@@ -31,6 +31,27 @@ export const config = {
     topK: Number(process.env.RETRIEVAL_TOP_K) || 4,
   },
 
+  // Document ingestion (Phase 7). Uploaded knowledge files are converted to
+  // canonical Markdown by Microsoft MarkItDown (https://github.com/microsoft/
+  // markitdown) when a Python interpreter with the package is reachable, and
+  // otherwise fall back to a pure-JS extractor for text-like types — MarkItDown
+  // is an enhancement, exactly like the live LLM, so the app stays
+  // standalone-first. Everything here is env-overridable.
+  ingest: {
+    // Python interpreter used to run server/src/ingest/markitdown_helper.py.
+    // Prefer MARKITDOWN_PYTHON; otherwise the wrapper auto-probes a project-local
+    // `.venv` and then a bare `python3` (see ingest/markitdown.js).
+    python: process.env.MARKITDOWN_PYTHON || '',
+    // Per-file upload ceiling (bytes). Guards the ingestion surface.
+    maxBytes: Number(process.env.UPLOAD_MAX_BYTES) || 15 * 1024 * 1024, // 15 MiB
+    // Per-conversion timeout (seconds) for the MarkItDown subprocess.
+    timeoutSec: Number(process.env.MARKITDOWN_TIMEOUT_SEC) || 120,
+    // Hard kill-switch: MARKITDOWN_DISABLE=1 forces the built-in JS fallback even
+    // when MarkItDown is installed. Lets the hermetic smoke test exercise the
+    // fallback path regardless of the local machine's Python setup.
+    disabled: /^(1|true|yes|on)$/i.test(process.env.MARKITDOWN_DISABLE || ''),
+  },
+
   // Optional live LLM via Google Gen AI (@google/genai). Absent by default →
   // deterministic engine. Auth is by API key: prefer GEMINI_API_KEY, fall back
   // to GOOGLE_API_KEY. The model id is fixed to gemma-4-31b-it but overridable.

@@ -36,25 +36,38 @@ real, downloadable documents.
 
 ---
 
-## 🔜 Phase 7 — Document ingestion pipeline for the knowledge base
+## ✅ Phase 7 — Document ingestion pipeline for the knowledge base *(shipped)*
 
 **Goal:** let managers grow an employee's knowledge base by *uploading files*,
 not just pasting text.
 
-- Accept **PDF / DOCX / TXT / Markdown** uploads via a new
-  `POST /api/employees/:id/knowledge/upload` (multipart).
-- Server-side text extraction — pure-JS / standalone-first extractors (e.g.
-  `mammoth` for `.docx`, a dependency-light PDF text pass, native decode for
-  text). No OCR, no cloud parsing in this phase.
-- Feed extracted text through the **existing chunking + FTS indexing** path so
-  uploaded docs behave exactly like pasted ones in retrieval and grounding.
-- Store original filename + mime + byte size as document metadata; surface it in
-  the employee knowledge panel.
-- Guardrails: size/type limits, graceful "couldn't extract text" messaging in
-  Traditional Chinese, and a smoke test that uploads each supported type and
-  asserts chunks are indexed and retrievable.
+- [x] Accept **PDF / DOCX / TXT / Markdown / HTML** uploads via a new
+      `POST /api/employees/:id/knowledge/upload` (multipart, `multer`).
+- [x] **Microsoft [MarkItDown](https://github.com/microsoft/markitdown) is the
+      canonical document → Markdown pipeline** — the Node backend drives it through
+      a small Python helper via `execFile` (never a shell; the only Python
+      touch-point). Markdown is treated as the canonical ingestion format.
+- [x] **Standalone-first fallback** — MarkItDown is an optional enhancement (like
+      the live LLM): TXT/MD/HTML still ingest via a pure-JS extractor when it's
+      absent; PDF/DOCX surface a clear Traditional Chinese error. Auto-detects a
+      project-local `.venv`; `MARKITDOWN_DISABLE=1` forces the fallback.
+- [x] Preserve **both** the canonical Markdown (chunked) and a raw/plain-text copy;
+      store `originalFilename` / `mimeType` / `sourceType` / `parser` /
+      `parseStatus` / `byteSize` metadata, surfaced in the employee knowledge panel
+      with source-type badges.
+- [x] **Section-aware Markdown chunking** — split on the heading hierarchy so a
+      chunk never straddles unrelated sections, each prefixed with its heading
+      breadcrumb — then fed through the *existing* chunking + FTS path so uploaded
+      docs behave exactly like pasted ones in retrieval and grounding.
+- [x] Guardrails: route + service size caps, type/extension allow-list, private
+      `0600` temp file always deleted, graceful TC error messaging. `GET /api/health`
+      advertises the ingestion capability + supported types.
+- [x] Tests: hermetic `npm test` uploads TXT/MD/HTML (fallback path) asserting
+      conversion, section chunking, retrieval, metadata, and rejection of
+      binary/unsupported types; opt-in `npm run test:markitdown` proves the real
+      MarkItDown path with an in-process `.docx`.
 
-## 🧭 Phase 8 — Output quality & orchestration polish
+## 🔜 Phase 8 — Output quality & orchestration polish
 
 **Goal:** make agent interactions read less "templated" and more like real
 colleagues, and make outputs more useful.

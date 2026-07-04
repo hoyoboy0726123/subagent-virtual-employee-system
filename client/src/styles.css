@@ -143,6 +143,15 @@ textarea { resize: vertical; }
 .detail-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .profile-box { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 4px 14px; font-size: 14px; }
 .note-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+
+/* knowledge file upload (Phase 7) */
+.upload-box { border: 1px dashed var(--line); border-radius: 9px; padding: 10px 12px; margin-bottom: 12px; background: var(--panel-2); }
+.upload-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.upload-hint { font-size: 12px; }
+.upload-file { font-size: 12px; margin: 4px 0 2px; opacity: 0.85; }
+.banner-ok { background: rgba(74, 201, 155, 0.12); border: 1px solid rgba(74, 201, 155, 0.3); color: var(--green, #4ac99b); padding: 9px 12px; border-radius: 8px; margin-top: 10px; font-size: 13px; }
+.banner-err.sm, .banner-ok.sm { padding: 7px 10px; font-size: 12px; margin-bottom: 0; }
+
 .notes { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .note { display: flex; justify-content: space-between; gap: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 10px 12px; }
 .note strong { font-size: 14px; }
