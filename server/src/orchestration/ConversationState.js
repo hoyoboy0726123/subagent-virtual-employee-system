@@ -8,7 +8,10 @@
 //
 // `AgentTurn` is the single record shape shared by the orchestrator, the stored
 // meeting transcript, and the UI. `ConversationState` is an ordered log of turns
-// with a couple of helpers for building the context each next agent sees.
+// with helpers for building the context each next agent sees. Phase 8 makes that
+// context *agent-aware*: it separates what YOU (the next speaker) already said
+// from what OTHERS said, and singles out the person you're answering — so turns
+// read like a real conversation instead of parallel monologues.
 
 /**
  * @typedef {Object} AgentTurn
@@ -50,6 +53,16 @@ export class ConversationState {
     return [...new Set(this.turns.map((t) => t.speaker))];
   }
 
+  /** The most recent turn overall — the person the next speaker is answering. */
+  lastTurn() {
+    return this.turns[this.turns.length - 1] || null;
+  }
+
+  /** Every turn a given speaker has taken so far (their own prior positions). */
+  turnsBy(name) {
+    return this.turns.filter((t) => t.speaker === name);
+  }
+
   /**
    * A compact digest of the most recent turns, for injection into the next
    * agent's prompt so it can genuinely respond to what was said.
@@ -59,8 +72,50 @@ export class ConversationState {
     if (this.isEmpty) return '（你是本場討論第一位發言者。）';
     return this.turns
       .slice(-n)
-      .map((t) => `${t.speaker}（${t.role}）：${t.text}`)
+      .map((t) => `第${t.round}輪 · ${t.speaker}（${t.role}）：${t.text}`)
       .join('\n');
+  }
+
+  /**
+   * An agent-aware view of the recent conversation used to pack the next turn's
+   * prompt. Unlike a flat digest, this pulls apart the pieces that make a reply
+   * feel earned:
+   *   • `previousSpeaker` — the last *other* person, so this agent can answer a
+   *     specific someone by name instead of the room in general;
+   *   • `myLastPoint` — this agent's own most recent stance, so it stays
+   *     consistent across rounds instead of contradicting itself;
+   *   • `othersDigest` — only what other people said (no echoing yourself);
+   *   • `spokenSoFar` — who else is in the thread already.
+   *
+   * @param {string} name             the next speaker's name
+   * @param {object} [opts]
+   * @param {number} [opts.window]    how many trailing turns to consider
+   * @returns {{
+   *   isFirstOverall: boolean,
+   *   transcriptDigest: string|null,
+   *   othersDigest: string|null,
+   *   previousSpeaker: {name:string, role:string, text:string}|null,
+   *   myLastPoint: string|null,
+   *   spokenSoFar: string[],
+   * }}
+   */
+  contextFor(name, { window = 6 } = {}) {
+    const recent = this.turns.slice(-window);
+    const others = recent.filter((t) => t.speaker !== name);
+    const mine = this.turnsBy(name);
+    const previous = [...this.turns].reverse().find((t) => t.speaker !== name) || null;
+    const line = (t) => `${t.speaker}（${t.role}）：${t.text}`;
+
+    return {
+      isFirstOverall: this.isEmpty,
+      transcriptDigest: recent.length ? recent.map(line).join('\n') : null,
+      othersDigest: others.length ? others.map(line).join('\n') : null,
+      previousSpeaker: previous
+        ? { name: previous.speaker, role: previous.role, text: previous.text }
+        : null,
+      myLastPoint: mine.length ? mine[mine.length - 1].text : null,
+      spokenSoFar: this.priorSpeakers().filter((n) => n !== name),
+    };
   }
 
   /** The full ordered transcript, ready to store on a meeting record. */

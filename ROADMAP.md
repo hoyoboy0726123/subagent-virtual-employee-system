@@ -67,19 +67,41 @@ not just pasting text.
       binary/unsupported types; opt-in `npm run test:markitdown` proves the real
       MarkItDown path with an in-process `.docx`.
 
-## 🔜 Phase 8 — Output quality & orchestration polish
+## ✅ Phase 8 — Output quality & orchestration polish *(shipped)*
 
 **Goal:** make agent interactions read less "templated" and more like real
 colleagues, and make outputs more useful.
 
-- Richer per-agent prompting: stronger persona conditioning, explicit
-  disagreement/build-on-others behavior across rounds, and tighter grounding so
-  citations feel earned rather than decorative.
-- Improve the manager/synthesizer pass (executive summary, clearer decisions and
-  owned action items, deduping repetition across turns).
-- Reduce boilerplate phrasing in the deterministic offline engine so the
-  zero-key experience still feels substantive.
-- Optional: streaming/progress signal to the UI so long runs show life.
+- [x] **Richer per-agent prompting** — the persona system instruction is built
+      from the employee's *full* profile (role, expertise, personality, comms
+      style, objectives, **and** the generated background side-profile) and now
+      conditions **voice + behaviour**: speak in-character, hold a position,
+      disagree with reasons, build on a *named* colleague. A list of templated
+      openers is explicitly banned; creative temperature is nudged per-employee
+      (deterministically) so distinct personas also phrase distinctly.
+- [x] **Agent-aware conversation state** — `ConversationState.contextFor` packs an
+      *agent-specific* view into each turn: who it's answering (previous other
+      speaker, by name), its own last stance (consistency), and what others said
+      (without echoing itself). A per-round **stance** (open → challenge → commit)
+      makes later turns reflect earlier ones coherently and decisions feel earned.
+- [x] **Sharper manager/synthesizer pass** — briefed as a chief of staff; meeting
+      reports use 執行摘要 / 討論脈絡 / 決議 / 行動項目 / 風險與待解問題 and goal outputs
+      use 目標與成功標準 / 分工 / 相依與交接 / 整合計畫 / 里程碑, de-duping the transcript
+      and citing retrieved knowledge only where earned.
+- [x] **Concrete goal decomposition** — each assignee sees the other assignees'
+      roles/expertise, so slices don't overlap and hand-offs are named; approaches
+      state deliverables, dependencies, acceptance criteria and risk.
+- [x] **De-boilerplated offline engine** — deterministic turns vary phrasing by a
+      reproducible per-employee seed, weave in a persona lens, name prior speakers,
+      and commit to a workline-specific acceptance bar; report/minutes gained an
+      exec summary, discussion threads and open-questions — so the zero-key path
+      stays substantive. (Fixed a signed-shift index bug that could emit `undefined`.)
+- [x] **Tests** — a new hermetic `server/test/smoke.orchestration.mjs`
+      (`npm run test:orchestration`, also run by `npm test`) asserts persona
+      differentiation, the agent-aware context split, banned-boilerplate absence,
+      named callbacks, earned citations, and the richer report/output structure.
+
+_Deferred to a later pass: streaming/progress signal to the UI for long runs._
 
 ## 🧭 Phase 9 — History, search & management polish
 

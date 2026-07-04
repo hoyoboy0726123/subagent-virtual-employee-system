@@ -6,6 +6,15 @@
 // Google Gen AI (`gemma-4-31b-it`) as a real model turn. Different employees get
 // different personas and different grounding, so they genuinely diverge.
 //
+// Phase 8 focus — make the output read like real colleagues, not a template:
+//   • the persona system prompt now conditions *voice and behaviour* (defend a
+//     view, disagree with reasons, build on a named person) from the full
+//     profile — role, personality, comms style, expertise, objectives, profile;
+//   • the turn prompt is agent-aware (see ConversationState.contextFor): it knows
+//     who this agent is answering, what it itself already argued, and what is
+//     already settled — so callbacks feel earned, not formulaic;
+//   • a per-round "stance" steers openings/challenges/commitments differently.
+//
 // No external runtime is required. If the LLM is not configured, or a turn fails
 // (network/quota/empty), the executor degrades *per turn* to the deterministic
 // engine and marks that turn `live: false` — so the orchestration is real either
@@ -16,34 +25,80 @@ import { config } from '../config.js';
 
 const asList = (v) =>
   (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
-const snippet = (text = '', n = 160) => {
+const snippet = (text = '', n = 200) => {
   const s = String(text).replace(/\s+/g, ' ').trim();
   return s.length > n ? `${s.slice(0, n)}…` : s;
 };
 
-// Persona + retrieved-knowledge system instruction that turns a bare model call
-// into a specific employee agent. Grounding differs per employee, so this is
-// where two agents on the same topic start to think differently.
+// A tiny deterministic hash so we can vary a couple of stylistic knobs *per
+// employee* without randomness (keeps runs reproducible). Two employees on the
+// same topic get a slightly different creative temperature, nudging distinct
+// phrasing even before their personas diverge.
+function seedOf(str = '') {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+// ---------------------------------------------------------------------------
+// Persona system instruction — turns a bare model call into a specific employee
+// agent with a recognisable voice. Grounding differs per employee, so this is
+// where two agents on the same topic start to think (and sound) differently.
+// ---------------------------------------------------------------------------
 function personaSystem(emp, grounding) {
-  const expertise = asList(emp.expertise).join('、') || '一般問題解決';
+  const expertise = asList(emp.expertise);
+  const expertiseLine = expertise.join('、') || '一般問題解決';
+  const primary = expertise[0] || '你的專業領域';
   const knowledge = grounding.length
     ? grounding.map((h) => `- 《${h.documentTitle}》：${snippet(h.content)}`).join('\n')
-    : '（目前沒有檢索到與此主題直接相關的個人知識，請依你的專業判斷作答。）';
-  return [
-    '你正在一個「虛擬員工系統」中，扮演一位真實的虛擬員工代理，與其他虛擬員工一起協作。',
-    '請嚴格維持以下人設，全程以繁體中文回覆，且只輸出你本人的發言內容，不要加入旁白、標題、名字前綴或 Markdown 標記。',
-    '',
+    : '（目前沒有檢索到與此主題直接相關的個人知識，請完全依你的專業判斷作答，不要杜撰任何資料。）';
+
+  const identity = [
     `【姓名】${emp.name}`,
     `【職稱】${emp.roleTitle}`,
-    `【專長】${expertise}`,
+    `【專長】${expertiseLine}`,
     emp.personality ? `【個性】${emp.personality}` : '',
     emp.communicationStyle ? `【溝通風格】${emp.communicationStyle}` : '',
-    emp.objectives ? `【目標】${emp.objectives}` : '',
+    emp.objectives ? `【你在意的目標】${emp.objectives}` : '',
+    emp.profile ? `【背景側寫】${snippet(emp.profile, 320)}` : '',
+  ].filter(Boolean).join('\n');
+
+  return [
+    '你正在一個「虛擬員工系統」中，扮演一位真實的資深同事，和其他虛擬員工一起開會或協作。',
+    '你不是在寫文章，而是在一場活生生的討論裡「說話」。全程使用繁體中文，只輸出你這一次的發言內容，',
+    '不要加入旁白、標題、名字前綴、引號或任何 Markdown 標記。',
+    '',
+    identity,
+    '',
+    '【你的聲音與行為準則】',
+    `- 用你的個性與溝通風格「說話」，而不是描述它們；讓別人光看語氣就知道這是 ${emp.name}。`,
+    `- 你有立場。凡事先用${primary}的視角切入，給出明確主張，而不是四平八穩的場面話。`,
+    '- 需要時就明確地表達不同意，並說出理由；也可以在別人的想法上往前推一步，指名是誰的點。',
+    '- 具體：講得出取捨、數字、可交付物或驗收方式，而不是抽象原則。',
+    '- 不要重複已經被講過或已達成共識的內容；把討論往前推。',
+    '- 只在知識確實切題時才自然帶入其名稱；不相關就忽略，切勿杜撰。',
+    '',
+    '【嚴禁的樣板語氣】',
+    '- 不要用「從我的角度來看」「作為一名…」「總的來說」「首先／其次／最後」這類公式化開場或連接詞。',
+    '- 不要空泛地附和（例如「我同意大家的看法」）而不補上你自己的實質內容。',
+    '- 不要每次都用一樣的句型開頭；像真人一樣自然變化。',
     '',
     '【你被授權參考的個人知識】',
     knowledge,
-    '（若知識與當前問題相關，請自然地引用其名稱；若不相關則忽略，切勿杜撰。）',
   ].filter(Boolean).join('\n');
+}
+
+// Per-round behavioural stance. Openings stake a position; middle rounds push
+// back and integrate; closing rounds commit to owned, concrete decisions.
+function roundStance(round, rounds) {
+  const isLast = round === rounds - 1;
+  if (round === 0) {
+    return '這是開場。清楚表態：你認為什麼才算成功、你最擔心的一個風險是什麼、以及你想守住的原則。不要面面俱到，挑你最在意的講。';
+  }
+  if (isLast) {
+    return '這是收斂輪。把討論落地成具體決定：你願意負責哪一條工作線、交付什麼、用什麼標準驗收、下一個檢查點在何時。做出承諾，不要再開新問題。';
+  }
+  return '這是分析輪。針對前面的發言，明確地同意或反對某個人的某個具體論點並說明理由，補上別人漏掉的取捨或風險，讓結論更扎實。';
 }
 
 function citationsFor(grounding) {
@@ -58,24 +113,41 @@ function citationsFor(grounding) {
  * @param {object} opts
  * @param {object} opts.employee
  * @param {Array}  opts.grounding     retrieved chunks scoped to this employee
- * @param {object} opts.context       { topic, rounds, round (0-based), roundTitle, roundGoal, participantList, priorDigest, priorSpeakers }
+ * @param {object} opts.context       { topic, rounds, round (0-based), roundTitle, roundGoal, participantList, convo, priorSpeakers }
  * @returns {Promise<{text:string, live:boolean, citations:Array}>}
  */
 export async function meetingTurn({ employee, grounding, context }) {
-  const { topic, rounds, round, roundTitle, roundGoal, participantList, priorDigest } = context;
-  const user = round === 0
-    ? [
-        `這是一場關於「${topic}」的團隊會議，共 ${rounds} 輪。與會者：${participantList}。`,
-        `現在是第 1 輪（${roundTitle}）。請提出你的開場觀點：${roundGoal}。`,
-        '精煉作答，約 3–5 句，只輸出你的發言。',
-      ].join('\n')
-    : [
-        `現在是第 ${round + 1} 輪（${roundTitle}）。以下是目前為止的討論：`,
-        priorDigest,
+  const { topic, rounds, round, roundTitle, roundGoal, participantList, convo } = context;
+  const view = convo || {};
+  const stance = roundStance(round, rounds);
+
+  let user;
+  if (round === 0 && view.isFirstOverall) {
+    user = [
+      `這是一場關於「${topic}」的團隊會議，共 ${rounds} 輪。與會者：${participantList}。`,
+      `現在是第 1 輪（${roundTitle}）。你是第一位發言者，為討論定調：${roundGoal}。`,
+      stance,
+      '約 3–5 句，口語、精煉，只輸出你的發言。',
+    ].join('\n');
+  } else {
+    const lines = [`現在是第 ${round + 1} 輪（${roundTitle}），主題仍是「${topic}」。`];
+    if (view.previousSpeaker) {
+      lines.push(
         '',
-        `請延續討論、具體回應其他成員的觀點，並推進到：${roundGoal}。`,
-        '精煉作答，約 3–5 句，只輸出你的發言。',
-      ].join('\n');
+        `你前一位發言的是 ${view.previousSpeaker.name}（${view.previousSpeaker.role}），他說：`,
+        `「${view.previousSpeaker.text}」`,
+        '請直接接著回應——認同就往前推進，有疑慮就具體點出，用得上就叫他的名字。',
+      );
+    }
+    if (view.othersDigest && (!view.previousSpeaker || view.othersDigest.split('\n').length > 1)) {
+      lines.push('', '這一輪稍早（及上一輪）其他人的重點：', view.othersDigest);
+    }
+    if (view.myLastPoint) {
+      lines.push('', `你上一輪的立場是：「${view.myLastPoint}」。請延續它、不要自相矛盾，並在此基礎上推進。`);
+    }
+    lines.push('', `本輪目標：${roundGoal}。`, stance, '約 3–5 句，口語、精煉，只輸出你的發言。');
+    user = lines.join('\n');
+  }
 
   const text = await runOrFallback({
     employee,
@@ -91,18 +163,28 @@ export async function meetingTurn({ employee, grounding, context }) {
  * @param {object} opts
  * @param {object} opts.employee
  * @param {Array}  opts.grounding
- * @param {object} opts.context   { title, description, others }
+ * @param {object} opts.context   { title, description, others, otherProfiles }
  * @returns {Promise<{text:string, live:boolean, citations:Array}>}
  */
 export async function goalTurn({ employee, grounding, context }) {
-  const { title, description, others } = context;
+  const { title, description, others, otherProfiles } = context;
+  const collaborators = otherProfiles && otherProfiles.length
+    ? otherProfiles.map((o) => `- ${o.name}（${o.roleTitle}）：${asList(o.expertise).slice(0, 3).join('、') || '通用'}`).join('\n')
+    : '（沒有其他負責人，這個目標由你端到端負責。）';
+
   const user = [
     `團隊目標：「${title}」`,
     description ? `目標說明：${description}` : '',
-    `其他負責人：${others}`,
     '',
-    '請針對這個目標，說明「你負責的子任務」與「你的執行方法」：你會交付什麼、依賴哪些人、驗收標準為何。',
-    '精煉作答，約 4–6 句，只輸出內容。',
+    '一起負責這個目標的還有：',
+    collaborators,
+    '',
+    '請認領你最適合負責的那一塊，說清楚：',
+    `1. 你負責的子任務（用你的${asList(employee.expertise)[0] || '專業'}切一塊別人不會重複的範圍）。`,
+    '2. 你的具體做法與交付物。',
+    '3. 你依賴誰、要跟誰交接（點名上面的負責人）。',
+    '4. 驗收標準與你看到的最大風險。',
+    '約 4–6 句，具體、口語，只輸出內容，不要條列編號、不要標題。',
   ].filter(Boolean).join('\n');
 
   const text = await runOrFallback({
@@ -116,11 +198,13 @@ export async function goalTurn({ employee, grounding, context }) {
 
 // Single live model turn with one retry; deterministic fallback on failure.
 // Returns { text, live }. `live` is true only when the model actually answered.
+// Temperature is nudged per-employee so distinct personas also phrase distinctly.
 async function runOrFallback({ employee, grounding, user, fallback }) {
   if (llmEnabled()) {
     const system = personaSystem(employee, grounding);
+    const temperature = 0.72 + ((seedOf(employee.id || employee.name) % 16) / 100); // 0.72–0.87
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await generate({ system, user, maxTokens: 700, temperature: 0.7 });
+      const res = await generate({ system, user, maxTokens: 700, temperature });
       const t = res?.text?.trim();
       if (t) return { text: t, live: true };
     }

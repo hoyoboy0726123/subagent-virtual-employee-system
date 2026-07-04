@@ -4,25 +4,40 @@
 // orchestrated multi-agent conversations, not placeholders". For each round, and
 // for each participant, it:
 //   1. grounds the employee in *their own* retrieved knowledge (RAG),
-//   2. injects the running conversation (ConversationState) so they respond to
-//      what the others actually said,
-//   3. runs a genuine agent turn via EmployeeAgentExecutor.
+//   2. injects an agent-aware slice of the running conversation
+//      (ConversationState.contextFor) so they respond to who spoke last and stay
+//      consistent with their own earlier stance,
+//   3. runs a genuine agent turn via EmployeeAgentExecutor with a per-round
+//      behavioural stance (open → challenge → commit).
 // Then a coordinating manager agent (ReportSynthesizer) writes the report from
-// the REAL transcript. Everything happens in-process — no external Gateway.
+// the REAL transcript, with the retrieved knowledge in view. Everything happens
+// in-process — no external Gateway.
 import { ConversationState } from './ConversationState.js';
 import * as executor from './EmployeeAgentExecutor.js';
 import { synthesizeMeetingReport } from './ReportSynthesizer.js';
 import { groundingFor } from '../storage/retrieval.js';
 import * as engine from '../reasoning/engine.js';
 
-const ROUND_TITLES = ['開場立場', '分析與風險', '決議與後續步驟', '深化與整合', '收斂與定案'];
-const ROUND_GOALS = [
-  '釐清成功標準、關鍵限制與你最關注的風險',
-  '分析主要風險與取捨，回應其他成員的觀點',
-  '收斂為具體決議、負責人與下一步',
-  '深化尚未解決的爭點並提出整合方案',
-  '對齊最終定案與檢查點',
+// Round scaffold: a human title, the substantive goal for the round, and the
+// shape the round should take. The orchestrator picks a coherent subset for the
+// requested round count so short and long meetings both arc sensibly.
+const ROUND_LIBRARY = [
+  { title: '開場立場', goal: '釐清成功標準、關鍵限制，以及你最在意的一個風險' },
+  { title: '分析與風險', goal: '針對彼此的論點深入分析主要風險與取捨，同意或反對都要給理由' },
+  { title: '決議與後續步驟', goal: '收斂為具體決議、負責人與可驗收的下一步' },
 ];
+const DEEPEN_ROUND = { title: '深化與整合', goal: '深化尚未解決的爭點，提出能整合各方的方案' };
+const CLOSE_ROUND = { title: '收斂與定案', goal: '對齊最終定案、負責人與檢查點時間' };
+
+// Build a round plan of exactly `rounds` entries that always opens with a
+// position round and ends on a decision/close round (the arc that makes a
+// meeting feel like it went somewhere).
+function planRounds(rounds) {
+  if (rounds <= 3) return ROUND_LIBRARY.slice(0, rounds);
+  const middle = [];
+  for (let i = 0; i < rounds - 3; i++) middle.push(DEEPEN_ROUND);
+  return [ROUND_LIBRARY[0], ROUND_LIBRARY[1], ...middle, ROUND_LIBRARY[2], CLOSE_ROUND].slice(0, rounds);
+}
 
 /**
  * @param {object} req  { topic, participants, rounds }
@@ -31,13 +46,13 @@ const ROUND_GOALS = [
 export async function runMeeting({ topic, participants, rounds }) {
   const { byEmployee, flat } = groundingFor({ query: topic, employees: participants });
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
+  const plan = planRounds(rounds);
 
   const convo = new ConversationState({ topic, participants });
   const stats = newStats();
 
   for (let r = 0; r < rounds; r++) {
-    const roundTitle = ROUND_TITLES[r] || `第 ${r + 1} 輪`;
-    const roundGoal = ROUND_GOALS[r] || '收斂結論';
+    const { title: roundTitle, goal: roundGoal } = plan[r] || { title: `第 ${r + 1} 輪`, goal: '收斂結論' };
 
     for (const emp of participants) {
       const grounding = byEmployee[emp.id] || [];
@@ -51,7 +66,7 @@ export async function runMeeting({ topic, participants, rounds }) {
           roundTitle,
           roundGoal,
           participantList,
-          priorDigest: convo.digest(8),
+          convo: convo.contextFor(emp.name, { window: Math.max(participants.length, 4) }),
           priorSpeakers: convo.priorSpeakers().filter((n) => n !== emp.name),
         },
       });
@@ -71,7 +86,7 @@ export async function runMeeting({ topic, participants, rounds }) {
 
   const transcript = convo.transcript();
   const minutes = engine.buildMinutes({ topic, participants, transcript });
-  const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes });
+  const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding: flat });
   record(stats, report.live);
 
   return { transcript, minutes, report: report.text, grounding: flat, stats };

@@ -52,9 +52,20 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 > text-like formats still ingest via a pure-JS fallback, keeping the app
 > standalone-first. See [Document ingestion](#-document-ingestion-markitdown).
 >
-> The full productization plan — through the planned Phases 8–10 (output-quality
-> polish, history/search management, final packaging) — lives in
-> **[ROADMAP.md](./ROADMAP.md)**.
+> **Phase 8 (shipped).** Output & orchestration **quality** upgrade — agents now
+> read like real colleagues, not a template. Each employee is conditioned on its
+> **full persona** (role, personality, comms style, expertise, objectives,
+> profile) to speak with a recognisable voice; turns are **agent-aware** (they
+> answer the previous speaker by name, stay consistent with their own earlier
+> stance, and don't re-litigate what's settled) via a per-round *stance*
+> (open → challenge → commit); and the manager pass now writes a chief-of-staff
+> report (**執行摘要 / 討論脈絡 / 決議 / 行動項目 / 風險與待解問題**) that de-dups the
+> transcript and cites knowledge only where it was earned. The **offline engine**
+> was de-boilerplated too, so the zero-key experience is distinct and concrete.
+> See [The standalone runtime](#-the-standalone-runtime-built-in-multi-agent).
+>
+> The full productization plan — through the planned Phases 9–10 (history/search
+> management, final packaging) — lives in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---
 
@@ -278,26 +289,39 @@ happens in-process — there is no gateway, no external orchestrator, no live
 runtime dependency. The mechanics live in `server/src/orchestration/`:
 
 - **`EmployeeAgentExecutor`** — runs **one** employee as a distinct agent. It
-  builds a persona system instruction (role, expertise, personality, comms style,
-  objectives) **plus the knowledge retrieved for *that* employee** (RAG), adds the
-  turn's context, and calls Google Gen AI. Because each employee gets a different
-  persona and different grounding, two agents on the same topic genuinely diverge.
-  If the model is unconfigured or a turn fails (after one retry), it degrades
-  **per turn** to the deterministic engine and marks that turn `live: false`.
+  builds a persona system instruction from the employee's **full profile** (role,
+  expertise, personality, comms style, objectives, *and* the generated background
+  side-profile) **plus the knowledge retrieved for *that* employee** (RAG), adds
+  the turn's context, and calls Google Gen AI. The persona prompt now conditions
+  **voice and behaviour** — speak in-character, hold a position, disagree with
+  reasons, build on a *named* colleague — and bans a list of templated openers, so
+  two agents on the same topic diverge in *how they sound*, not just what they
+  know. Its creative temperature is nudged per-employee (deterministically) to
+  reinforce that. If the model is unconfigured or a turn fails (after one retry),
+  it degrades **per turn** to the deterministic engine and marks that turn
+  `live: false`.
 - **`ConversationState` / `AgentTurn`** — the running conversation, kept in-app.
-  Since model calls are stateless, the orchestrator re-injects a compact digest of
-  recent turns into each next agent's prompt — this is what lets employees
-  actually **respond to one another** across rounds without any session store.
+  Since model calls are stateless, the orchestrator re-injects an **agent-aware**
+  slice (`contextFor`) into each next agent's prompt: who the agent is answering
+  (the previous *other* speaker, by name), what the agent itself already argued (so
+  it stays consistent), and what others said (without echoing itself). This is what
+  lets later turns reflect earlier ones **coherently**, not with formulaic callbacks.
 - **`MeetingOrchestrator`** — for a meeting it runs `rounds` × `participants`
-  genuine agent turns. Each round has a goal (open positions → risks/trade-offs →
-  decisions & next steps → …), and each participant sees what the others just said.
-- **`GoalCoordinator`** — for a goal each assignee runs as an agent (aware of the
-  other assignees) and produces its own subtask + execution approach.
-- **`ReportSynthesizer`** — a separate **coordinating manager agent** reads the
-  *real* transcript and synthesizes the final **report** (meeting) or
-  **collaboration output** (goal). Minutes are derived deterministically from the
-  same real transcript. If the model is unavailable, it assembles the artifact
-  from that real transcript deterministically — never fabricated.
+  genuine agent turns. It plans a coherent **arc** (always opens on positions and
+  ends on a decision/close round) and gives each round a behavioural **stance** —
+  *open* (stake a view) → *challenge* (agree/disagree with reasons) → *commit*
+  (owned, concrete decisions) — so decisions feel earned rather than generic.
+- **`GoalCoordinator`** — for a goal each assignee runs as an agent that sees the
+  **other assignees' roles and expertise** (not just their names), so it claims a
+  non-overlapping slice and names real hand-offs, then produces its subtask +
+  execution approach (deliverables, dependencies, acceptance criteria, risk).
+- **`ReportSynthesizer`** — a separate **coordinating manager agent** (briefed as a
+  *chief of staff*) reads the *real* transcript and synthesizes the final **report**
+  (執行摘要 / 討論脈絡 / 決議 / 行動項目 / 風險與待解問題) or **collaboration output**
+  (目標與成功標準 / 分工 / 相依與交接 / 整合計畫 / 里程碑), de-duping the transcript and
+  citing knowledge only where it was earned. Minutes are derived deterministically
+  from the same real transcript. If the model is unavailable, it assembles the
+  artifact from that real transcript deterministically — never fabricated.
 
 **Honesty.** A run is labeled `live`/`engine: "standalone-genai"` only for the
 turns that actually ran on the model; `fallback: true` appears **only** when not a
@@ -311,7 +335,11 @@ The guaranteed baseline: pure, persona-driven generators grounded with RAG, zero
 model calls. It powers `generateProfile` / `ideateRole`, provides the **per-turn
 fallback** inside `EmployeeAgentExecutor`, and the whole-run fallback for the
 OpenClaw adapter (via `orchestration/deterministic.js`). It keeps the app instant,
-free, and fully functional with no keys and no network.
+free, and fully functional with no keys and no network. Phase 8 **de-boilerplated**
+it: turns vary phrasing by a *deterministic* per-employee seed (reproducible, never
+random) and weave in each persona's expertise + comms-style lens, callbacks name a
+prior speaker, and closings commit to a concrete, workline-specific acceptance bar —
+so even the zero-key experience reads distinct and substantive rather than filled-in.
 
 ### The live model: Google Gen AI (`@google/genai`)
 
