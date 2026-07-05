@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 import { getDb } from './db/connection.js';
 import { healthRouter } from './routes/health.routes.js';
+import { dashboardRouter } from './routes/dashboard.routes.js';
 import { employeesRouter } from './routes/employees.routes.js';
 import { knowledgeRouter } from './routes/knowledge.routes.js';
 import { meetingsRouter } from './routes/meetings.routes.js';
@@ -26,6 +27,7 @@ export function createApp() {
   app.use(express.json({ limit: '4mb' }));
 
   app.use('/api', healthRouter);
+  app.use('/api', dashboardRouter);
   app.use('/api', settingsRouter);
   app.use('/api', employeesRouter);
   app.use('/api', knowledgeRouter);

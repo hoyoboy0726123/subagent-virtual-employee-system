@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { asyncHandler } from '../util/http.js';
 import { listEmployees } from '../storage/employees.repo.js';
-import { listMeetings } from '../storage/meetings.repo.js';
-import { listGoals } from '../storage/goals.repo.js';
+import { listAllMeetings } from '../storage/meetings.repo.js';
+import { listAllGoals } from '../storage/goals.repo.js';
 import { retrievalStats } from '../storage/retrieval.js';
 import { llmEnabled } from '../reasoning/llm.js';
 import { getSettings } from '../services/settings.service.js';
@@ -46,8 +46,8 @@ healthRouter.get('/health', asyncHandler(async (_req, res) => {
       employees: listEmployees().length,
       documents: kb.documents,
       chunks: kb.chunks,
-      meetings: listMeetings().length,
-      goals: listGoals().length,
+      meetings: listAllMeetings().length,
+      goals: listAllGoals().length,
     },
   });
 }));

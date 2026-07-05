@@ -22,11 +22,86 @@ function rowToMeeting(row) {
   };
 }
 
-export function listMeetings() {
-  return getDb()
+function matchesText(meeting, q = '') {
+  const needle = String(q || '').trim().toLowerCase();
+  if (!needle) return true;
+  const haystack = [
+    meeting.topic,
+    ...(meeting.participants || []).flatMap((p) => [p.name, p.roleTitle]),
+    meeting.report,
+  ].join(' ').toLowerCase();
+  return haystack.includes(needle);
+}
+
+function matchesParticipant(meeting, participantId = '') {
+  if (!participantId) return true;
+  return (meeting.participantIds || []).includes(participantId);
+}
+
+function matchesRuntime(meeting, runtime = '') {
+  if (!runtime) return true;
+  return meeting.runtime?.mode === runtime || meeting.runtime?.engine === runtime;
+}
+
+function matchesLive(meeting, live = '') {
+  if (live === '' || live === undefined || live === null) return true;
+  const truthy = String(live) === 'true';
+  return Boolean(meeting.runtime?.live && !meeting.runtime?.fallback) === truthy;
+}
+
+function sortMeetings(items, sort = 'newest') {
+  const list = [...items];
+  switch (sort) {
+    case 'oldest':
+      return list.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+    case 'topic-asc':
+      return list.sort((a, b) => String(a.topic).localeCompare(String(b.topic), 'zh-Hant'));
+    case 'topic-desc':
+      return list.sort((a, b) => String(b.topic).localeCompare(String(a.topic), 'zh-Hant'));
+    case 'newest':
+    default:
+      return list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  }
+}
+
+export function listMeetings(opts = {}) {
+  const all = getDb()
     .prepare('SELECT * FROM meetings ORDER BY created_at DESC')
     .all()
     .map(rowToMeeting);
+
+  const filtered = sortMeetings(all.filter((meeting) => (
+    matchesText(meeting, opts.q)
+    && matchesParticipant(meeting, opts.participantId)
+    && matchesRuntime(meeting, opts.runtime)
+    && matchesLive(meeting, opts.live)
+  )), opts.sort);
+
+  const pageSize = Math.min(Math.max(Number(opts.pageSize) || 10, 1), 100);
+  const page = Math.max(Number(opts.page) || 1, 1);
+  const total = filtered.length;
+  const start = (page - 1) * pageSize;
+  const items = filtered.slice(start, start + pageSize);
+
+  return {
+    items,
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(Math.ceil(total / pageSize), 1),
+    hasMore: start + pageSize < total,
+    filters: {
+      q: opts.q || '',
+      participantId: opts.participantId || '',
+      runtime: opts.runtime || '',
+      live: opts.live === undefined ? '' : String(opts.live),
+      sort: opts.sort || 'newest',
+    },
+  };
+}
+
+export function listAllMeetings() {
+  return listMeetings({ page: 1, pageSize: 1000000 }).items;
 }
 
 export function getMeeting(meetingId) {

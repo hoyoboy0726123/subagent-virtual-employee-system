@@ -82,6 +82,7 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 | 7 | **Runtime switch** — **Standalone** (built-in multi-agent orchestration, default, no external deps) or **OpenClaw** (optional external subagent execution via the `openclaw` CLI → Gateway) | Header → *Runtime* |
 | 8 | **SQLite persistence** — everything survives restarts in a single `.db` file | `server/data/app.db` |
 | 9 | **Downloadable reports** — export any meeting report or goal collaboration output as a polished **Word `.docx`** (or portable Markdown) with structured sections: title, participants/assignees, minutes/task breakdown, report body, transcript, runtime metadata, and knowledge references | Meetings / Goals → *⬇ 下載 Word* |
+| 10 | **History & management polish** — meetings/goals now support **search, filters, sorting, pagination**, and the header shows a lightweight **dashboard** for employee / knowledge / run health | Meetings / Goals lists · header dashboard |
 
 ---
 
@@ -532,6 +533,7 @@ the primary parser is live.
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
 | GET | `/api/health` | status, LLM flag, runtime mode, **standalone** + **OpenClaw** liveness, **ingest capability** (MarkItDown + supported types), counts |
+| GET | `/api/dashboard` | lightweight product dashboard: employee / knowledge / run counts, average chunks per document, live-run and live-turn ratios |
 | GET/PUT | `/api/settings` | read settings + per-runtime health / switch runtime mode |
 | GET/POST | `/api/employees` | list / create employees |
 | GET/PUT/DELETE | `/api/employees/:id` | read (with knowledge) / update / delete |
@@ -541,10 +543,10 @@ the primary parser is live.
 | POST | `/api/employees/:id/knowledge/upload` | **upload a knowledge file** (multipart `file`): PDF/DOCX/TXT/MD/HTML → MarkItDown → Markdown → chunked + indexed |
 | GET | `/api/knowledge/search` | keyword/FTS search (`?q=`, optional `?employeeIds=a,b`, `?limit=`) |
 | DELETE | `/api/knowledge/:id` | delete a document (and its chunks/index) |
-| GET/POST | `/api/meetings` | list / run a multi-agent meeting |
+| GET/POST | `/api/meetings` | list / run a multi-agent meeting (`GET` supports `q`, `participantId`, `runtime`, `live`, `sort`, `page`, `pageSize`) |
 | GET/DELETE | `/api/meetings/:id` | read / delete a meeting |
 | GET | `/api/meetings/:id/export` | download the meeting report (`?format=docx` *(default)* `\| md \| txt`) |
-| GET/POST | `/api/goals` | list / assign a collaborative goal |
+| GET/POST | `/api/goals` | list / assign a collaborative goal (`GET` supports `q`, `assigneeId`, `status`, `runtime`, `live`, `sort`, `page`, `pageSize`) |
 | GET | `/api/goals/:id` | read a single goal |
 | PUT/DELETE | `/api/goals/:id` | update status/tasks / delete |
 | GET | `/api/goals/:id/export` | download the collaboration output (`?format=docx` *(default)* `\| md \| txt`) |

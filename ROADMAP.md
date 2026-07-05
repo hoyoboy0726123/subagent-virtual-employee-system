@@ -103,15 +103,24 @@ colleagues, and make outputs more useful.
 
 _Deferred to a later pass: streaming/progress signal to the UI for long runs._
 
-## 🧭 Phase 9 — History, search & management polish
+## ✅ Phase 9 — History, search & management polish *(shipped)*
 
 **Goal:** make a growing library of meetings/goals/employees easy to navigate.
 
-- List-view **search + filters** (by topic/title, participant/assignee, date,
-  runtime engine, live vs. offline).
-- Sort + pagination for meetings and goals; empty/loading states refined.
-- Re-run / duplicate a meeting or goal; rename/archive; bulk export.
-- Lightweight dashboard counts (documents, chunks, runs, live-turn ratio).
+- [x] Meetings list now supports **search + filters** by topic/report text,
+      participant, runtime mode, and live-vs-offline output.
+- [x] Goals list now supports **search + filters** by title/output text,
+      assignee, status, runtime mode, and live-vs-offline output.
+- [x] Both meetings and goals gained **sorting + pagination** (newest/oldest,
+      alpha sorts, configurable page size) and refined empty states that reflect
+      active filters rather than only true-zero history.
+- [x] Added a lightweight **dashboard** endpoint/UI strip with counts for
+      employees / documents / chunks / runs plus live-run and live-turn ratios,
+      giving the product a useful operational summary at a glance.
+- [x] Smoke tests cover the new dashboard and filtered/paginated list APIs.
+
+_Deferred to a later pass: re-run / duplicate, archive / bulk export, and deeper
+run history actions beyond discoverability._
 
 ## 🧭 Phase 10 — Final product polish & packaging
 

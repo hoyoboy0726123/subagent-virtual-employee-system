@@ -2,21 +2,29 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
 
-export default function MeetingsPage({ refreshKey }) {
+const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
+
+export default function MeetingsPage({ refreshKey, onChange }) {
   const [employees, setEmployees] = useState([]);
-  const [meetings, setMeetings] = useState([]);
+  const [meetingData, setMeetingData] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
   const [open, setOpen] = useState(null); // meeting being viewed
   const [topic, setTopic] = useState('');
   const [rounds, setRounds] = useState(3);
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [filters, setFilters] = useState(DEFAULT_FILTERS);
 
-  const reload = () => Promise.all([
-    api.get('/employees').then(setEmployees),
-    api.get('/meetings').then(setMeetings),
-  ]);
-  useEffect(() => { reload(); }, [refreshKey]);
+  const reload = async (next = filters) => {
+    const [employeeList, meetings] = await Promise.all([
+      api.get('/employees'),
+      api.get(`/meetings?${new URLSearchParams(next).toString()}`),
+    ]);
+    setEmployees(employeeList);
+    setMeetingData(meetings);
+  };
+  useEffect(() => { reload(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); }, [refreshKey]);
+  useEffect(() => { reload(filters); }, [filters]);
 
   const toggle = (id) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -31,12 +39,14 @@ export default function MeetingsPage({ refreshKey }) {
     try {
       const m = await api.post('/meetings', { topic, participantIds: selected, rounds: Number(rounds) });
       setTopic(''); setSelected([]);
-      await api.get('/meetings').then(setMeetings);
+      onChange?.();
       setOpen(m);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
 
-  const del = async (id) => { await api.del(`/meetings/${id}`); reload(); };
+  const del = async (id) => { await api.del(`/meetings/${id}`); onChange?.(); };
+  const patchFilters = (patch) => setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
+  const meetings = meetingData.items || [];
 
   return (
     <div className="page">
@@ -63,28 +73,86 @@ export default function MeetingsPage({ refreshKey }) {
         </div>
       </div>
 
-      <h3 className="section-title">過往會議</h3>
-      {meetings.length === 0 ? (
-        <Empty>尚無會議。</Empty>
-      ) : (
-        <div className="list">
-          {meetings.map((m) => (
-            <div key={m.id} className="list-item">
-              <button className="list-main" onClick={() => setOpen(m)}>
-                <strong>{m.topic}</strong>
-                <span className="muted">
-                  {(m.participants || []).map((p) => p.name).join('、')} · {new Date(m.createdAt).toLocaleString('zh-Hant')}
-                  {m.grounding?.length ? ` · 📚 ${m.grounding.length} 筆知識依據` : ''}
-                </span>
-              </button>
-              <ExportButtons path={`/meetings/${m.id}`} compact />
-              <button className="icon-btn" onClick={() => del(m.id)} aria-label="刪除會議">🗑</button>
-            </div>
-          ))}
+      <div className="section-head">
+        <h3 className="section-title">過往會議</h3>
+        <span className="muted">共 {meetingData.total || 0} 筆</span>
+      </div>
+      <div className="toolbar panel">
+        <div className="toolbar-grid toolbar-grid-meetings">
+          <label>搜尋
+            <input value={filters.q} onChange={(e) => patchFilters({ q: e.target.value })} placeholder="主題、與會者、報告內容" />
+          </label>
+          <label>與會者
+            <select value={filters.participantId} onChange={(e) => patchFilters({ participantId: e.target.value })}>
+              <option value="">全部</option>
+              {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+            </select>
+          </label>
+          <label>執行模式
+            <select value={filters.runtime} onChange={(e) => patchFilters({ runtime: e.target.value })}>
+              <option value="">全部</option>
+              <option value="standalone">內建多代理</option>
+              <option value="openclaw">OpenClaw</option>
+            </select>
+          </label>
+          <label>是否即時
+            <select value={filters.live} onChange={(e) => patchFilters({ live: e.target.value })}>
+              <option value="">全部</option>
+              <option value="true">即時模型</option>
+              <option value="false">離線 / 備援</option>
+            </select>
+          </label>
+          <label>排序
+            <select value={filters.sort} onChange={(e) => patchFilters({ sort: e.target.value })}>
+              <option value="newest">最新優先</option>
+              <option value="oldest">最舊優先</option>
+              <option value="topic-asc">主題 A→Z</option>
+              <option value="topic-desc">主題 Z→A</option>
+            </select>
+          </label>
+          <label>每頁
+            <select value={filters.pageSize} onChange={(e) => patchFilters({ pageSize: Number(e.target.value) })}>
+              {[5, 10, 20].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
         </div>
+      </div>
+
+      {meetings.length === 0 ? (
+        <Empty>目前沒有符合條件的會議。</Empty>
+      ) : (
+        <>
+          <div className="list">
+            {meetings.map((m) => (
+              <div key={m.id} className="list-item">
+                <button className="list-main" onClick={() => setOpen(m)}>
+                  <strong>{m.topic}</strong>
+                  <span className="muted">
+                    {(m.participants || []).map((p) => p.name).join('、')} · {new Date(m.createdAt).toLocaleString('zh-Hant')}
+                    {m.grounding?.length ? ` · 📚 ${m.grounding.length} 筆知識依據` : ''}
+                  </span>
+                </button>
+                <ExportButtons path={`/meetings/${m.id}`} compact />
+                <button className="icon-btn" onClick={() => del(m.id)} aria-label="刪除會議">🗑</button>
+              </div>
+            ))}
+          </div>
+          <Pagination page={meetingData.page} totalPages={meetingData.totalPages} onPage={(page) => setFilters((f) => ({ ...f, page }))} />
+        </>
       )}
 
       {open && <MeetingView meeting={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+function Pagination({ page, totalPages, onPage }) {
+  if (!totalPages || totalPages <= 1) return null;
+  return (
+    <div className="pagination">
+      <button className="btn-ghost btn-sm" onClick={() => onPage(page - 1)} disabled={page <= 1}>← 上一頁</button>
+      <span className="muted">第 {page} / {totalPages} 頁</span>
+      <button className="btn-ghost btn-sm" onClick={() => onPage(page + 1)} disabled={page >= totalPages}>下一頁 →</button>
     </div>
   );
 }

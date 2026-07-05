@@ -5,8 +5,8 @@ import { buildMeetingExport } from '../export/reportDoc.js';
 
 export const meetingsRouter = Router();
 
-meetingsRouter.get('/meetings', asyncHandler(async (_req, res) => {
-  res.json(meetings.list());
+meetingsRouter.get('/meetings', asyncHandler(async (req, res) => {
+  res.json(meetings.list(req.query || {}));
 }));
 
 meetingsRouter.get('/meetings/:id', asyncHandler(async (req, res) => {

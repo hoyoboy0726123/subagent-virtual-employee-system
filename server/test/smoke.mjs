@@ -365,6 +365,34 @@ try {
     assert.ok(json.length >= 2);
   });
 
+  await step('dashboard summarizes counts + live ratios', async () => {
+    const { status, json } = await api('GET', '/api/dashboard');
+    assert.equal(status, 200);
+    assert.ok(json.counts.employees >= 2);
+    assert.ok('liveTurnRatio' in json.runs);
+    assert.ok('avgChunksPerDocument' in json.knowledge);
+  });
+
+  await step('meetings list supports search/filter/sort/pagination', async () => {
+    const { status, json } = await api('GET', `/api/meetings?q=Regression&participantId=${empId}&sort=topic-asc&page=1&pageSize=1`);
+    assert.equal(status, 200);
+    assert.equal(json.items.length, 1);
+    assert.equal(json.total, 1);
+    assert.equal(json.items[0].id, meetingId);
+    assert.equal(json.pageSize, 1);
+    assert.equal(json.totalPages, 1);
+  });
+
+  await step('goals list supports search/filter/sort/pagination', async () => {
+    const { status, json } = await api('GET', `/api/goals?q=beta&assigneeId=${empId}&status=in-progress&sort=title-asc&page=1&pageSize=1`);
+    assert.equal(status, 200);
+    assert.equal(json.items.length, 1);
+    assert.equal(json.total, 1);
+    assert.equal(json.items[0].id, goalId);
+    assert.equal(json.pageSize, 1);
+    assert.equal(json.totalPages, 1);
+  });
+
   console.log(`\n  All ${passed} smoke checks passed ✅\n`);
 } catch (err) {
   console.error(`\n  ✗ FAILED after ${passed} checks:`, err.message, '\n', err.stack);

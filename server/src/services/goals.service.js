@@ -5,8 +5,8 @@ import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { badRequest, notFound } from '../util/http.js';
 
-export function list() {
-  return repo.listGoals();
+export function list(filters = {}) {
+  return repo.listGoals(filters);
 }
 
 export function get(id) {

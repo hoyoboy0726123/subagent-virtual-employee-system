@@ -35,6 +35,15 @@ body {
 .pill-live { background: rgba(55, 201, 139, 0.12); color: var(--green); }
 .pill-sim { background: rgba(109, 139, 255, 0.12); color: var(--brand); }
 
+/* dashboard */
+.dashboard-strip { margin: 18px 0 6px; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.dashboard-card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; }
+.dashboard-card strong { font-size: 22px; }
+.dashboard-label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; }
+.dashboard-sub, .dashboard-meta { font-size: 12px; }
+.dashboard-meta { margin-top: 8px; }
+
 /* tabs */
 .tabs { display: flex; gap: 8px; margin: 22px 0 20px; border-bottom: 1px solid var(--line); }
 .tab {
@@ -131,6 +140,13 @@ textarea { resize: vertical; }
 .chip-role { color: var(--muted); font-size: 12px; }
 
 /* lists */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.toolbar { margin-bottom: 14px; }
+.toolbar-grid { display: grid; gap: 12px 14px; }
+.toolbar-grid-meetings { grid-template-columns: minmax(220px, 2fr) repeat(5, minmax(120px, 1fr)); }
+.toolbar-grid-goals { grid-template-columns: minmax(220px, 2fr) repeat(6, minmax(120px, 1fr)); }
+.toolbar-grid label { display: block; }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 12px; }
 .list { display: flex; flex-direction: column; gap: 8px; }
 .list-item { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; }
 .list-main { flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; background: none; border: none; color: var(--text); cursor: pointer; text-align: left; padding: 8px 4px; }
@@ -211,7 +227,14 @@ textarea { resize: vertical; }
 .cite { font-size: 11px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: default; }
 .note .count { margin-left: 8px; }
 
+@media (max-width: 900px) {
+  .dashboard-grid,
+  .toolbar-grid-meetings,
+  .toolbar-grid-goals { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 680px) {
-  .detail, .form-grid { grid-template-columns: 1fr; }
+  .detail, .form-grid, .dashboard-grid, .toolbar-grid-meetings, .toolbar-grid-goals { grid-template-columns: 1fr; }
   .grid { grid-template-columns: 1fr; }
+  .topbar, .page-head, .section-head, .pagination { align-items: stretch; flex-direction: column; }
 }

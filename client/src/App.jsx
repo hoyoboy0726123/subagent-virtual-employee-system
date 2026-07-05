@@ -19,6 +19,7 @@ export default function App() {
   const [tab, setTab] = useState('employees');
   const [health, setHealth] = useState(null);
   const [settings, setSettings] = useState(null);
+  const [dashboard, setDashboard] = useState(null);
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
@@ -26,6 +27,7 @@ export default function App() {
   useEffect(() => {
     api.get('/health').then(setHealth).catch(() => setHealth({ ok: false }));
     api.get('/settings').then(setSettings).catch(() => setSettings(null));
+    api.get('/dashboard').then(setDashboard).catch(() => setDashboard(null));
   }, [refreshKey]);
 
   const switchRuntime = async (mode) => {
@@ -76,6 +78,8 @@ export default function App() {
         </div>
       </header>
 
+      {dashboard && <DashboardStrip dashboard={dashboard} />}
+
       <nav className="tabs">
         {TABS.map((t) => (
           <button
@@ -98,5 +102,31 @@ export default function App() {
         獨立運作 · 內建多代理編排 · SQLite 儲存 · 無需外部服務 · 執行環境：{settings ? (RUNTIME_LABELS[settings.runtimeMode] || settings.runtimeMode) : '—'}
       </footer>
     </div>
+  );
+}
+
+function DashboardStrip({ dashboard }) {
+  const cards = [
+    { label: '員工', value: dashboard.counts.employees },
+    { label: '知識文件', value: dashboard.counts.documents, sub: `${dashboard.counts.chunks} 個片段` },
+    { label: '會議', value: dashboard.counts.meetings, sub: `即時占比 ${Math.round((dashboard.runs.liveMeetings / Math.max(dashboard.counts.meetings, 1)) * 100)}%` },
+    { label: '目標', value: dashboard.counts.goals, sub: `即時占比 ${Math.round((dashboard.runs.liveGoals / Math.max(dashboard.counts.goals, 1)) * 100)}%` },
+  ];
+
+  return (
+    <section className="dashboard-strip">
+      <div className="dashboard-grid">
+        {cards.map((card) => (
+          <div key={card.label} className="dashboard-card">
+            <span className="dashboard-label">{card.label}</span>
+            <strong>{card.value}</strong>
+            {card.sub && <span className="dashboard-sub">{card.sub}</span>}
+          </div>
+        ))}
+      </div>
+      <div className="dashboard-meta muted">
+        整體即時回合比率 {Math.round((dashboard.runs.liveTurnRatio || 0) * 100)}% · 平均每份文件 {dashboard.knowledge.avgChunksPerDocument} 個片段
+      </div>
+    </section>
   );
 }

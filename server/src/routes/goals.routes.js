@@ -5,8 +5,8 @@ import { buildGoalExport } from '../export/reportDoc.js';
 
 export const goalsRouter = Router();
 
-goalsRouter.get('/goals', asyncHandler(async (_req, res) => {
-  res.json(goals.list());
+goalsRouter.get('/goals', asyncHandler(async (req, res) => {
+  res.json(goals.list(req.query || {}));
 }));
 
 goalsRouter.get('/goals/:id', asyncHandler(async (req, res) => {
