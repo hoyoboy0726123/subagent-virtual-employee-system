@@ -5,6 +5,7 @@
 // `npm test`, or standalone `node server/test/smoke.orchestration.mjs`.
 import assert from 'node:assert/strict';
 import { ConversationState } from '../src/orchestration/ConversationState.js';
+import { polishArtifact, polishUtterance } from '../src/orchestration/output.js';
 import * as engine from '../src/reasoning/engine.js';
 
 let passed = 0;
@@ -59,8 +60,17 @@ try {
         const t = engine.speak(emp, topic, r, ['Ada Lin', 'Bo Chen'], []);
         assert.ok(!t.includes('從我的角度來看'), `no formulaic opener (r${r})`);
         assert.ok(!/^作為一名/.test(t), `no "作為一名…" opener (r${r})`);
+        assert.ok(!/^總的來說/.test(t), `no "總的來說" opener (r${r})`);
       }
     }
+  });
+
+  step('output polish removes boilerplate opener and repairs dangling sentence tails', () => {
+    const cleaned = polishUtterance('從我的角度來看，這題要先看指標，而且');
+    assert.equal(cleaned, '這題要先看指標。');
+
+    const artifact = polishArtifact('## 行動項目\n- Ada — 交付第一版並附驗收依據，而且');
+    assert.ok(artifact.includes('- Ada — 交付第一版並附驗收依據。'));
   });
 
   step('engine.speak references a prior speaker by name in the analysis round', () => {
@@ -83,6 +93,8 @@ try {
       assert.ok(report.includes(h), `report has ${h}`);
     }
     assert.ok(report.includes(topic), 'report names the topic');
+    assert.ok(report.includes('建議展示重點'), 'report reads like a demo artifact');
+    assert.ok(report.includes('可 demo') || report.includes('可審查'), 'report emphasises deliverable quality');
     assert.ok(minutes.openQuestions && minutes.openQuestions.length >= 1, 'minutes carry open questions');
     assert.ok(minutes.decisions.every((d) => d.includes('工作線')), 'decisions attribute owned worklines');
   });
@@ -96,6 +108,7 @@ try {
       assert.ok(output.includes(h), `output has ${h}`);
     }
     assert.ok(output.includes('上線 A/B 測試平台'), 'output names the goal');
+    assert.ok(output.includes('可 demo') || output.includes('可審查'), 'goal output reads like a demo-ready artifact');
     // Two assignees → distinct approaches, not one boilerplate string repeated.
     assert.notEqual(tasks[0].approach, tasks[1].approach, 'assignees get distinct approaches');
   });

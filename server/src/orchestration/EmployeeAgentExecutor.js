@@ -22,6 +22,7 @@
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import * as engine from '../reasoning/engine.js';
 import { config } from '../config.js';
+import { polishUtterance } from './output.js';
 
 const asList = (v) =>
   (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
@@ -205,11 +206,11 @@ async function runOrFallback({ employee, grounding, user, fallback }) {
     const temperature = 0.72 + ((seedOf(employee.id || employee.name) % 16) / 100); // 0.72–0.87
     for (let attempt = 0; attempt < 2; attempt++) {
       const res = await generate({ system, user, maxTokens: 700, temperature });
-      const t = res?.text?.trim();
+      const t = polishUtterance(res?.text?.trim() || '');
       if (t) return { text: t, live: true };
     }
   }
-  return { text: fallback(), live: false };
+  return { text: polishUtterance(fallback()), live: false };
 }
 
 // Honest model identity for runtime metadata.

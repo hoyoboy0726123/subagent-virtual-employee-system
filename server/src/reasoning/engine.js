@@ -126,6 +126,20 @@ function lens(emp) {
   return '就事論事';
 }
 
+function voiceCue(emp) {
+  const role = String(emp.roleTitle || '');
+  const style = String(emp.communicationStyle || '');
+  const persona = String(emp.personality || '');
+  const bag = `${role} ${style} ${persona}`;
+  if (/資料|分析|數據|統計|quant|evidence/i.test(bag)) return '先看指標';
+  if (/設計|ui|ux|體驗|使用者|visual/i.test(bag)) return '先看使用者路徑';
+  if (/後端|架構|可靠性|資料庫|infra/i.test(bag)) return '先看系統邊界';
+  if (/產品|pm|策略|roadmap/i.test(bag)) return '先看取捨';
+  if (/行銷|品牌|成長|內容/i.test(bag)) return '先看市場訊號';
+  if (/法務|合規|風險|隱私/i.test(bag)) return '先看合規紅線';
+  return '先把事情講清楚';
+}
+
 // `speak` is exported so the standalone orchestration layer can reuse it as the
 // per-turn *deterministic fallback* when a live model turn is unavailable.
 export function speak(emp, topic, round, priorSpeakers, hits) {
@@ -135,14 +149,15 @@ export function speak(emp, topic, round, priorSpeakers, hits) {
   const hit = hits.length ? hits[s % hits.length] : null;
   const cite = hit ? `（我看過《${hit.documentTitle}》，裡面提到「${snippet(hit.content)}」）` : '';
   const l = lens(emp);
+  const voice = voiceCue(emp);
 
   if (round === 0) {
     const openers = [
-      `這題對我來說，成敗就看${focus}守不守得住。${cite}我習慣${l}，所以想先把「怎樣才算成功」定義清楚，不然後面會各說各話。`,
-      `先講我最擔心的一點：${focus}一旦沒顧好，整個「${topic}」會被拖垮。${cite}我傾向${l}，把限制條件先攤開再談做法。`,
-      `我在意的是${focus}。${cite}比起一次做滿，我更想先釐清成功標準跟不能碰的紅線——這也是我${l}的習慣。`,
-      `站在${emp.roleTitle}的位置，我會盯住${focus}。${cite}我${l}，建議先對齊目標與限制，別急著跳進解法。`,
-      `讓我起個頭：「${topic}」真正的槓桿在${focus}。${cite}我一向${l}，想先確認我們對「成功」的定義是不是同一個。`,
+      `這題對我來說，成敗就看${focus}守不守得住。${cite}${voice}，我習慣${l}，所以想先把「怎樣才算成功」定義清楚，不然後面會各說各話。`,
+      `先講我最擔心的一點：${focus}一旦沒顧好，整個「${topic}」會被拖垮。${cite}${voice}，我傾向${l}，把限制條件先攤開再談做法。`,
+      `我在意的是${focus}。${cite}${voice}，比起一次做滿，我更想先釐清成功標準跟不能碰的紅線——這也是我${l}的習慣。`,
+      `站在${emp.roleTitle}的位置，我會盯住${focus}。${cite}${voice}，建議先對齊目標與限制，別急著跳進解法。`,
+      `讓我起個頭：「${topic}」真正的槓桿在${focus}。${cite}${voice}，我一向${l}，想先確認我們對「成功」的定義是不是同一個。`,
     ];
     return pick(openers, s);
   }
@@ -160,18 +175,18 @@ export function speak(emp, topic, round, priorSpeakers, hits) {
         ]
       : [`就${focus}來說，`, `把焦點拉回${focus}：`, `我最擔心的還是${focus}——`];
     const bodies = [
-      `${cite}我${l}，提議先做一個最小、可量測的版本，用結果決定要不要加碼。`,
-      `${cite}與其僵在這，不如替${focus}設一個明確門檻，過了才往下走。`,
-      `${cite}我會先鎖定${focus}裡風險最高的一段驗證，把不確定性壓下來再擴大。`,
+      `${cite}${voice}，我${l}，提議先做一個最小、可量測的版本，用結果決定要不要加碼。`,
+      `${cite}${voice}，與其僵在這，不如替${focus}設一個明確門檻，過了才往下走。`,
+      `${cite}${voice}，我會先鎖定${focus}裡風險最高的一段驗證，把不確定性壓下來再擴大。`,
     ];
     return pick(reacts, s) + pick(bodies, s >> 5);
   }
 
   // Closing / deepening rounds — commit to an owned workline with a real bar.
   const commits = [
-    `結論我來收：${focus}這條線我認領，驗收標準是${criterionFor(focus)}，下個檢查點前給你們可審的版本。`,
-    `那就這樣定：我負責${focus}，交付物看得到、量得到——${criterionFor(focus)}。誰的產出是我的輸入，我們先對一下介面。`,
-    `我承諾把${focus}做到可驗收（${criterionFor(focus)}），並在檢查點回報。剩下沒定的，我們現在就把負責人補上。`,
+    `結論我來收：${focus}這條線我認領，先交一版可 demo 的成果，驗收標準是${criterionFor(focus)}，下個檢查點前給你們可審的版本。`,
+    `那就這樣定：我負責${focus}，交付物看得到、量得到——${criterionFor(focus)}。誰的產出是我的輸入，我們今天就把介面定死。`,
+    `我承諾把${focus}做到可驗收（${criterionFor(focus)}），並在檢查點回報。若要上 demo，我會一併補上讓下一棒直接接手的說明。`,
   ];
   return pick(commits, s);
 }
@@ -224,14 +239,14 @@ export function buildMinutes({ topic, participants, transcript }) {
 
   const decisions = participants.map((p) => {
     const focus = asList(p.expertise)[0] || '指定';
-    return `- ${p.name} 認領「${focus}」工作線，交付標準為${criterionFor(focus)}。`;
+    return `- ${p.name} 認領「${focus}」工作線，先交 demo 級第一版，交付標準為${criterionFor(focus)}。`;
   });
 
   const actionItems = participants.map((p) => {
     const focus = asList(p.expertise)[0] || '核心';
     return {
       owner: p.name,
-      action: `就「${topic}」的${focus}切片交付第一版並附驗收依據`,
+      action: `就「${topic}」的${focus}切片交付第一版、驗收依據與交接說明`,
       due: '下次檢查點',
     };
   });
@@ -262,9 +277,10 @@ export function buildReport({ topic, participants, minutes, transcript = [] }) {
     `# 會議報告：${topic}`,
     ``,
     `**與會者：** ${minutes.attendees.join('、')}`,
+    `**建議展示重點：** 已收斂為可 demo 的第一版切片、負責人與檢查點。`,
     ``,
     `## 執行摘要`,
-    `${participants.length} 位成員（${names}）就「${topic}」交換了立場——${lenses}。討論先對齊成功標準與限制，再逐一盤點風險與取捨，最後把工作切成各有負責人、各有驗收標準的小塊，決定以可量測的第一版切片先行、再依數據擴大投入。`,
+    `${participants.length} 位成員（${names}）就「${topic}」交換了立場——${lenses}。討論先對齊成功標準與限制，再逐一盤點風險與取捨，最後把工作切成各有負責人、各有驗收標準的小塊，決定以可量測的第一版切片先行、再依數據擴大投入。整體結論不是再研究，而是先交出能 demo、能審查、能接棒的版本。`,
     ``,
     `## 討論脈絡`,
     ...(threads.length ? threads : ['- （本場以離線推理彙整，重點見下方決議與行動項目。）']),
@@ -317,11 +333,12 @@ export function goalApproach(emp, title, hits = []) {
   const l = lens(emp);
   const groundNote = hits.length ? `會先吃透《${hits[0].documentTitle}》裡的相關做法，` : '';
   const bars = criterionFor(focus);
+  const voice = voiceCue(emp);
   const templates = [
-    `我來扛${focus}這一塊。${groundNote}我習慣${l}，會用${skills}把它做成可審查的交付物，驗收看${bars}。上游相依先跟相關負責人對齊介面，卡住的地方我會及早喊。`,
-    `${focus}最吃我的專長，我認領。${groundNote}我${l}，所以先切一個小而完整的版本、量得到成效再放大，交付標準是${bars}，相依項目我會清楚標給下一棒。`,
-    `這塊的${focus}交給我。${groundNote}我會${l}，先把風險最高的環節打通，產出讓其他負責人能直接接手，驗收依據為${bars}。`,
-    `我負責${focus}。${groundNote}做法上我傾向${l}：先用${skills}立一個能跑的骨架，再逐步補齊，過程中把介面與依賴攤開，驗收以${bars}為準。`,
+    `我來扛${focus}這一塊。${groundNote}${voice}，我習慣${l}，會用${skills}把它做成可審查、可 demo 的交付物，驗收看${bars}。上游相依先跟相關負責人對齊介面，卡住的地方我會及早喊。`,
+    `${focus}最吃我的專長，我認領。${groundNote}${voice}，我${l}，所以先切一個小而完整的版本、量得到成效再放大，交付標準是${bars}，相依項目我會清楚標給下一棒。`,
+    `這塊的${focus}交給我。${groundNote}${voice}，我會${l}，先把風險最高的環節打通，產出讓其他負責人能直接接手的 demo 級成果，驗收依據為${bars}。`,
+    `我負責${focus}。${groundNote}${voice}，做法上我傾向${l}：先用${skills}立一個能跑的骨架，再逐步補齊，過程中把介面與依賴攤開，驗收以${bars}為準。`,
   ];
   return pick(templates, s);
 }
@@ -333,7 +350,7 @@ export function buildCollaborationOutput({ title, description, tasks, assignees 
     ``,
     description ? `**目標：** ${description}\n` : '',
     `## 目標與成功標準`,
-    `此目標依專長拆給 ${assignees.length} 位負責人，各認領一塊互不重疊、合起來可覆蓋目標的切片；做完的標準是每塊都通過各自驗收、且能在共用介面處順利合流。`,
+    `此目標依專長拆給 ${assignees.length} 位負責人，各認領一塊互不重疊、合起來可覆蓋目標的切片；做完的標準是每塊都通過各自驗收、且能在共用介面處順利合流。最少要能拿出一版可 demo、可審查、可接棒的整合成果。`,
     ``,
     `## 分工`,
     ...tasks.map((t) => `- **${t.assignee}**（${t.role}） — ${t.subtask}。${t.approach}`),

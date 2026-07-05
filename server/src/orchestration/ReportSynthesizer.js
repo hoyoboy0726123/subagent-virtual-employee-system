@@ -15,6 +15,7 @@
 // tighter than the transcript.
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import * as engine from '../reasoning/engine.js';
+import { polishArtifact } from './output.js';
 
 const MANAGER_SYSTEM = [
   '你是這場多代理協作的主管兼幕僚長（main agent）。你的讀者是沒有參加這場討論的高階主管，',
@@ -56,8 +57,8 @@ export async function synthesizeMeetingReport({ topic, participants, transcript,
   ].filter(Boolean).join('\n');
 
   const live = await run(user);
-  if (live) return { text: live, live: true };
-  return { text: engine.buildReport({ topic, participants, minutes, transcript }), live: false };
+  if (live) return { text: polishArtifact(live), live: true };
+  return { text: polishArtifact(engine.buildReport({ topic, participants, minutes, transcript })), live: false };
 }
 
 /**
@@ -86,13 +87,13 @@ export async function synthesizeGoalOutput({ title, description, assignees, task
   ].filter(Boolean).join('\n');
 
   const live = await run(user);
-  if (live) return { text: live, live: true };
-  return { text: engine.buildCollaborationOutput({ title, description, tasks, assignees }), live: false };
+  if (live) return { text: polishArtifact(live), live: true };
+  return { text: polishArtifact(engine.buildCollaborationOutput({ title, description, tasks, assignees })), live: false };
 }
 
 // One manager turn. Returns the trimmed text, or null to signal "fall back".
 async function run(user) {
   if (!llmEnabled()) return null;
   const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: 1800, temperature: 0.55 });
-  return res?.text?.trim() || null;
+  return polishArtifact(res?.text?.trim() || '') || null;
 }
