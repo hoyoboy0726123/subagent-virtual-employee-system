@@ -150,16 +150,18 @@ export function speak(emp, topic, round, priorSpeakers, hits) {
   const cite = hit ? `（我看過《${hit.documentTitle}》，裡面提到「${snippet(hit.content)}」）` : '';
   const l = lens(emp);
   const voice = voiceCue(emp);
+  const noun = topicNoun(topic);
 
   if (round === 0) {
+    const style = openingStyle(emp, round, topic);
     const openers = [
-      `這題對我來說，成敗就看${focus}守不守得住。${cite}${voice}，我習慣${l}，所以想先把「怎樣才算成功」定義清楚，不然後面會各說各話。`,
-      `先講我最擔心的一點：${focus}一旦沒顧好，整個「${topic}」會被拖垮。${cite}${voice}，我傾向${l}，把限制條件先攤開再談做法。`,
-      `我在意的是${focus}。${cite}${voice}，比起一次做滿，我更想先釐清成功標準跟不能碰的紅線——這也是我${l}的習慣。`,
-      `站在${emp.roleTitle}的位置，我會盯住${focus}。${cite}${voice}，建議先對齊目標與限制，別急著跳進解法。`,
-      `讓我起個頭：「${topic}」真正的槓桿在${focus}。${cite}${voice}，我一向${l}，想先確認我們對「成功」的定義是不是同一個。`,
+      `${style.prefix}${focus}守不守得住，差不多就決定這件事能不能往下走。${cite}${voice}，我習慣${l}，所以會先把成功標準和不能退的底線講明白。${style.bridge}`,
+      `${style.prefix}我最怕的是${focus}被當成細節，結果後面整個${noun}都要回頭重修。${cite}${voice}，先把限制條件攤開，再談做法會省很多冤枉路。`,
+      `${style.prefix}${focus}是我第一個要守的點。${cite}${voice}，與其一開始就想做滿，我更想先釐清什麼叫做過關、什麼又是不能碰的紅線。`,
+      `${style.prefix}我會盯住${focus}。${cite}${voice}，先把目標、限制、驗收方式對齊，不然等於每個人都在解不同題。`,
+      `${style.prefix}真正有槓桿的不是把話講漂亮，而是把${focus}先定住。${cite}${voice}，這樣後面每個人的分工才有共同基準。`,
     ];
-    return pick(openers, s);
+    return stripTopicEcho(pick(openers, s), topic);
   }
 
   const ref = priorSpeakers.length
@@ -168,27 +170,30 @@ export function speak(emp, topic, round, priorSpeakers, hits) {
   if (round === 1) {
     const reacts = ref
       ? [
-          `${ref}講的方向我大致同意，但${focus}這塊我沒那麼樂觀——`,
-          `我想補一個${ref}沒點到的取捨：`,
-          `順著${ref}的點往下想，真正的變數其實在${focus}——`,
-          `我對${ref}的判斷有點保留，至少在${focus}上——`,
+          `${ref}那個方向我接得上，但${focus}這塊我沒有那麼放心——`,
+          `我想補一刀在${ref}剛剛那個判斷上：${focus}其實更容易失手——`,
+          `順著${ref}的想法往下看，真正會卡住我們的還是${focus}——`,
+          `我對${ref}的結論不算反對，只是${focus}這裡不能這麼快放過——`,
+          `${ref}把大方向講到了，可是落到${focus}時，我覺得門檻還要再講死一點——`,
         ]
-      : [`就${focus}來說，`, `把焦點拉回${focus}：`, `我最擔心的還是${focus}——`];
+      : [`就${focus}這塊來說，`, `把鏡頭拉回${focus}：`, `我還是想先咬住${focus}——`];
     const bodies = [
-      `${cite}${voice}，我${l}，提議先做一個最小、可量測的版本，用結果決定要不要加碼。`,
-      `${cite}${voice}，與其僵在這，不如替${focus}設一個明確門檻，過了才往下走。`,
-      `${cite}${voice}，我會先鎖定${focus}裡風險最高的一段驗證，把不確定性壓下來再擴大。`,
+      `${cite}${voice}，我${l}，所以提議先做一個小但量得到的版本，再用結果決定要不要擴。`,
+      `${cite}${voice}，與其在抽象原則上兜圈，不如先替${focus}設一條明確門檻，過了再往下走。`,
+      `${cite}${voice}，我會先把${focus}裡風險最高的那段拆出來驗證，先壓低不確定性再談全面鋪開。`,
+      `${cite}${voice}，這裡最需要的不是更多口號，而是把${focus}變成一個可檢查、可被否證的假設。`,
     ];
-    return pick(reacts, s) + pick(bodies, s >> 5);
+    return stripTopicEcho(pick(reacts, s) + pick(bodies, s >> 5), topic);
   }
 
   // Closing / deepening rounds — commit to an owned workline with a real bar.
   const commits = [
-    `結論我來收：${focus}這條線我認領，先交一版可 demo 的成果，驗收標準是${criterionFor(focus)}，下個檢查點前給你們可審的版本。`,
-    `那就這樣定：我負責${focus}，交付物看得到、量得到——${criterionFor(focus)}。誰的產出是我的輸入，我們今天就把介面定死。`,
-    `我承諾把${focus}做到可驗收（${criterionFor(focus)}），並在檢查點回報。若要上 demo，我會一併補上讓下一棒直接接手的說明。`,
+    `這樣收斂吧：${focus}這條線我接，先交一版可 demo 的成果，驗收就看${criterionFor(focus)}。下個檢查點前，我會給大家一份能直接審的版本。`,
+    `那我把話講實一點：${focus}由我負責，交付物要看得到、量得到——${criterionFor(focus)}。誰的產出要餵給我，我今天就把介面跟格式一起定下來。`,
+    `我承諾把${focus}做到可驗收（${criterionFor(focus)}），檢查點前回報。若要上 demo，我會連同讓下一棒直接接手的說明一起補齊。`,
+    `別再繞了，${focus}這塊我扛。先做出能跑、能檢查的第一版，標準就是${criterionFor(focus)}；如果中間卡在相依，我會第一時間拉人對齊。`,
   ];
-  return pick(commits, s);
+  return stripTopicEcho(pick(commits, s), topic);
 }
 
 // A concrete-sounding acceptance bar keyed off the workline, so "驗收標準" isn't
@@ -201,6 +206,58 @@ function criterionFor(focus) {
     `輸出可被下一棒直接接手、相依項目標示清楚`,
   ];
   return pick(bars, seed(focus));
+}
+
+function escapeRegExp(s = '') {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function stripTopicEcho(text = '', topic = '') {
+  let out = String(text || '').replace(/\s+/g, ' ').trim();
+  const cleanTopic = String(topic || '').replace(/\s+/g, ' ').trim();
+  if (!out || !cleanTopic || cleanTopic.length < 6) return out;
+
+  const quoted = [`「${cleanTopic}」`, `『${cleanTopic}』`, `"${cleanTopic}"`, `'${cleanTopic}'`];
+  for (const q of quoted) out = out.split(q).join('這件事');
+
+  const topicRe = new RegExp(escapeRegExp(cleanTopic), 'g');
+  const count = (out.match(topicRe) || []).length;
+  if (count > 1) out = out.replace(topicRe, (_, idx) => (idx === 0 ? cleanTopic : '這件事'));
+
+  out = out
+    .replace(new RegExp(`^(就|對於|關於)${escapeRegExp(cleanTopic)}[，、：]?`), '')
+    .replace(new RegExp(`^(這題|這件事|這個主題)就是${escapeRegExp(cleanTopic)}[，、：]?`), '$1')
+    .replace(/這件事會被拖垮這件事/g, '整體會被拖垮')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return out;
+}
+
+function topicNoun(topic = '') {
+  const clean = String(topic || '').trim();
+  if (!clean) return '這件事';
+  if (/流程|體驗|旅程/.test(clean)) return '流程';
+  if (/平台|系統|工具|服務/.test(clean)) return '系統';
+  if (/方案|計畫|專案/.test(clean)) return '方案';
+  return '這件事';
+}
+
+function openingStyle(emp, round, topic = '') {
+  const s = seed(`${emp.id || emp.name}:${round}:${topic}`);
+  const styles = [
+    { prefix: '我先挑明講，', bridge: '不然後面很容易越講越散。' },
+    { prefix: '先抓最要命的那一段，', bridge: '這個先沒對齊，後面做再多都會歪掉。' },
+    { prefix: '我想先把底線說清楚，', bridge: '底線沒守住，漂亮結論也站不住。' },
+    { prefix: '如果只能先盯一個點，', bridge: '把這裡看住，其他討論才有意義。' },
+    { prefix: '我不想把範圍講太滿，', bridge: '先把最核心的判準釘住比較實際。' },
+  ];
+  const bag = `${emp.roleTitle || ''} ${emp.communicationStyle || ''} ${emp.personality || ''} ${asList(emp.expertise).join(' ')}`;
+  if (/資料|分析|統計|數據|evidence|metric/i.test(bag)) return styles[3];
+  if (/設計|ui|ux|體驗|使用者|visual/i.test(bag)) return styles[2];
+  if (/後端|架構|可靠性|資料庫|infra|api/i.test(bag)) return styles[1];
+  if (/產品|pm|策略|roadmap/i.test(bag)) return styles[0];
+  return pick(styles, s);
 }
 
 export function runMeeting({ topic, participants, rounds = 3, groundingByEmployee = {} }) {
@@ -232,10 +289,11 @@ export function runMeeting({ topic, participants, rounds = 3, groundingByEmploye
 
 export function buildMinutes({ topic, participants, transcript }) {
   const attendees = participants.map((p) => `${p.name}（${p.roleTitle}）`);
+  const noun = topicNoun(topic);
   // Key points come from the opening round (where positions are staked), trimmed.
   const keyPoints = transcript
     .filter((t) => t.round === 1)
-    .map((t) => `- ${t.speaker}（${t.role}）：${snippet(t.text, 120)}`);
+    .map((t) => `- ${t.speaker}（${t.role}）：${snippet(stripTopicEcho(t.text, topic), 120)}`);
 
   const decisions = participants.map((p) => {
     const focus = asList(p.expertise)[0] || '指定';
@@ -246,7 +304,7 @@ export function buildMinutes({ topic, participants, transcript }) {
     const focus = asList(p.expertise)[0] || '核心';
     return {
       owner: p.name,
-      action: `就「${topic}」的${focus}切片交付第一版、驗收依據與交接說明`,
+      action: `${focus}切片先交第一版，附驗收依據與交接說明`,
       due: '下次檢查點',
     };
   });
@@ -254,7 +312,7 @@ export function buildMinutes({ topic, participants, transcript }) {
   return {
     topic,
     attendees,
-    agenda: [`對齊「${topic}」的成功標準與限制`, '盤點主要風險與取捨', '分工、驗收標準與檢查點'],
+    agenda: [`對齊${noun}的成功標準與限制`, '盤點主要風險與取捨', '分工、驗收標準與檢查點'],
     keyPoints,
     decisions,
     actionItems,
@@ -267,11 +325,12 @@ export function buildReport({ topic, participants, minutes, transcript = [] }) {
   const lenses = participants
     .map((p) => `${firstName(p.name)}偏重${asList(p.expertise)[0] || '整體'}`)
     .join('、');
+  const noun = topicNoun(topic);
 
   const threads = (transcript.length ? transcript : [])
     .filter((t) => t.round <= 2)
     .slice(0, 6)
-    .map((t) => `- **${t.speaker}**（${t.role}）：${snippet(t.text, 110)}`);
+    .map((t) => `- **${t.speaker}**（${t.role}）：${snippet(stripTopicEcho(t.text, topic), 110)}`);
 
   return [
     `# 會議報告：${topic}`,
@@ -280,7 +339,7 @@ export function buildReport({ topic, participants, minutes, transcript = [] }) {
     `**建議展示重點：** 已收斂為可 demo 的第一版切片、負責人與檢查點。`,
     ``,
     `## 執行摘要`,
-    `${participants.length} 位成員（${names}）就「${topic}」交換了立場——${lenses}。討論先對齊成功標準與限制，再逐一盤點風險與取捨，最後把工作切成各有負責人、各有驗收標準的小塊，決定以可量測的第一版切片先行、再依數據擴大投入。整體結論不是再研究，而是先交出能 demo、能審查、能接棒的版本。`,
+    `${participants.length} 位成員（${names}）各自從不同專業切入：${lenses}。討論先把${noun}的成功標準與限制釘住，再集中在風險最高的取捨，最後收斂成可量測的第一版切片與明確負責人。整體結論不是繼續空談，而是先交出能 demo、能審查、能接棒的版本，再用結果決定下一步。`,
     ``,
     `## 討論脈絡`,
     ...(threads.length ? threads : ['- （本場以離線推理彙整，重點見下方決議與行動項目。）']),

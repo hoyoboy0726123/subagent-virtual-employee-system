@@ -54,6 +54,18 @@ try {
     assert.ok(b.includes('UI/UX') || b.includes(designer.expertise[0]), 'designer speaks to their focus');
   });
 
+  step('offline opening lines avoid collapsing into one shared template', () => {
+    const third = {
+      id: 'emp_c', name: 'Mina Hsu', roleTitle: '後端工程師',
+      expertise: ['可靠性', 'API'], personality: '有系統且重視風險',
+      communicationStyle: '精確且結構化', objectives: '避免系統在高峰期失手',
+    };
+    const openings = [analyst, designer, third].map((emp) => engine.speak(emp, topic, 0, [], []));
+    const starters = openings.map((t) => t.slice(0, 12));
+    assert.equal(new Set(starters).size, 3, 'three people start differently');
+    assert.ok(openings.every((t) => !t.includes(`「${topic}」真正的槓桿在`)), 'legacy shared opening removed');
+  });
+
   step('engine.speak avoids the banned boilerplate openers', () => {
     for (const emp of [analyst, designer]) {
       for (let r = 0; r < 3; r++) {
@@ -84,6 +96,22 @@ try {
     assert.ok(grounded.includes('結帳轉換率研究'), 'names the source it was grounded on');
   });
 
+  step('minutes and report trim topic echo instead of repeating the full title everywhere', () => {
+    const longTopic = '把新版結帳流程升級成更順手、可量測、可回滾的三階段轉換方案';
+    const third = {
+      id: 'emp_c', name: 'Mina Hsu', roleTitle: '後端工程師',
+      expertise: ['可靠性', 'API'], personality: '有系統且重視風險',
+      communicationStyle: '精確且結構化', objectives: '避免系統在高峰期失手',
+    };
+    const { transcript, minutes, report } = engine.runMeeting({
+      topic: longTopic, participants: [analyst, designer, third], rounds: 3,
+    });
+    const transcriptText = transcript.map((t) => t.text).join('\n');
+    assert.ok((transcriptText.match(new RegExp(longTopic, 'g')) || []).length <= 1, 'transcript does not keep re-injecting the whole topic');
+    assert.ok(!minutes.keyPoints.some((line) => line.includes(`「${longTopic}」`)), 'minutes key points avoid quoted full-topic echo');
+    assert.ok((report.match(new RegExp(longTopic, 'g')) || []).length <= 1, 'report names the topic once, not over and over');
+  });
+
   step('buildReport produces the sharper Phase 8 section structure', () => {
     const { transcript, minutes, report } = engine.runMeeting({
       topic, participants: [analyst, designer], rounds: 3,
@@ -97,6 +125,23 @@ try {
     assert.ok(report.includes('可 demo') || report.includes('可審查'), 'report emphasises deliverable quality');
     assert.ok(minutes.openQuestions && minutes.openQuestions.length >= 1, 'minutes carry open questions');
     assert.ok(minutes.decisions.every((d) => d.includes('工作線')), 'decisions attribute owned worklines');
+  });
+
+  step('offline transcript feels like three different colleagues instead of one repeated voice', () => {
+    const third = {
+      id: 'emp_c', name: 'Mina Hsu', roleTitle: '後端工程師',
+      expertise: ['可靠性', 'API'], personality: '有系統且重視風險',
+      communicationStyle: '精確且結構化', objectives: '避免系統在高峰期失手',
+    };
+    const { transcript } = engine.runMeeting({
+      topic: '把內部客服機器人做成可 demo 的團隊方案', participants: [analyst, designer, third], rounds: 3,
+    });
+    const roundOne = transcript.filter((t) => t.round === 1).map((t) => t.text);
+    assert.equal(roundOne.length, 3);
+    assert.equal(new Set(roundOne).size, 3, 'openings are all distinct');
+    assert.ok(roundOne.some((t) => /指標|統計/.test(t)), 'one voice speaks in metrics');
+    assert.ok(roundOne.some((t) => /使用者|體驗|流程/.test(t)), 'one voice speaks in user-experience language');
+    assert.ok(roundOne.some((t) => /風險|可靠性|驗收/.test(t)), 'one voice speaks in reliability/risk language');
   });
 
   step('buildCollaborationOutput produces the richer goal structure', () => {
