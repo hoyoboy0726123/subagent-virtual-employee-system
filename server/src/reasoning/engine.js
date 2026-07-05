@@ -147,7 +147,7 @@ export function speak(emp, topic, round, priorSpeakers, hits) {
   const focus = expertise[Math.min(round, Math.max(expertise.length - 1, 0))] || expertise[0] || '這個問題';
   const s = seed(`${emp.id || emp.name}#${round}`);
   const hit = hits.length ? hits[s % hits.length] : null;
-  const cite = hit ? `（我看過《${hit.documentTitle}》，裡面提到「${snippet(hit.content)}」）` : '';
+  const cite = groundingClause(hit, s);
   const l = lens(emp);
   const voice = voiceCue(emp);
   const noun = topicNoun(topic);
@@ -155,11 +155,11 @@ export function speak(emp, topic, round, priorSpeakers, hits) {
   if (round === 0) {
     const style = openingStyle(emp, round, topic);
     const openers = [
-      `${style.prefix}${focus}守不守得住，差不多就決定這件事能不能往下走。${cite}${voice}，我習慣${l}，所以會先把成功標準和不能退的底線講明白。${style.bridge}`,
-      `${style.prefix}我最怕的是${focus}被當成細節，結果後面整個${noun}都要回頭重修。${cite}${voice}，先把限制條件攤開，再談做法會省很多冤枉路。`,
-      `${style.prefix}${focus}是我第一個要守的點。${cite}${voice}，與其一開始就想做滿，我更想先釐清什麼叫做過關、什麼又是不能碰的紅線。`,
-      `${style.prefix}我會盯住${focus}。${cite}${voice}，先把目標、限制、驗收方式對齊，不然等於每個人都在解不同題。`,
-      `${style.prefix}真正有槓桿的不是把話講漂亮，而是把${focus}先定住。${cite}${voice}，這樣後面每個人的分工才有共同基準。`,
+      `${style.prefix}如果 ${focus} 一開始沒有講死，後面所有人都會各做各的。${voice}，我會先把驗收長相講清楚${cite}，這樣討論才有共同尺。${style.bridge}`,
+      `${style.prefix}我先不談漂亮解法，先問 ${focus} 出事時誰來接、怎麼判定失手。${voice}，這塊如果現在不講透${cite}，整個${noun}很容易做到一半才發現假設錯了。`,
+      `${style.prefix}${focus}對我來說不是配角，它決定這件事最後能不能穩定落地。${voice}，我想先把過關條件跟不能碰的邊界釘住${cite}。`,
+      `${style.prefix}我會先抓 ${focus} 的判準，不然大家其實是在解不同版本的題目。${voice}，先把成功標準對齊${cite}，後面的分工才不會散掉。`,
+      `${style.prefix}先別急著把方案鋪滿，${focus} 這條線要先看清楚。${voice}，我傾向把最容易翻車的地方先攤開${cite}，再決定要不要擴大。`,
     ];
     return stripTopicEcho(pick(openers, s), topic);
   }
@@ -206,6 +206,19 @@ function criterionFor(focus) {
     `輸出可被下一棒直接接手、相依項目標示清楚`,
   ];
   return pick(bars, seed(focus));
+}
+
+function groundingClause(hit, s = 0) {
+  if (!hit) return '';
+  const source = `《${hit.documentTitle}》`;
+  const line = snippet(hit.content, 42);
+  const clauses = [
+    `，而且 ${source} 有一段直接提醒「${line}」`,
+    `；${source} 其實已經把這個風險寫得很白：「${line}」`,
+    `，這點也跟 ${source} 提到的「${line}」對得上`,
+    `，${source} 裡甚至直接寫到「${line}」`,
+  ];
+  return pick(clauses, s >> 2);
 }
 
 function escapeRegExp(s = '') {
@@ -327,10 +340,23 @@ export function buildReport({ topic, participants, minutes, transcript = [] }) {
     .join('、');
   const noun = topicNoun(topic);
 
-  const threads = (transcript.length ? transcript : [])
-    .filter((t) => t.round <= 2)
-    .slice(0, 6)
-    .map((t) => `- **${t.speaker}**（${t.role}）：${snippet(stripTopicEcho(t.text, topic), 110)}`);
+  const bySpeaker = new Map();
+  for (const turn of transcript || []) {
+    if (!bySpeaker.has(turn.speaker)) bySpeaker.set(turn.speaker, []);
+    bySpeaker.get(turn.speaker).push(turn);
+  }
+
+  const threads = Array.from(bySpeaker.entries()).slice(0, 4).map(([speaker, turns]) => {
+    const role = turns[0]?.role || '成員';
+    const opening = snippet(stripTopicEcho(turns[0]?.text || '', topic), 70);
+    const close = turns.length > 1 ? snippet(stripTopicEcho(turns[turns.length - 1]?.text || '', topic), 70) : '';
+    const arc = close && close !== opening ? `，後來收斂成 ${close}` : '';
+    return `- **${speaker}**（${role}）一開始主張 ${opening}${arc}。`;
+  });
+
+  const risks = (minutes.openQuestions || []).length
+    ? minutes.openQuestions.map((q) => `- ${q}`)
+    : ['- 無重大未解問題。'];
 
   return [
     `# 會議報告：${topic}`,
@@ -339,7 +365,7 @@ export function buildReport({ topic, participants, minutes, transcript = [] }) {
     `**建議展示重點：** 已收斂為可 demo 的第一版切片、負責人與檢查點。`,
     ``,
     `## 執行摘要`,
-    `${participants.length} 位成員（${names}）各自從不同專業切入：${lenses}。討論先把${noun}的成功標準與限制釘住，再集中在風險最高的取捨，最後收斂成可量測的第一版切片與明確負責人。整體結論不是繼續空談，而是先交出能 demo、能審查、能接棒的版本，再用結果決定下一步。`,
+    `這場討論沒有停在觀點交換，而是很快把${noun}拉回「怎樣才算做成」與「哪些邊界不能退」兩件事。${participants.length} 位成員（${names}）分別從 ${lenses} 切入，先把分歧攤開，再收斂成可檢查的第一版切片。最後的共識很務實：先交出能 demo、能審查、也能讓下一棒直接接手的版本，再依驗收結果決定擴張節奏。`,
     ``,
     `## 討論脈絡`,
     ...(threads.length ? threads : ['- （本場以離線推理彙整，重點見下方決議與行動項目。）']),
@@ -351,7 +377,7 @@ export function buildReport({ topic, participants, minutes, transcript = [] }) {
     ...minutes.actionItems.map((a) => `- **${a.owner}** — ${a.action}（期限：${a.due}）`),
     ``,
     `## 風險與待解問題`,
-    ...(minutes.openQuestions || []).map((q) => `- ${q}`),
+    ...risks,
   ].join('\n');
 }
 

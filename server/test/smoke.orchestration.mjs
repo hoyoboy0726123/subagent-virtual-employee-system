@@ -64,6 +64,7 @@ try {
     const starters = openings.map((t) => t.slice(0, 12));
     assert.equal(new Set(starters).size, 3, 'three people start differently');
     assert.ok(openings.every((t) => !t.includes(`「${topic}」真正的槓桿在`)), 'legacy shared opening removed');
+    assert.ok(openings.every((t) => !t.includes('我最怕的是') && !t.includes('先把限制條件攤開，再談做法')), 'shared skeleton phrases removed');
   });
 
   step('engine.speak avoids the banned boilerplate openers', () => {
@@ -94,6 +95,8 @@ try {
     const hits = [{ documentTitle: '結帳轉換率研究', content: '每多一步結帳流程，轉換率平均下降約 10%。' }];
     const grounded = engine.speak(analyst, topic, 0, [], hits);
     assert.ok(grounded.includes('結帳轉換率研究'), 'names the source it was grounded on');
+    assert.ok(!grounded.includes('（我看過《結帳轉換率研究》'), 'citation is no longer pasted in as a hard parenthetical aside');
+    assert.ok(/《結帳轉換率研究》.*(提醒|寫得很白|對得上|直接寫到)/.test(grounded), 'citation is embedded into the sentence flow');
   });
 
   step('minutes and report trim topic echo instead of repeating the full title everywhere', () => {
@@ -125,6 +128,8 @@ try {
     assert.ok(report.includes('可 demo') || report.includes('可審查'), 'report emphasises deliverable quality');
     assert.ok(minutes.openQuestions && minutes.openQuestions.length >= 1, 'minutes carry open questions');
     assert.ok(minutes.decisions.every((d) => d.includes('工作線')), 'decisions attribute owned worklines');
+    assert.ok(/一開始主張.+後來收斂成|一開始主張/.test(report), 'discussion section synthesizes arcs instead of dumping transcript bullets');
+    assert.ok(!report.includes('第1輪 ·'), 'report reads like a polished summary, not transcript formatting');
   });
 
   step('offline transcript feels like three different colleagues instead of one repeated voice', () => {
