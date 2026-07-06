@@ -148,6 +148,9 @@ export async function meetingTurn({ employee, grounding, context }) {
     if (view.myLastPoint) {
       lines.push('', `你上一輪的立場是：「${view.myLastPoint}」。請延續它、不要自相矛盾，並在此基礎上推進。`);
     }
+    if (context.managerQuestion) {
+      lines.push('', `主持會議的主管點名你發言，並追問：「${context.managerQuestion}」。請正面回答這個問題，不要迴避。`);
+    }
     lines.push('', `本輪目標：${roundGoal}。`, stance, '約 3–5 句，口語、精煉，只輸出你的發言。');
     user = lines.join('\n');
   }

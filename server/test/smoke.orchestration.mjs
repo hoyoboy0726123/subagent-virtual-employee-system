@@ -163,6 +163,47 @@ try {
     assert.notEqual(tasks[0].approach, tasks[1].approach, 'assignees get distinct approaches');
   });
 
+  // --- Phase 15: the manager agent chairs the meeting (dynamic speaking order) ---
+  const { pickNextSpeaker } = await import('../src/orchestration/MeetingChair.js');
+  await (async () => {
+    const chairConvo = new ConversationState({ topic });
+    chairConvo.add({ round: 1, speaker: 'Ada Lin', role: '資料科學家', text: '成本估算還沒人回答，這是最大風險。' });
+    const roster = [analyst, designer];
+
+    // Offline: degrades to the deterministic order (previous behaviour, exactly).
+    const off = await pickNextSpeaker({
+      topic, roundTitle: '分析與風險', roundGoal: '深入分析', convo: chairConvo, remaining: roster,
+    });
+    assert.equal(off.employee, analyst, 'no LLM → first remaining speaker (stable order)');
+    assert.equal(off.live, false);
+
+    // Live: the chair routes to the right persona and attaches a follow-up.
+    const prompts = [];
+    const fakeGen = async ({ user }) => {
+      prompts.push(user);
+      return { text: '{"next":"Bo Chen","question":"行動端的結帳流程你打算怎麼簡化？"}', functionCalls: [] };
+    };
+    const live = await pickNextSpeaker({
+      topic, roundTitle: '分析與風險', roundGoal: '深入分析', convo: chairConvo, remaining: roster, _generate: fakeGen,
+    });
+    assert.equal(live.employee, designer, 'chair picked the named participant');
+    assert.equal(live.question, '行動端的結帳流程你打算怎麼簡化？');
+    assert.equal(live.live, true);
+    assert.ok(prompts[0].includes('成本估算') && prompts[0].includes('Bo Chen'),
+      'chair sees the conversation and the remaining roster');
+
+    // A hallucinated name falls back safely.
+    const bogus = await pickNextSpeaker({
+      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, remaining: roster,
+      _generate: async () => ({ text: '{"next":"不存在的人","question":""}', functionCalls: [] }),
+    });
+    assert.equal(bogus.employee, analyst, 'invalid pick → deterministic fallback');
+    assert.equal(bogus.live, false);
+
+    passed++;
+    console.log('  ✓ MeetingChair: dynamic speaker picking with safe deterministic fallback');
+  })();
+
   console.log(`\n  All ${passed} orchestration checks passed ✅\n`);
 } catch (err) {
   console.error(`\n  ✗ FAILED after ${passed} checks:`, err.message, '\n', err.stack);

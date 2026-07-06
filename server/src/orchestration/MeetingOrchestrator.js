@@ -15,6 +15,7 @@
 import { ConversationState } from './ConversationState.js';
 import * as executor from './EmployeeAgentExecutor.js';
 import { synthesizeMeetingReport } from './ReportSynthesizer.js';
+import { pickNextSpeaker } from './MeetingChair.js';
 import { groundingFor } from '../storage/retrieval.js';
 import * as engine from '../reasoning/engine.js';
 
@@ -54,7 +55,16 @@ export async function runMeeting({ topic, participants, rounds }) {
   for (let r = 0; r < rounds; r++) {
     const { title: roundTitle, goal: roundGoal } = plan[r] || { title: `第 ${r + 1} 輪`, goal: '收斂結論' };
 
-    for (const emp of participants) {
+    // Phase 15: the manager agent chairs the round — it picks WHO speaks next
+    // (and may attach a follow-up question) from those yet to speak. Everyone
+    // still speaks exactly once per round; offline this degrades to the
+    // original deterministic order.
+    const remaining = [...participants];
+    while (remaining.length) {
+      const pick = await pickNextSpeaker({ topic, roundTitle, roundGoal, convo, remaining });
+      const emp = pick.employee;
+      remaining.splice(remaining.indexOf(emp), 1);
+
       const grounding = byEmployee[emp.id] || [];
       const turn = await executor.meetingTurn({
         employee: emp,
@@ -66,6 +76,7 @@ export async function runMeeting({ topic, participants, rounds }) {
           roundTitle,
           roundGoal,
           participantList,
+          managerQuestion: pick.question,
           convo: convo.contextFor(emp.name, { window: Math.max(participants.length, 4) }),
           priorSpeakers: convo.priorSpeakers().filter((n) => n !== emp.name),
         },
@@ -80,6 +91,8 @@ export async function runMeeting({ topic, participants, rounds }) {
         text: turn.text,
         live: turn.live,
         toolCalls: turn.toolCalls || 0,
+        pickedBy: pick.live ? 'manager' : 'sequence',
+        managerQuestion: pick.question || null,
         citations: turn.citations,
       });
     }
