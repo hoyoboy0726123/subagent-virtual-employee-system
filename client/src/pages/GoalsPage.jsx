@@ -15,6 +15,7 @@ export default function GoalsPage({ refreshKey, onChange }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  const [progress, setProgress] = useState(null); // Phase 15 live progress: { doneTasks, total, phase }
 
   const reload = async (next = filters) => {
     const [employeeList, goals] = await Promise.all([
@@ -37,12 +38,23 @@ export default function GoalsPage({ refreshKey, onChange }) {
       return;
     }
     setBusy(true);
+    setProgress({ doneTasks: [], total: selected.length, phase: null });
     try {
-      const g = await api.post('/goals', { ...form, assigneeIds: selected });
+      const { goal } = await api.stream(
+        '/goals/stream',
+        { ...form, assigneeIds: selected },
+        (evt) => {
+          if (evt.type === 'task') {
+            setProgress((p) => ({ ...p, doneTasks: [...(p?.doneTasks || []), evt.task] }));
+          } else if (evt.type === 'synthesizing') {
+            setProgress((p) => ({ ...p, phase: '主管代理正在整合各負責人的計畫…' }));
+          }
+        },
+      );
       setForm({ title: '', description: '' }); setSelected([]);
       onChange?.();
-      setOpen(g);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+      setOpen(goal);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); setProgress(null); }
   };
 
   const setStatus = async (goal, status) => {
@@ -74,6 +86,12 @@ export default function GoalsPage({ refreshKey, onChange }) {
             : <EmployeePicker employees={employees} selected={selected} toggle={toggle} />}
         </label>
         <div className="row end">
+          {busy && progress && (
+            <span className="muted">
+              {progress.phase
+                || `⚡ 各負責人平行認領中 ${progress.doneTasks.length}/${progress.total}${progress.doneTasks.length ? `（最新完成：${progress.doneTasks[progress.doneTasks.length - 1].assignee}）` : ''}`}
+            </span>
+          )}
           <button className="btn" onClick={assign} disabled={busy}>{busy ? '指派中…' : '🎯 指派並協作'}</button>
         </div>
       </div>

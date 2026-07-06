@@ -22,12 +22,48 @@ const uploadFile = (path, file, field = 'file') => {
   });
 };
 
+// Consume a Server-Sent-Events POST endpoint (Phase 15 live progress). Calls
+// onEvent for every event; resolves with the {type:'done', ...} payload and
+// throws on {type:'error'} or transport failure.
+const stream = async (path, body, onEvent) => {
+  const res = await fetch(`/api${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok || !res.body) {
+    const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+    throw new Error(data?.error || `請求失敗（${res.status}）`);
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const frame = buf.slice(0, idx);
+      buf = buf.slice(idx + 2);
+      const dataLine = frame.split('\n').find((l) => l.startsWith('data: '));
+      if (!dataLine) continue;
+      const evt = JSON.parse(dataLine.slice(6));
+      if (evt.type === 'error') throw new Error(evt.error || '執行失敗');
+      onEvent?.(evt);
+      if (evt.type === 'done') return evt;
+    }
+  }
+  throw new Error('串流意外中斷');
+};
+
 export const api = {
   get: json('GET'),
   post: json('POST'),
   put: json('PUT'),
   del: json('DELETE'),
   upload: uploadFile,
+  stream,
 };
 
 // Trigger a browser download for a server export endpoint. The server sends

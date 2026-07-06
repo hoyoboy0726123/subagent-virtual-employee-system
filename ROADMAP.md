@@ -193,7 +193,35 @@ let agents grow their own knowledge base — with the manager as gatekeeper.
       chose its own queries, consulted 24 sources, produced an attributed
       report, and approval made it FTS-retrievable. 3/3 passing.
 
-## 🧭 Phase 15 — Final product polish & packaging
+## ✅ Phase 15 — True multi-agent upgrades *(shipped)*
+
+**Goal:** close every remaining gap between "well-orchestrated script" and
+"real multi-agent system" from the architecture review.
+
+- [x] **Per-agent config** (migration v3, `employees.agent_config`): each
+      employee can override model / temperature / per-turn tool budget, and
+      `webSearch:false` forbids the web for that agent even when the global
+      toggle is on. Advanced section in the employee form.
+- [x] **CJK-aware retrieval** (migration v4): FTS index stores CJK
+      character-segmented text and CJK query terms become phrase queries —
+      Chinese substring search finally matches (「退貨」 finds 退貨政策).
+- [x] **Cross-meeting memory**: MemoryDistiller writes each participant a
+      first-person memory document after every meeting (deterministic fallback
+      offline; MEETING_MEMORY_DISABLE kill-switch), and the always-available
+      `remember` tool lets an agent persist key facts mid-turn. Memories are
+      normal knowledge → future groundings and search_knowledge surface them.
+- [x] **MeetingChair (dynamic speaking order)**: the manager agent picks who
+      speaks next within each round (expertise-routed) and can attach a
+      follow-up question the speaker must answer; everyone still speaks once
+      per round; offline degrades to the exact previous order. Transcript
+      records pickedBy + managerQuestion (👔 badges in the UI).
+- [x] **Parallel goals + SSE streaming**: goal assignees now run concurrently
+      (wall-clock ≈ slowest assignee); `POST /api/meetings/stream` and
+      `POST /api/goals/stream` stream round/turn/task/synthesizing events live,
+      and the UI shows the conversation as it happens.
+- [x] Tests: 64 hermetic checks + 4/4 live agentic regression passing.
+
+## 🧭 Phase 16 — Final product polish & packaging
 
 **Goal:** ship-ready operational clarity.
 

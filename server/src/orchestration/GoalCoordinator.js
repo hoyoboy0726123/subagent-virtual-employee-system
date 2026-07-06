@@ -13,10 +13,12 @@ import { groundingFor } from '../storage/retrieval.js';
 import * as engine from '../reasoning/engine.js';
 
 /**
- * @param {object} req  { title, description, assignees }
+ * @param {object} req  { title, description, assignees, onEvent? }
+ *   onEvent — optional live-progress callback (Phase 15 streaming).
  * @returns {Promise<{tasks, output, grounding, stats}>}
  */
-export async function executeGoal({ title, description, assignees }) {
+export async function executeGoal({ title, description, assignees, onEvent }) {
+  const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   const query = `${title} ${description || ''}`.trim();
   const { byEmployee, flat } = groundingFor({ query, employees: assignees });
 
@@ -27,10 +29,11 @@ export async function executeGoal({ title, description, assignees }) {
   const namesOf = (list) => list.map((a) => a.name).join('、') || '（無，僅你一位負責人）';
 
   const stats = newStats();
-  const tasks = [];
 
-  for (let i = 0; i < assignees.length; i++) {
-    const emp = assignees[i];
+  // Phase 15: assignees are independent of one another (each claims its own
+  // slice from the SAME initial brief), so their agent turns run CONCURRENTLY —
+  // wall-clock ≈ the slowest single assignee instead of the sum of all of them.
+  const tasks = await Promise.all(assignees.map(async (emp, i) => {
     const grounding = byEmployee[emp.id] || [];
     const others = othersOf(emp);
     const turn = await executor.goalTurn({
@@ -44,7 +47,7 @@ export async function executeGoal({ title, description, assignees }) {
       },
     });
     record(stats, turn.live);
-    tasks.push({
+    const task = {
       assignee: emp.name,
       assigneeId: emp.id,
       role: emp.roleTitle,
@@ -54,9 +57,12 @@ export async function executeGoal({ title, description, assignees }) {
       toolCalls: turn.toolCalls || 0,
       status: 'in-progress',
       order: i + 1,
-    });
-  }
+    };
+    emit({ type: 'task', task, done: null, total: assignees.length });
+    return task;
+  }));
 
+  emit({ type: 'synthesizing' });
   const output = await synthesizeGoalOutput({ title, description, assignees, tasks, grounding: flat });
   record(stats, output.live);
 

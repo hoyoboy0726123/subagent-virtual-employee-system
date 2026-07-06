@@ -83,7 +83,7 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 > review — approval ingests it into that employee's knowledge base; rejection
 > archives it. Live-proven end-to-end (`npm run test:live:research`).
 >
-> The full productization plan — through the planned Phase 15 (final packaging)
+> The full productization plan — through the planned Phase 16 (final packaging)
 > — lives in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---

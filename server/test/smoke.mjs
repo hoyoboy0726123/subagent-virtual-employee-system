@@ -387,6 +387,72 @@ try {
     await api('DELETE', `/api/knowledge/${doc.id}`);
   });
 
+  await step('SSE streaming: a meeting streams round/turn events live, then done', async () => {
+    const res = await fetch(`${base}/api/meetings/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ topic: '串流驗證會議', participantIds: [empId], rounds: 2 }),
+    });
+    assert.equal(res.status, 200);
+    assert.ok(res.headers.get('content-type').includes('text/event-stream'));
+
+    const events = [];
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let i;
+      while ((i = buf.indexOf('\n\n')) >= 0) {
+        const line = buf.slice(0, i).split('\n').find((l) => l.startsWith('data: '));
+        buf = buf.slice(i + 2);
+        if (line) events.push(JSON.parse(line.slice(6)));
+      }
+    }
+    const types = events.map((e) => e.type);
+    assert.ok(types.filter((t) => t === 'round').length === 2, 'one round event per round');
+    assert.ok(types.filter((t) => t === 'turn').length === 2, 'one turn event per agent turn');
+    assert.ok(types.includes('synthesizing'), 'synthesis phase is announced');
+    assert.equal(types[types.length - 1], 'done', 'stream ends with done');
+    const finalEvt = events[events.length - 1];
+    assert.ok(finalEvt.meeting?.id, 'done carries the persisted meeting');
+    assert.equal(finalEvt.meeting.transcript.length, 2);
+    assert.ok(events.find((e) => e.type === 'turn').turn.text.length > 0, 'turn events carry real utterances');
+    await api('DELETE', `/api/meetings/${finalEvt.meeting.id}`);
+  });
+
+  await step('SSE streaming: goal assignees run in PARALLEL and stream task completions', async () => {
+    const { json: e2 } = await api('POST', '/api/employees', { name: 'Parallel Pat', roleTitle: '行銷' });
+    const res = await fetch(`${base}/api/goals/stream`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: '平行驗證目標', assigneeIds: [empId, e2.id] }),
+    });
+    assert.equal(res.status, 200);
+    const chunks = [];
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(decoder.decode(value, { stream: true }));
+    }
+    const events = chunks.join('').split('\n\n').filter(Boolean)
+      .map((f) => f.split('\n').find((l) => l.startsWith('data: ')))
+      .filter(Boolean)
+      .map((l) => JSON.parse(l.slice(6)));
+    const types = events.map((e) => e.type);
+    assert.equal(types.filter((t) => t === 'task').length, 2, 'each assignee streams a task event');
+    assert.equal(types[types.length - 1], 'done');
+    const goal = events[events.length - 1].goal;
+    assert.equal(goal.tasks.length, 2);
+    assert.deepEqual(goal.tasks.map((t) => t.order), [1, 2], 'task order is stable despite parallel execution');
+    await api('DELETE', `/api/goals/${goal.id}`);
+    await api('DELETE', `/api/employees/${e2.id}`);
+  });
+
   await step('cross-meeting memory: a finished meeting writes each participant a memory document', async () => {
     delete process.env.MEETING_MEMORY_DISABLE; // feature on for this step only
     try {

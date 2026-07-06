@@ -16,7 +16,7 @@ export function get(id) {
   return m;
 }
 
-export async function create({ topic, participantIds, rounds } = {}) {
+export async function create({ topic, participantIds, rounds } = {}, onEvent) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
     throw badRequest('主題與至少一位與會者為必填');
@@ -24,7 +24,7 @@ export async function create({ topic, participantIds, rounds } = {}) {
   const boundedRounds = Math.min(Math.max(Number(rounds) || 3, 1), 5);
 
   const runtime = getActiveRuntime();
-  const result = await runtime.runMeeting({ topic, participants, rounds: boundedRounds });
+  const result = await runtime.runMeeting({ topic, participants, rounds: boundedRounds, onEvent });
 
   const meeting = repo.insertMeeting({
     topic,
@@ -41,6 +41,7 @@ export async function create({ topic, participantIds, rounds } = {}) {
   // Cross-meeting memory (Phase 15): distill what each participant should
   // remember and write it into their own knowledge base. Failures here must
   // never lose the meeting itself.
+  try { onEvent?.({ type: 'memory' }); } catch { /* ignore */ }
   try {
     meeting.memories = await distillMeetingMemories({
       meetingId: meeting.id,

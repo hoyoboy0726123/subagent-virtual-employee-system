@@ -254,3 +254,10 @@ textarea { resize: vertical; }
 .agent-config .form-grid { margin-top: 10px; }
 .agent-config-check { display: flex; align-items: center; gap: 8px; flex-direction: row !important; }
 .agent-config-check input { width: 16px; height: 16px; accent-color: #2f6fed; }
+
+/* Phase 15 — live meeting progress (SSE) */
+.live-progress { margin-top: 12px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 10px; background: rgba(47, 111, 237, 0.04); }
+.live-progress-head { font-weight: 600; margin-bottom: 8px; }
+.live-progress-turns .turn { margin-bottom: 8px; animation: turn-in 0.25s ease-out; }
+.turn-question { font-size: 0.85rem; margin: 2px 0; }
+@keyframes turn-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

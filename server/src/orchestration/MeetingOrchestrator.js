@@ -41,10 +41,14 @@ function planRounds(rounds) {
 }
 
 /**
- * @param {object} req  { topic, participants, rounds }
+ * @param {object} req  { topic, participants, rounds, onEvent? }
+ *   onEvent — optional live-progress callback (Phase 15 streaming): receives
+ *   {type:'round'|'turn'|'synthesizing', ...} as the meeting unfolds. Callback
+ *   errors are swallowed so streaming can never break the meeting itself.
  * @returns {Promise<{transcript, minutes, report, grounding, stats}>}
  */
-export async function runMeeting({ topic, participants, rounds }) {
+export async function runMeeting({ topic, participants, rounds, onEvent }) {
+  const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   const { byEmployee, flat } = groundingFor({ query: topic, employees: participants });
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
   const plan = planRounds(rounds);
@@ -54,6 +58,7 @@ export async function runMeeting({ topic, participants, rounds }) {
 
   for (let r = 0; r < rounds; r++) {
     const { title: roundTitle, goal: roundGoal } = plan[r] || { title: `第 ${r + 1} 輪`, goal: '收斂結論' };
+    emit({ type: 'round', round: r + 1, rounds, roundTitle, roundGoal });
 
     // Phase 15: the manager agent chairs the round — it picks WHO speaks next
     // (and may attach a follow-up question) from those yet to speak. Everyone
@@ -82,7 +87,7 @@ export async function runMeeting({ topic, participants, rounds }) {
         },
       });
       record(stats, turn.live);
-      convo.add({
+      const added = convo.add({
         round: r + 1,
         roundTitle,
         speaker: emp.name,
@@ -95,9 +100,11 @@ export async function runMeeting({ topic, participants, rounds }) {
         managerQuestion: pick.question || null,
         citations: turn.citations,
       });
+      emit({ type: 'turn', turn: added });
     }
   }
 
+  emit({ type: 'synthesizing' });
   const transcript = convo.transcript();
   const minutes = engine.buildMinutes({ topic, participants, transcript });
   const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding: flat });

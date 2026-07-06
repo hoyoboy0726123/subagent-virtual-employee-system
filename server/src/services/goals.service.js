@@ -15,14 +15,14 @@ export function get(id) {
   return g;
 }
 
-export async function create({ title, description, assigneeIds } = {}) {
+export async function create({ title, description, assigneeIds } = {}, onEvent) {
   const assignees = getEmployees(assigneeIds || []);
   if (!title || assignees.length === 0) {
     throw badRequest('標題與至少一位負責人為必填');
   }
 
   const runtime = getActiveRuntime();
-  const result = await runtime.executeGoal({ title, description: description || '', assignees });
+  const result = await runtime.executeGoal({ title, description: description || '', assignees, onEvent });
 
   return repo.insertGoal({
     title,

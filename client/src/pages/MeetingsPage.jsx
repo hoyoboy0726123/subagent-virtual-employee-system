@@ -14,6 +14,8 @@ export default function MeetingsPage({ refreshKey, onChange }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
+  // Live progress while the multi-agent meeting streams (Phase 15).
+  const [progress, setProgress] = useState(null); // { phase, round, roundTitle, turns: [] }
 
   const reload = async (next = filters) => {
     const [employeeList, meetings] = await Promise.all([
@@ -36,12 +38,27 @@ export default function MeetingsPage({ refreshKey, onChange }) {
       return;
     }
     setBusy(true);
+    setProgress({ phase: '準備中…', round: 0, roundTitle: '', turns: [] });
     try {
-      const m = await api.post('/meetings', { topic, participantIds: selected, rounds: Number(rounds) });
+      const { meeting } = await api.stream(
+        '/meetings/stream',
+        { topic, participantIds: selected, rounds: Number(rounds) },
+        (evt) => {
+          if (evt.type === 'round') {
+            setProgress((p) => ({ ...p, phase: null, round: evt.round, rounds: evt.rounds, roundTitle: evt.roundTitle }));
+          } else if (evt.type === 'turn') {
+            setProgress((p) => ({ ...p, turns: [...(p?.turns || []), evt.turn] }));
+          } else if (evt.type === 'synthesizing') {
+            setProgress((p) => ({ ...p, phase: '主管代理正在統整報告…' }));
+          } else if (evt.type === 'memory') {
+            setProgress((p) => ({ ...p, phase: '正在為每位員工沉澱會議記憶…' }));
+          }
+        },
+      );
       setTopic(''); setSelected([]);
       onChange?.();
-      setOpen(m);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+      setOpen(meeting);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); setProgress(null); }
   };
 
   const del = async (id) => { await api.del(`/meetings/${id}`); onChange?.(); };
@@ -71,6 +88,31 @@ export default function MeetingsPage({ refreshKey, onChange }) {
           </label>
           <button className="btn" onClick={run} disabled={busy}>{busy ? '討論進行中…' : '▶ 開始會議'}</button>
         </div>
+
+        {busy && progress && (
+          <div className="live-progress">
+            <div className="live-progress-head">
+              {progress.phase
+                ? <span>⏳ {progress.phase}</span>
+                : <span>🗣️ 第 {progress.round}/{progress.rounds} 輪 — {progress.roundTitle}（已 {progress.turns.length} 則發言）</span>}
+            </div>
+            <div className="live-progress-turns">
+              {progress.turns.slice(-6).map((t, i) => (
+                <div key={i} className="turn">
+                  <div className="turn-av">{t.speaker.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
+                  <div>
+                    <div className="turn-who">
+                      {t.speaker} <span className="muted">· {t.role}</span>
+                      {t.pickedBy === 'manager' && <span className="tag" title={t.managerQuestion ? `主管追問：${t.managerQuestion}` : '主管代理點名'}>👔 點名</span>}
+                      {t.toolCalls > 0 && <span className="tag" title="此發言前代理自主查詢了資料">🛠 {t.toolCalls}</span>}
+                    </div>
+                    <div className="turn-text">{t.text}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="section-head">
@@ -231,7 +273,16 @@ function MeetingView({ meeting, onClose }) {
                   <div key={i} className="turn">
                     <div className="turn-av">{t.speaker.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
                     <div>
-                      <div className="turn-who">{t.speaker} <span className="muted">· {t.role}</span></div>
+                      <div className="turn-who">
+                        {t.speaker} <span className="muted">· {t.role}</span>
+                        {t.pickedBy === 'manager' && (
+                          <span className="tag" title={t.managerQuestion ? `主管追問：${t.managerQuestion}` : '主管代理點名發言'}>👔 點名</span>
+                        )}
+                        {t.toolCalls > 0 && (
+                          <span className="tag" title="此發言前，代理自主查詢了知識庫／網路">🛠 {t.toolCalls} 次查證</span>
+                        )}
+                      </div>
+                      {t.managerQuestion && <div className="muted turn-question">主管追問：「{t.managerQuestion}」</div>}
                       <div className="turn-text">{t.text}</div>
                       {t.citations?.length > 0 && (
                         <div className="citations">
