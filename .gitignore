@@ -11,3 +11,7 @@ server/data/db.json
 # Optional local Python env for MarkItDown document ingestion (Phase 7).
 .venv/
 __pycache__/
+
+# Local preview config
+.claude/
+server/data/demo-live.db*

@@ -173,7 +173,9 @@ export function buildToolbox({
   // Policy that applies on BOTH transports (native function calling folds it
   // into the system instruction; the legacy protocol embeds it in instructions).
   const policy = webOn
-    ? '【外部資料出處】只要你的論述使用了網路搜尋（web_search）取得的資料，必須自然地說明出處（來源名稱或網站），不可假裝是自己原本就知道的。'
+    ? ['【主動查證】當主題涉及「最新」資訊、市場/競品現況、法規或任何你記憶可能過時的外部事實時，你應「主動」先呼叫 web_search 查證，再發言；',
+       '未經查證就引用外部數字或動態，是嚴重錯誤。',
+       '【外部資料出處】只要你的論述使用了網路搜尋（web_search）取得的資料，必須自然地說明出處（來源名稱或網站），不可假裝是自己原本就知道的。'].join('\n')
     : '';
   const instructions = [
     '【工具使用】發言前若需要更多資訊，你可以先呼叫工具。做法：整則回覆「只」輸出一行 JSON，不加任何其他文字，例如：',

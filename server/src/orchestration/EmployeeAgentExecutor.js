@@ -79,6 +79,8 @@ function personaSystem(emp, grounding) {
     '- 具體：講得出取捨、數字、可交付物或驗收方式，而不是抽象原則。',
     '- 不要重複已經被講過或已達成共識的內容；把討論往前推。',
     '- 只在知識確實切題時才自然帶入其名稱；不相關就忽略，切勿杜撰。',
+    '- 先查證、後發言：主題涉及最新資訊、市場現況、競品動態或你不確定的事實時，先使用你的工具查證，再開口。',
+    '  未經查證就引用外部數字或「最新」動態，是嚴重錯誤；查了沒查到，就誠實說沒查到。',
     '',
     '【嚴禁的樣板語氣】',
     '- 不要用「從我的角度來看」「作為一名…」「總的來說」「首先／其次／最後」這類公式化開場或連接詞。',
@@ -124,13 +126,22 @@ export async function meetingTurn({ employee, grounding, context }) {
   const view = convo || {};
   const stance = roundStance(round, rounds);
 
+  // Trailing two-phase instruction: models weight the last lines most, so the
+  // "check facts with your tools FIRST" step must come after the stance — and
+  // topics that explicitly ask for verification make tool use mandatory.
+  const speakClosing = [
+    '發言前先判斷：這個主題、或你想主張的論點，是否需要最新外部事實或你知識庫的資料佐證？',
+    '需要就先呼叫工具查證（可查多次），拿到結果後再發言；主題若明確提到「查證」「最新」「現況」，你必須至少查證一次才能發言。',
+    '最後輸出約 3–5 句、口語、精煉的正式發言。',
+  ].join('\n');
+
   let user;
   if (round === 0 && view.isFirstOverall) {
     user = [
       `這是一場關於「${topic}」的團隊會議，共 ${rounds} 輪。與會者：${participantList}。`,
       `現在是第 1 輪（${roundTitle}）。你是第一位發言者，為討論定調：${roundGoal}。`,
       stance,
-      '約 3–5 句，口語、精煉，只輸出你的發言。',
+      speakClosing,
     ].join('\n');
   } else {
     const lines = [`現在是第 ${round + 1} 輪（${roundTitle}），主題仍是「${topic}」。`];
@@ -151,7 +162,7 @@ export async function meetingTurn({ employee, grounding, context }) {
     if (context.managerQuestion) {
       lines.push('', `主持會議的主管點名你發言，並追問：「${context.managerQuestion}」。請正面回答這個問題，不要迴避。`);
     }
-    lines.push('', `本輪目標：${roundGoal}。`, stance, '約 3–5 句，口語、精煉，只輸出你的發言。');
+    lines.push('', `本輪目標：${roundGoal}。`, stance, speakClosing);
     user = lines.join('\n');
   }
 
