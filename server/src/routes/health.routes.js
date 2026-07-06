@@ -5,7 +5,7 @@ import { listAllMeetings } from '../storage/meetings.repo.js';
 import { listAllGoals } from '../storage/goals.repo.js';
 import { retrievalStats } from '../storage/retrieval.js';
 import { llmEnabled } from '../reasoning/llm.js';
-import { webSearchEnabled } from '../reasoning/tools.js';
+import { webSearchConfigured, webSearchEnabled } from '../reasoning/tools.js';
 import { config } from '../config.js';
 import { getSettings } from '../services/settings.service.js';
 import { getRuntimeAdapter } from '../runtime/index.js';
@@ -44,11 +44,13 @@ healthRouter.get('/health', asyncHandler(async (_req, res) => {
       disabled: openclaw.disabled,
     },
     ingest,
-    // Agentic tool use (Phase 13): search_knowledge is always available to live
-    // agent turns; web_search only when a provider key is configured.
+    // Agentic tool use (Phase 13/14): search_knowledge is always available to
+    // live agent turns; web_search needs BOTH a provider key and the in-app
+    // toggle. `webSearchKey` lets the UI distinguish "no key" from "toggled off".
     tools: {
       knowledgeSearch: true,
       webSearch: webSearchEnabled(),
+      webSearchKey: webSearchConfigured(),
       maxCallsPerTurn: config.tools.maxCallsPerTurn,
     },
     counts: {

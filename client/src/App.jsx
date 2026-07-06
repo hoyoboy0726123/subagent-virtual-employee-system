@@ -36,6 +36,16 @@ export default function App() {
     refresh();
   };
 
+  const toggleWebSearch = async () => {
+    try {
+      const next = await api.put('/settings', { webSearchEnabled: !settings?.webSearch?.enabled });
+      setSettings((s) => ({ ...s, ...next }));
+      refresh();
+    } catch (e) {
+      alert(e.message); // e.g. 尚未設定 TAVILY_API_KEY
+    }
+  };
+
   return (
     <div className="app">
       <header className="topbar">
@@ -47,6 +57,23 @@ export default function App() {
           </div>
         </div>
         <div className="topbar-status">
+          {settings && (
+            <label
+              className="runtime-switch web-toggle"
+              title={settings.webSearch?.keyConfigured
+                ? '開啟後，AI 員工在會議、目標與自主研究中可視需要上網搜尋（Tavily 深度搜索），引用外部資料時會標明出處'
+                : '需要在伺服器環境設定 TAVILY_API_KEY 才能開啟網路搜尋'}
+            >
+              <input
+                type="checkbox"
+                checked={Boolean(settings.webSearch?.enabled)}
+                onChange={toggleWebSearch}
+              />
+              <span className="runtime-label">
+                🌐 網路搜尋{settings.webSearch?.keyConfigured ? '' : '（未設定金鑰）'}
+              </span>
+            </label>
+          )}
           {settings && (
             <label className="runtime-switch" title="由哪個執行環境驅動你的子代理">
               <span className="runtime-label">執行環境</span>

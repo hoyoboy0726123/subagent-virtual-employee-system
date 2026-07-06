@@ -74,7 +74,16 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 > identical calls, records `toolCalls` on every transcript turn, and merges
 > looked-up chunks into the turn's citations so grounding stays honest.
 >
-> The full productization plan — through the planned Phase 14 (final packaging)
+> **Phase 14 (shipped).** **網路搜尋開關 + AI 自主研究** — a topbar toggle
+> (requires `TAVILY_API_KEY`) arms every agent with `web_search` (Tavily
+> **advanced** depth); anything drawn from the web must be attributed, and
+> consulted sources land in the turn's citations. In the employee detail modal,
+> 「AI 自主研究」 lets an employee agent research a topic on its own (multiple
+> self-directed queries), write an attributed 調查報告, and submit it for YOUR
+> review — approval ingests it into that employee's knowledge base; rejection
+> archives it. Live-proven end-to-end (`npm run test:live:research`).
+>
+> The full productization plan — through the planned Phase 15 (final packaging)
 > — lives in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---

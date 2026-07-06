@@ -316,6 +316,8 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
               <li className="muted">尚無文件。上傳檔案或手動新增筆記皆可。</li>
             )}
           </ul>
+
+          <ResearchSection employee={employee} onChange={onChange} />
         </section>
       </div>
 
@@ -324,5 +326,121 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
         <button className="btn" onClick={onEdit}>編輯檔案</button>
       </div>
     </Modal>
+  );
+}
+
+const RESEARCH_STATUS = {
+  pending: { label: '⏳ 待審核', cls: 'tag' },
+  approved: { label: '✅ 已入庫', cls: 'tag tag-blue' },
+  rejected: { label: '🚫 已駁回', cls: 'tag' },
+};
+
+// Phase 14 — 讓 agent 自己上網做功課：主管出題 → 員工代理用 web_search 深度搜索
+// 寫出附出處的調查報告 → 主管在這裡審核，核准才會進入該員工的知識庫。
+function ResearchSection({ employee, onChange }) {
+  const [webSearch, setWebSearch] = useState(null); // {enabled, keyConfigured}
+  const [reports, setReports] = useState([]);
+  const [topic, setTopic] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [open, setOpen] = useState(null); // expanded report id
+
+  const reload = () => api.get(`/employees/${employee.id}/research`).then(setReports).catch(() => {});
+  useEffect(() => {
+    api.get('/settings').then((s) => setWebSearch(s.webSearch)).catch(() => setWebSearch(null));
+    reload();
+  }, [employee.id]);
+
+  const run = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      await api.post(`/employees/${employee.id}/research`, { topic });
+      setTopic('');
+      await reload();
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const review = async (id, action) => {
+    setErr('');
+    try {
+      await api.post(`/research/${id}/${action}`);
+      await reload();
+      if (action === 'approve') onChange(); // knowledge list changed
+    } catch (e) { setErr(e.message); }
+  };
+
+  const enabled = Boolean(webSearch?.enabled);
+
+  return (
+    <div className="research-box">
+      <h4>
+        🔍 AI 自主研究 <span className="count">{reports.length}</span>
+      </h4>
+      <p className="muted sm">
+        指定主題，讓 {employee.name} 自己上網深度搜索並寫出附出處的調查報告；經你核准後才會加入知識庫。
+      </p>
+      {!enabled && (
+        <div className="banner-err sm">
+          {webSearch?.keyConfigured
+            ? '網路搜尋開關未開啟——請在頁面上方打開「🌐 網路搜尋」。'
+            : '尚未設定 TAVILY_API_KEY，無法進行網路研究。'}
+        </div>
+      )}
+      <div className="note-form">
+        <input
+          placeholder="調查主題，例如：2026 台灣電商物流的最新趨勢"
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          disabled={!enabled || busy}
+        />
+        <button className="btn sm" onClick={run} disabled={!enabled || busy || !topic.trim()}>
+          {busy ? '研究中…（agent 正在多次搜尋與撰寫，約需 1–2 分鐘）' : '🔍 開始研究'}
+        </button>
+      </div>
+      {err && <div className="banner-err sm">{err}</div>}
+
+      <ul className="notes">
+        {reports.map((r) => {
+          const st = RESEARCH_STATUS[r.status] || RESEARCH_STATUS.pending;
+          return (
+            <li key={r.id} className="note research-report">
+              <div>
+                <strong>{r.topic}</strong>
+                <span className={st.cls}>{st.label}</span>
+                <span className="muted sm"> · 搜尋 {r.queries.length} 次 · 來源 {r.sources.length} 個</span>
+                <div>
+                  <button className="btn-ghost sm" onClick={() => setOpen(open === r.id ? null : r.id)}>
+                    {open === r.id ? '收合報告 ▲' : '閱讀報告 ▼'}
+                  </button>
+                  {r.status === 'pending' && (
+                    <>
+                      <button className="btn sm" onClick={() => review(r.id, 'approve')}>✅ 核准入庫</button>
+                      <button className="btn-ghost sm" onClick={() => review(r.id, 'reject')}>🚫 駁回</button>
+                    </>
+                  )}
+                </div>
+                {open === r.id && (
+                  <div className="profile-box research-report-body">
+                    <Markdown text={r.report} />
+                    {r.sources.length > 0 && (
+                      <div className="muted sm">
+                        引用來源：
+                        {r.sources.map((s) => (
+                          <div key={s.url}>
+                            <a href={s.url} target="_blank" rel="noreferrer noopener">{s.title || s.url}</a>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </li>
+          );
+        })}
+        {reports.length === 0 && <li className="muted">尚無研究報告。</li>}
+      </ul>
+    </div>
   );
 }

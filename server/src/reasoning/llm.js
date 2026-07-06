@@ -161,6 +161,7 @@ import { parseToolRequest, formatToolResult } from './tools.js';
  * @param {object}   opts.toolbox       from buildToolbox() — declarations/instructions/execute/trace
  * @param {number}   [opts.maxTokens]
  * @param {number}   [opts.temperature]
+ * @param {number}   [opts.maxSteps]        tool-call budget (default config.tools.maxCallsPerTurn)
  * @param {Function} [opts._generate]       injectable generate fn (hermetic tests)
  * @param {boolean}  [opts._legacyProtocol] force the prompt-protocol transport (hermetic tests)
  * @returns {Promise<{text: string, toolCalls: number}|null>}
@@ -171,6 +172,7 @@ export async function generateAgentic({
   toolbox,
   maxTokens = 700,
   temperature = 0.7,
+  maxSteps = config.tools.maxCallsPerTurn,
   _generate = generate,
   _legacyProtocol = isLegacyGemma(),
 } = {}) {
@@ -178,15 +180,16 @@ export async function generateAgentic({
     const res = await _generate({ system, user, maxTokens, temperature });
     return res?.text ? { text: res.text.trim(), toolCalls: 0 } : null;
   }
-  const maxSteps = config.tools.maxCallsPerTurn;
   const seenCalls = new Set();
 
   if (!_legacyProtocol) {
-    // Native function calling: grow a contents array of turns.
+    // Native function calling: grow a contents array of turns. Toolbox policy
+    // (e.g. the external-source attribution rule) rides on the system prompt.
+    const sysNative = toolbox.policy ? `${system}\n\n${toolbox.policy}` : system;
     const contents = [{ role: 'user', parts: [{ text: user }] }];
     for (let step = 0; step <= maxSteps; step++) {
       const res = await _generate({
-        system, contents, tools: toolset(toolbox.declarations), maxTokens, temperature,
+        system: sysNative, contents, tools: toolset(toolbox.declarations), maxTokens, temperature,
       });
       if (!res) return null;
       const calls = res.functionCalls || [];

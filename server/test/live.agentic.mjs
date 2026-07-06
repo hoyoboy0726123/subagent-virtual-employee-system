@@ -9,14 +9,23 @@
 // This test spends real API quota, so it is NOT part of `npm test`.
 // Run: GEMINI_API_KEY=… TAVILY_API_KEY=… npm run test:live
 import assert from 'node:assert/strict';
-import { config } from '../src/config.js';
-import { generate, generateAgentic, toolset, llmEnabled } from '../src/reasoning/llm.js';
-import { buildToolbox, webSearchEnabled } from '../src/reasoning/tools.js';
+
+// Isolated in-memory DB BEFORE importing anything DB-adjacent (the web-search
+// toggle lives in settings, so the toolbox reads the DB when a key is present).
+process.env.DB_FILE = ':memory:';
+
+const { config } = await import('../src/config.js');
+const { generate, generateAgentic, toolset, llmEnabled } = await import('../src/reasoning/llm.js');
+const { buildToolbox, webSearchConfigured, webSearchEnabled, WEB_SEARCH_SETTING_KEY } = await import('../src/reasoning/tools.js');
+const { setSetting } = await import('../src/storage/settings.repo.js');
 
 if (!llmEnabled()) {
   console.error('  ✗ GEMINI_API_KEY (or GOOGLE_API_KEY) is required for the live test.');
   process.exit(1);
 }
+// Phase 14: web search is key + in-app toggle. This is a live test of the
+// tools themselves, so flip the toggle on when a key is available.
+if (webSearchConfigured()) setSetting(WEB_SEARCH_SETTING_KEY, '1');
 console.log(`\n  Live agentic test — model: ${config.llm.model}, web search: ${webSearchEnabled() ? 'Tavily (enabled)' : 'disabled'}\n`);
 
 let passed = 0;

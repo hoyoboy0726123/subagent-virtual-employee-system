@@ -14,6 +14,7 @@ import { knowledgeRouter } from './routes/knowledge.routes.js';
 import { meetingsRouter } from './routes/meetings.routes.js';
 import { goalsRouter } from './routes/goals.routes.js';
 import { settingsRouter } from './routes/settings.routes.js';
+import { researchRouter } from './routes/research.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -33,6 +34,7 @@ export function createApp() {
   app.use('/api', knowledgeRouter);
   app.use('/api', meetingsRouter);
   app.use('/api', goalsRouter);
+  app.use('/api', researchRouter);
 
   // Serve the built client in production (single-server mode).
   const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');

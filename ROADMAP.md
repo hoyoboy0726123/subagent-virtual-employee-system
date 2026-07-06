@@ -159,7 +159,41 @@ they need — the first step toward true subagent autonomy.
       parsing, employee scoping, provider gating (no network), the
       search-then-speak loop, loop bounding, and the zero-overhead no-tool path.
 
-## 🧭 Phase 14 — Final product polish & packaging
+## ✅ Phase 14 — Web-search toggle & autonomous research *(shipped)*
+
+**Goal:** put agent web access under an explicit manager-controlled switch, and
+let agents grow their own knowledge base — with the manager as gatekeeper.
+
+- [x] **前端網路搜尋開關**（topbar）。Turning it on requires a configured
+      provider key (`TAVILY_API_KEY` / `WEB_SEARCH_API_KEY`) — the toggle is an
+      authorization switch persisted in settings, not a key substitute. Exposed
+      via `GET/PUT /api/settings` (`webSearch: {keyConfigured, enabled}`) and
+      `/api/health` (`tools.webSearch`, `tools.webSearchKey`).
+- [x] **Agents get web_search when (and only when) the switch is on** — in
+      meetings, goals, and research alike. Toolbox policy (both transports)
+      demands source attribution: any claim drawn from the web must name its
+      source; consulted sources are tracked (`webSources()`) and merged into the
+      turn's citations with `web: true` + URL.
+- [x] **Tavily deep search**: `search_depth: "advanced"` (multiple semantically
+      relevant snippets per source, 2 credits/query) + `chunks_per_source: 3`,
+      Bearer auth, env-overridable (`WEB_SEARCH_DEPTH`, `WEB_SEARCH_CHUNKS_PER_SOURCE`).
+- [x] **Autonomous research → manager review → knowledge base**: POST
+      `/api/employees/:id/research` runs the employee as a research agent
+      (bigger tool budget, `RESEARCH_MAX_TOOL_CALLS`, default 6) that runs
+      self-directed multi-angle web searches and writes a structured, attributed
+      調查報告 (摘要/重點發現/詳細說明/資料來源/建議). Reports are PENDING until
+      the manager approves (→ ingested as a `source: 'research'` knowledge
+      document through the same chunk/FTS path) or rejects (archived). A run
+      that never actually searched the web is discarded as untrustworthy.
+- [x] Schema migration v2 (`research_reports`), research REST API, and the
+      research review UI in the employee detail modal.
+- [x] Tests: hermetic (toggle gating without key, prerequisite errors, approve/
+      reject flow over HTTP, Tavily advanced-depth request shape) and LIVE
+      (`npm run test:live:research`): real Gemma 4 + real Tavily — the agent
+      chose its own queries, consulted 24 sources, produced an attributed
+      report, and approval made it FTS-retrievable. 3/3 passing.
+
+## 🧭 Phase 15 — Final product polish & packaging
 
 **Goal:** ship-ready operational clarity.
 

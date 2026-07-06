@@ -9,7 +9,12 @@ settingsRouter.get('/settings', asyncHandler(async (_req, res) => {
   res.json(await settings.getSettingsWithHealth());
 }));
 
-// Switch the active runtime mode (simulated | openclaw).
+// Update settings: runtime mode (standalone | openclaw) and/or the web-search
+// toggle. Each key is applied only when present, so the UI can PUT one at a time.
 settingsRouter.put('/settings', asyncHandler(async (req, res) => {
-  res.json(settings.setRuntimeMode((req.body || {}).runtimeMode));
+  const body = req.body || {};
+  let result;
+  if (body.runtimeMode !== undefined) result = settings.setRuntimeMode(body.runtimeMode);
+  if (body.webSearchEnabled !== undefined) result = settings.setWebSearchEnabled(Boolean(body.webSearchEnabled));
+  res.json(result || settings.getSettings());
 }));

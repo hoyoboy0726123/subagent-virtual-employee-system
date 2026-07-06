@@ -97,6 +97,31 @@ const MIGRATIONS = [
       );
     `);
   },
+
+  // v2 — autonomous research reports (Phase 14). An employee agent researches a
+  // topic on the web, writes an investigation report, and the MANAGER (the user)
+  // reviews it: approval ingests it into that employee's knowledge base;
+  // rejection just archives it. The report stays linked to its web sources.
+  (db) => {
+    db.exec(`
+      CREATE TABLE research_reports (
+        id          TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL,
+        topic       TEXT NOT NULL,
+        report      TEXT NOT NULL DEFAULT '',
+        sources     TEXT NOT NULL DEFAULT '[]',  -- JSON: [{title,url}] consulted web sources
+        queries     TEXT NOT NULL DEFAULT '[]',  -- JSON: web queries the agent ran
+        status      TEXT NOT NULL DEFAULT 'pending', -- pending | approved | rejected
+        live        INTEGER NOT NULL DEFAULT 1,
+        document_id TEXT DEFAULT NULL,           -- knowledge doc created on approval
+        created_at  TEXT NOT NULL,
+        reviewed_at TEXT DEFAULT NULL,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      );
+      CREATE INDEX idx_research_employee ON research_reports(employee_id);
+      CREATE INDEX idx_research_status ON research_reports(status);
+    `);
+  },
 ];
 
 export function migrate(db) {

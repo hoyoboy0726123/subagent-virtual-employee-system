@@ -1,9 +1,11 @@
-// Service: settings. Currently just the active runtime mode, but the store is
-// generic key/value so more switches can be added without schema changes.
+// Service: settings. The active runtime mode plus the web-search toggle; the
+// store is generic key/value so more switches can be added without schema
+// changes.
 import { getSetting, setSetting } from '../storage/settings.repo.js';
 import { config } from '../config.js';
 import { RUNTIME_MODES, getRuntimeAdapter, normalizeMode } from '../runtime/index.js';
 import { badRequest } from '../util/http.js';
+import { WEB_SEARCH_SETTING_KEY, webSearchConfigured, webSearchEnabled } from '../reasoning/tools.js';
 
 const RUNTIME_KEY = 'runtimeMode';
 
@@ -26,12 +28,28 @@ export function setRuntimeMode(mode) {
   return getSettings();
 }
 
+/**
+ * Toggle agent web search (Phase 14). Turning it ON requires a provider key —
+ * the toggle is an authorization switch, not a substitute for configuration.
+ */
+export function setWebSearchEnabled(enabled) {
+  if (enabled && !webSearchConfigured()) {
+    throw badRequest('尚未設定網路搜尋金鑰。請在伺服器環境設定 TAVILY_API_KEY（或 WEB_SEARCH_API_KEY）後再開啟。');
+  }
+  setSetting(WEB_SEARCH_SETTING_KEY, enabled ? '1' : '0');
+  return getSettings();
+}
+
 export function getSettings() {
   const mode = getRuntimeMode();
   return {
     runtimeMode: mode,
     availableModes: RUNTIME_MODES,
     runtimeLabel: getRuntimeAdapter(mode).label,
+    webSearch: {
+      keyConfigured: webSearchConfigured(),
+      enabled: webSearchEnabled(),
+    },
   };
 }
 

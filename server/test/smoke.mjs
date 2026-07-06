@@ -353,6 +353,67 @@ try {
     assert.equal(status, 400);
   });
 
+  await step('web-search toggle: reported off and un-enableable without a provider key', async () => {
+    const { json: settings } = await api('GET', '/api/settings');
+    assert.equal(settings.webSearch.keyConfigured, false, 'hermetic run has no Tavily key');
+    assert.equal(settings.webSearch.enabled, false);
+
+    const { status } = await api('PUT', '/api/settings', { webSearchEnabled: true });
+    assert.equal(status, 400, 'turning it on without a key is refused with a clear error');
+
+    const { json: health } = await api('GET', '/api/health');
+    assert.equal(health.tools.knowledgeSearch, true);
+    assert.equal(health.tools.webSearch, false);
+    assert.equal(health.tools.webSearchKey, false);
+  });
+
+  await step('autonomous research: refused while research prerequisites are missing', async () => {
+    const { status, json } = await api('POST', `/api/employees/${empId}/research`, { topic: '任意主題' });
+    assert.equal(status, 400);
+    assert.ok(/GEMINI|TAVILY|網路搜尋/.test(json.error), 'error names the missing prerequisite');
+  });
+
+  await step('autonomous research: manager approval ingests the report into the knowledge base', async () => {
+    // Simulate a completed agent research run at the repo layer (the live agent
+    // path needs real keys and is exercised by test:live), then walk the REAL
+    // review flow over HTTP.
+    const { insertReport } = await import('../src/storage/research.repo.js');
+    const pending = insertReport({
+      employeeId: empId,
+      topic: '客服自動化趨勢',
+      report: '## 摘要\n測試研究內容。\n\n## 資料來源\n- 測試來源 — https://example.com/a',
+      sources: [{ title: '測試來源', url: 'https://example.com/a' }],
+      queries: ['customer service automation trends'],
+    });
+
+    const { json: list } = await api('GET', `/api/employees/${empId}/research`);
+    assert.ok(list.some((r) => r.id === pending.id && r.status === 'pending'), 'pending report is listed');
+
+    const { status, json } = await api('POST', `/api/research/${pending.id}/approve`);
+    assert.equal(status, 200);
+    assert.equal(json.report.status, 'approved');
+    assert.ok(json.document?.id, 'approval created a knowledge document');
+
+    const { json: emp } = await api('GET', `/api/employees/${empId}`);
+    const doc = emp.knowledge.find((k) => k.id === json.document.id);
+    assert.ok(doc, 'document appears in the employee knowledge base');
+    assert.equal(doc.source, 'research');
+    assert.ok(doc.title.includes('客服自動化趨勢'));
+
+    const again = await api('POST', `/api/research/${pending.id}/approve`);
+    assert.equal(again.status, 400, 'double review is refused');
+
+    // Rejection path: archived, no document.
+    const rejected = insertReport({ employeeId: empId, topic: '應駁回的主題', report: 'x', sources: [], queries: ['q'] });
+    const rej = await api('POST', `/api/research/${rejected.id}/reject`);
+    assert.equal(rej.status, 200);
+    assert.equal(rej.json.report.status, 'rejected');
+    assert.equal(rej.json.report.documentId, null);
+
+    // Keep the shared employee's knowledge base clean for the later delete check.
+    await api('DELETE', `/api/knowledge/${json.document.id}`);
+  });
+
   await step('delete knowledge document', async () => {
     const { status } = await api('DELETE', `/api/knowledge/${docId}`);
     assert.equal(status, 200);

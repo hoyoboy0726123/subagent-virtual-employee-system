@@ -62,14 +62,23 @@ export const config = {
   tools: {
     // Hard ceiling on tool calls per agent turn (loop guard).
     maxCallsPerTurn: Number(process.env.AGENT_MAX_TOOL_CALLS) || 3,
-    // Optional web search. Enabled only when an API key is present; the default
+    // Optional web search. Usable only when an API key is present AND the
+    // in-app toggle (settings key 'webSearchEnabled') is on; the default
     // endpoint speaks the Tavily search API shape but is overridable.
     webSearch: {
       apiKey: process.env.TAVILY_API_KEY || process.env.WEB_SEARCH_API_KEY || '',
       endpoint: process.env.WEB_SEARCH_ENDPOINT || 'https://api.tavily.com/search',
       maxResults: Number(process.env.WEB_SEARCH_MAX_RESULTS) || 5,
       timeoutSec: Number(process.env.WEB_SEARCH_TIMEOUT_SEC) || 20,
+      // Tavily search depth: 'advanced' returns multiple semantically relevant
+      // snippets per source (chunks_per_source, advanced-only) for far richer
+      // grounding, at 2 credits/query vs basic's 1. Overridable for cost control.
+      depth: process.env.WEB_SEARCH_DEPTH || 'advanced',
+      chunksPerSource: Number(process.env.WEB_SEARCH_CHUNKS_PER_SOURCE) || 3,
     },
+    // The autonomous-research agent (web research → pending report → manager
+    // approval → knowledge base) gets a bigger tool budget than a meeting turn.
+    researchMaxCalls: Number(process.env.RESEARCH_MAX_TOOL_CALLS) || 6,
   },
 
   // Optional live LLM via Google Gen AI (@google/genai). Absent by default →

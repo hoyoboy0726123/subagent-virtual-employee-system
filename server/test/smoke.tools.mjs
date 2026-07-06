@@ -51,8 +51,38 @@ try {
     assert.equal(webSearchEnabled(), false, 'hermetic run has no web-search key');
     const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
     assert.ok(!tb.declarations.some((d) => d.name === 'web_search'), 'standalone-first: tool not offered');
+    assert.equal(tb.policy, '', 'no attribution policy when web search is off');
     const res = await tb.execute('web_search', { query: 'x' });
     assert.ok(res.error, 'direct call reports it is disabled instead of hitting the network');
+  });
+
+  await step('toolbox: web_search uses Tavily ADVANCED depth and tracks sources for attribution', async () => {
+    let captured = null;
+    const fakeFetch = async (url, init) => {
+      captured = { url, init, body: JSON.parse(init.body) };
+      return {
+        ok: true,
+        json: async () => ({
+          results: [
+            { title: '產業報告 A', url: 'https://a.example.com', content: 'A 內容片段' },
+            { title: '新聞 B', url: 'https://b.example.com', content: 'B 內容片段' },
+          ],
+        }),
+      };
+    };
+    const tb = buildToolbox({ employee, searchKnowledge: fakeSearch, fetchImpl: fakeFetch, _webEnabled: true });
+    assert.ok(tb.declarations.some((d) => d.name === 'web_search'), 'tool offered when gate is open');
+    assert.ok(tb.policy.includes('出處'), 'attribution policy rides with the toolbox');
+
+    const res = await tb.execute('web_search', { query: '電商物流趨勢' });
+    assert.equal(captured.body.search_depth, 'advanced', 'deep search is on');
+    assert.equal(captured.body.chunks_per_source, 3, 'multiple snippets per source (advanced-only)');
+    assert.ok(captured.init.headers.authorization.startsWith('Bearer '), 'Tavily bearer auth');
+    assert.equal(res.results.length, 2);
+    assert.deepEqual(tb.webSources().map((s) => s.url),
+      ['https://a.example.com', 'https://b.example.com'],
+      'every consulted source is tracked for honest citations');
+    assert.ok(formatToolResult('web_search', res).includes('出處'), 'result block reminds the agent to attribute');
   });
 
   await step('generateAgentic (native function calling — Gemma 4+/Gemini path): search then speak', async () => {

@@ -238,3 +238,12 @@ textarea { resize: vertical; }
   .grid { grid-template-columns: 1fr; }
   .topbar, .page-head, .section-head, .pagination { align-items: stretch; flex-direction: column; }
 }
+
+/* Phase 14 — web-search toggle + autonomous research */
+.web-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.web-toggle input { accent-color: #2f6fed; width: 16px; height: 16px; cursor: pointer; }
+.research-box { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--border, #d9dee7); }
+.research-box .sm { font-size: 0.85rem; }
+.research-report > div > div { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.research-report-body { display: block; margin-top: 8px; max-height: 420px; overflow-y: auto; }
+.research-report-body a { color: #2f6fed; word-break: break-all; }

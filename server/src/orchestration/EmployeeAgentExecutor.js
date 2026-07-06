@@ -199,8 +199,10 @@ export async function goalTurn({ employee, grounding, context }) {
   return withCitations(turn, grounding);
 }
 
-// Merge the pre-injected grounding with whatever the agent looked up ITSELF via
-// search_knowledge mid-turn — so citations honestly cover both sources.
+// Merge the pre-injected grounding with whatever the agent looked up ITSELF —
+// knowledge-base hits AND consulted web sources — so citations honestly cover
+// everything the utterance drew on. Web sources carry `web: true` + url so the
+// UI can render them as external references.
 function withCitations(turn, grounding) {
   const citations = citationsFor(grounding);
   const seen = new Set(citations.map((c) => `${c.documentTitle}|${c.snippet}`));
@@ -210,7 +212,10 @@ function withCitations(turn, grounding) {
     seen.add(k);
     citations.push({ documentTitle: h.documentTitle, snippet: h.snippet });
   }
-  const { toolHits, ...rest } = turn;
+  for (const s of (turn.webSources || []).slice(0, 3)) {
+    citations.push({ documentTitle: s.title || s.url, snippet: s.url, web: true });
+  }
+  const { toolHits, webSources, ...rest } = turn;
   return { ...rest, citations };
 }
 
@@ -227,11 +232,17 @@ async function runOrFallback({ employee, grounding, user, fallback }) {
       const res = await generateAgentic({ system, user, toolbox, maxTokens: 700, temperature });
       const t = polishUtterance(res?.text || '');
       if (t) {
-        return { text: t, live: true, toolCalls: res.toolCalls, toolHits: toolbox.knowledgeHits() };
+        return {
+          text: t,
+          live: true,
+          toolCalls: res.toolCalls,
+          toolHits: toolbox.knowledgeHits(),
+          webSources: toolbox.webSources(),
+        };
       }
     }
   }
-  return { text: polishUtterance(fallback()), live: false, toolCalls: 0, toolHits: [] };
+  return { text: polishUtterance(fallback()), live: false, toolCalls: 0, toolHits: [], webSources: [] };
 }
 
 // Honest model identity for runtime metadata.
