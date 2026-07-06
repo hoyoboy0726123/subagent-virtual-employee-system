@@ -8,6 +8,7 @@ import { getDb } from '../db/connection.js';
 import { withTx } from '../db/tx.js';
 import { id, now } from '../util/ids.js';
 import { chunkText } from '../reasoning/chunk.js';
+import { segmentForFts } from './fts.js';
 
 const parseJson = (s, fallback) => {
   try { return JSON.parse(s); } catch { return fallback; }
@@ -89,7 +90,9 @@ export function insertDocument(employeeId, data) {
     chunks.forEach((content, i) => {
       const chunkId = id('chk');
       insChunk.run(chunkId, doc.id, doc.employeeId, i, content, doc.createdAt);
-      insFts.run(content, chunkId, doc.employeeId);
+      // FTS side stores CJK-segmented text (each character a token) so Chinese
+      // substring queries can match; `chunks.content` keeps the original text.
+      insFts.run(segmentForFts(content), chunkId, doc.employeeId);
     });
   });
 

@@ -247,3 +247,10 @@ textarea { resize: vertical; }
 .research-report > div > div { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .research-report-body { display: block; margin-top: 8px; max-height: 420px; overflow-y: auto; }
 .research-report-body a { color: #2f6fed; word-break: break-all; }
+
+/* Phase 15 — per-agent config */
+.agent-config { margin: 14px 0; padding: 10px 12px; border: 1px dashed var(--border, #d9dee7); border-radius: 8px; }
+.agent-config summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; }
+.agent-config .form-grid { margin-top: 10px; }
+.agent-config-check { display: flex; align-items: center; gap: 8px; flex-direction: row !important; }
+.agent-config-check input { width: 16px; height: 16px; accent-color: #2f6fed; }

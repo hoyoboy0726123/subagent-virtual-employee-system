@@ -9,6 +9,7 @@ const TYPE_LABELS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', md: 'Markdown', html
 const BLANK = {
   name: '', roleTitle: '', personality: '', expertise: '',
   objectives: '', communicationStyle: '', profile: '',
+  agentModel: '', agentTemperature: '', agentWebSearch: true, agentMaxToolCalls: '',
 };
 
 export default function EmployeesPage({ refreshKey, onChange }) {
@@ -89,6 +90,10 @@ export default function EmployeesPage({ refreshKey, onChange }) {
 const toForm = (e) => ({
   ...e,
   expertise: Array.isArray(e.expertise) ? e.expertise.join(', ') : e.expertise || '',
+  agentModel: e.agentConfig?.model || '',
+  agentTemperature: e.agentConfig?.temperature ?? '',
+  agentWebSearch: e.agentConfig?.webSearch !== false,
+  agentMaxToolCalls: e.agentConfig?.maxToolCalls ?? '',
 });
 
 function EmployeeForm({ initial, onClose, onSaved }) {
@@ -100,6 +105,12 @@ function EmployeeForm({ initial, onClose, onSaved }) {
   const payload = () => ({
     ...form,
     expertise: String(form.expertise).split(',').map((s) => s.trim()).filter(Boolean),
+    agentConfig: {
+      model: form.agentModel?.trim() || undefined,
+      temperature: form.agentTemperature === '' ? undefined : Number(form.agentTemperature),
+      webSearch: form.agentWebSearch === false ? false : undefined,
+      maxToolCalls: form.agentMaxToolCalls === '' ? undefined : Number(form.agentMaxToolCalls),
+    },
   });
 
   const genProfile = async () => {
@@ -132,6 +143,43 @@ function EmployeeForm({ initial, onClose, onSaved }) {
         <label className="col-2">專長（以逗號分隔）<input value={form.expertise} onChange={set('expertise')} placeholder="產品策略, 路線圖規劃, 使用者研究" /></label>
         <label className="col-2">目標<input value={form.objectives} onChange={set('objectives')} placeholder="交付讓顧客喜愛的產品。" /></label>
       </div>
+
+      <details className="agent-config">
+        <summary>⚙️ 代理設定（進階，留空即用系統預設）</summary>
+        <div className="form-grid">
+          <label>模型
+            <input
+              value={form.agentModel}
+              onChange={set('agentModel')}
+              placeholder="預設（gemma-4-31b-it）"
+            />
+          </label>
+          <label>溫度（0–2）
+            <input
+              type="number" min="0" max="2" step="0.05"
+              value={form.agentTemperature}
+              onChange={set('agentTemperature')}
+              placeholder="自動（依員工微調）"
+            />
+          </label>
+          <label>每回合工具上限（1–10）
+            <input
+              type="number" min="1" max="10" step="1"
+              value={form.agentMaxToolCalls}
+              onChange={set('agentMaxToolCalls')}
+              placeholder="預設 3"
+            />
+          </label>
+          <label className="agent-config-check">
+            <input
+              type="checkbox"
+              checked={form.agentWebSearch !== false}
+              onChange={(ev) => setForm({ ...form, agentWebSearch: ev.target.checked })}
+            />
+            允許此員工使用網路搜尋（仍受全域開關控制）
+          </label>
+        </div>
+      </details>
 
       <div className="profile-head">
         <label className="profile-label">自動產生的背景／個人檔案</label>

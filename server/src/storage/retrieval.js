@@ -6,16 +6,9 @@
 // only depend on the returned shape, not on how ranking is done.
 import { getDb } from '../db/connection.js';
 import { config } from '../config.js';
-
-// Turn arbitrary user text into a safe FTS5 MATCH expression: extract word
-// tokens, drop stopword-length fragments, and OR them together quoted (quoting
-// neutralizes FTS operator characters so free text can never be a syntax error).
-function toMatchQuery(text) {
-  const terms = String(text || '').toLowerCase().match(/[\p{L}\p{N}]+/gu) || [];
-  const uniq = [...new Set(terms)].filter((t) => t.length > 1).slice(0, 24);
-  if (!uniq.length) return null;
-  return uniq.map((t) => `"${t}"`).join(' OR ');
-}
+// CJK-aware query building lives in fts.js so the index side (knowledge.repo)
+// and the query side stay symmetrical.
+import { toMatchQuery } from './fts.js';
 
 /**
  * Keyword-search knowledge chunks.

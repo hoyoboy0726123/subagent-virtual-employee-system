@@ -120,7 +120,10 @@ export function buildToolbox({
   fetchImpl = fetch,
   _webEnabled = undefined,
 } = {}) {
-  const webOn = _webEnabled !== undefined ? _webEnabled : webSearchEnabled();
+  // Effective web access = global gate (key + toggle) AND this agent's own
+  // permission (agentConfig.webSearch === false forbids it per-employee).
+  const globallyOn = _webEnabled !== undefined ? _webEnabled : webSearchEnabled();
+  const webOn = globallyOn && employee?.agentConfig?.webSearch !== false;
   const trace = [];
   const collectedHits = [];
   const collectedSources = [];

@@ -221,15 +221,32 @@ function withCitations(turn, grounding) {
 
 // Single live agentic turn (with tool use) plus one retry; deterministic
 // fallback on failure. Returns { text, live, toolCalls, toolHits }. `live` is
-// true only when the model actually answered. Temperature is nudged
-// per-employee so distinct personas also phrase distinctly.
+// true only when the model actually answered.
+//
+// Per-agent configuration (Phase 15, employee.agentConfig) is applied here:
+//   model        — this agent's model id (unset → global default)
+//   temperature  — explicit sampling override; otherwise a per-employee seeded
+//                  nudge (0.72–0.87) so distinct personas also phrase distinctly
+//   maxToolCalls — this agent's per-turn tool budget
+//   webSearch    — false forbids web_search for this agent (enforced in toolbox)
 async function runOrFallback({ employee, grounding, user, fallback }) {
   if (llmEnabled()) {
+    const agentCfg = employee.agentConfig || {};
     const system = personaSystem(employee, grounding);
-    const temperature = 0.72 + ((seedOf(employee.id || employee.name) % 16) / 100); // 0.72–0.87
+    const temperature = Number.isFinite(agentCfg.temperature)
+      ? agentCfg.temperature
+      : 0.72 + ((seedOf(employee.id || employee.name) % 16) / 100); // 0.72–0.87
     for (let attempt = 0; attempt < 2; attempt++) {
       const toolbox = buildToolbox({ employee });
-      const res = await generateAgentic({ system, user, toolbox, maxTokens: 700, temperature });
+      const res = await generateAgentic({
+        system,
+        user,
+        toolbox,
+        maxTokens: 700,
+        temperature,
+        ...(agentCfg.model ? { model: agentCfg.model } : {}),
+        ...(agentCfg.maxToolCalls ? { maxSteps: agentCfg.maxToolCalls } : {}),
+      });
       const t = polishUtterance(res?.text || '');
       if (t) {
         return {

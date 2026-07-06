@@ -122,6 +122,35 @@ const MIGRATIONS = [
       CREATE INDEX idx_research_status ON research_reports(status);
     `);
   },
+
+  // v3 — per-agent configuration (Phase 15). Each employee can override the
+  // global agent defaults: model id, sampling temperature, whether it may use
+  // web search, and its per-turn tool budget. '{}' inherits everything.
+  (db) => {
+    db.exec(`ALTER TABLE employees ADD COLUMN agent_config TEXT NOT NULL DEFAULT '{}';`);
+  },
+
+  // v4 — CJK-aware FTS (Phase 15). unicode61 treats a run of CJK characters as
+  // ONE token, which made Chinese retrieval nearly useless (only exact whole-run
+  // matches). Fix: store FTS content with CJK characters space-segmented (each
+  // char = one token) and query CJK terms as phrases ("電 商 物 流"), so any
+  // Chinese substring of 2+ chars matches. English tokenization is unchanged.
+  // Rebuild the index from the chunks table with segmentation applied.
+  (db) => {
+    db.exec(`
+      DROP TABLE chunks_fts;
+      CREATE VIRTUAL TABLE chunks_fts USING fts5(
+        content,
+        chunk_id UNINDEXED,
+        employee_id UNINDEXED,
+        tokenize = 'porter unicode61'
+      );
+    `);
+    const rows = db.prepare('SELECT id, employee_id, content FROM chunks').all();
+    const ins = db.prepare('INSERT INTO chunks_fts (content, chunk_id, employee_id) VALUES (?, ?, ?)');
+    const CJK = /([㐀-䶿一-鿿豈-﫿])/g;
+    for (const r of rows) ins.run(String(r.content).replace(CJK, ' $1 '), r.id, r.employee_id);
+  },
 ];
 
 export function migrate(db) {

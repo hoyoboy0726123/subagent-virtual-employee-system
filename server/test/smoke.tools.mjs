@@ -138,6 +138,15 @@ try {
     }
   });
 
+  await step('toolbox: per-agent webSearch=false forbids the tool even when globally enabled', async () => {
+    const restricted = { ...employee, agentConfig: { webSearch: false } };
+    const tb = buildToolbox({ employee: restricted, searchKnowledge: fakeSearch, _webEnabled: true });
+    assert.ok(!tb.declarations.some((d) => d.name === 'web_search'), 'agent-level permission wins');
+    assert.ok(tb.declarations.some((d) => d.name === 'search_knowledge'), 'knowledge search unaffected');
+    const res = await tb.execute('web_search', { query: 'x' });
+    assert.ok(res.error, 'direct call is refused for this agent');
+  });
+
   await step('generateAgentic: an agent that does not need tools just speaks (zero overhead)', async () => {
     const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
     const fake = async () => ({ text: '我直接表達立場：先守住體驗再談轉換。', functionCalls: [] });

@@ -353,6 +353,36 @@ try {
     assert.equal(status, 400);
   });
 
+  await step('per-agent config: persisted, sanitized, and editable', async () => {
+    const { status, json: created } = await api('POST', '/api/employees', {
+      name: 'Config Test', roleTitle: '測試員',
+      agentConfig: { model: 'gemini-2.5-flash', temperature: 0.3, webSearch: false, maxToolCalls: 5, bogus: 'x' },
+    });
+    assert.equal(status, 201);
+    assert.deepEqual(created.agentConfig, { model: 'gemini-2.5-flash', temperature: 0.3, webSearch: false, maxToolCalls: 5 },
+      'known keys persist; unknown keys are dropped');
+
+    const { json: fetched } = await api('GET', `/api/employees/${created.id}`);
+    assert.deepEqual(fetched.agentConfig, created.agentConfig, 'survives a fresh read');
+
+    const { json: updated } = await api('PUT', `/api/employees/${created.id}`, { agentConfig: { temperature: 9 } });
+    assert.deepEqual(updated.agentConfig, {}, 'out-of-range values are dropped → inherit defaults');
+
+    await api('DELETE', `/api/employees/${created.id}`);
+  });
+
+  await step('CJK retrieval: Chinese substring queries now match (segmented FTS)', async () => {
+    const { json: doc } = await api('POST', `/api/employees/${empId}/knowledge`, {
+      title: '客服政策',
+      content: '我們的退貨政策是七天內免費退換貨，超過期限需酌收處理費。物流合作夥伴為黑貓宅急便。',
+    });
+    const q1 = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('退貨')}&employeeIds=${empId}`);
+    assert.ok(q1.json.results.some((r) => r.documentId === doc.id), '2-char Chinese word「退貨」matches');
+    const q2 = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('物流 夥伴')}&employeeIds=${empId}`);
+    assert.ok(q2.json.results.some((r) => r.documentId === doc.id), 'multi-term Chinese query matches');
+    await api('DELETE', `/api/knowledge/${doc.id}`);
+  });
+
   await step('web-search toggle: reported off and un-enableable without a provider key', async () => {
     const { json: settings } = await api('GET', '/api/settings');
     assert.equal(settings.webSearch.keyConfigured, false, 'hermetic run has no Tavily key');

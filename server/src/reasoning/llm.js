@@ -34,7 +34,9 @@ function getClient() {
 
 // Gemma 1–3 needed prompt-folding for system instructions and a prompt protocol
 // for tools; Gemma 4+ supports both natively, exactly like Gemini models.
-const isLegacyGemma = () => /^gemma-[1-3]\b/i.test(config.llm.model);
+// Model-sensitive checks take the EFFECTIVE model (per-agent override or the
+// global default) so a per-employee model choice gets the right transport.
+const isLegacyGemma = (model = config.llm.model) => /^gemma-[1-3]\b/i.test(model);
 
 /**
  * Light abstraction point for (future) function calling: wrap plain function
@@ -57,6 +59,7 @@ export function toolset(functionDeclarations = []) {
  * @param {object}   [opts.toolConfig]   e.g. { functionCallingConfig: { mode } }
  * @param {number}   [opts.maxTokens]
  * @param {number}   [opts.temperature]
+ * @param {string}   [opts.model]        per-call model override (per-agent config)
  * @returns {Promise<{text: string|null, functionCalls: Array, raw: object}|null>}
  */
 export async function generate({
@@ -67,6 +70,7 @@ export async function generate({
   toolConfig,
   maxTokens = 1500,
   temperature = 0.6,
+  model = config.llm.model,
 } = {}) {
   const ai = getClient();
   if (!ai) return null;
@@ -75,12 +79,12 @@ export async function generate({
   // Suppress Gemma 4's always-on thinking (see config.llm.thinkingLevel): turns
   // come back faster, and small output budgets are spent on the answer instead
   // of thought parts. Applied only to gemma-4* — other models keep their default.
-  if (config.llm.thinkingLevel && /^gemma-4/i.test(config.llm.model)) {
+  if (config.llm.thinkingLevel && /^gemma-4/i.test(model)) {
     cfg.thinkingConfig = { thinkingLevel: config.llm.thinkingLevel };
   }
   let body = contents ?? user ?? '';
   if (system) {
-    if (isLegacyGemma()) body = `${system}\n\n${body}`;
+    if (isLegacyGemma(model)) body = `${system}\n\n${body}`;
     else cfg.systemInstruction = system;
   }
   if (tools) cfg.tools = tools;
@@ -103,7 +107,7 @@ export async function generate({
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       const res = await ai.models.generateContent({
-        model: config.llm.model,
+        model,
         contents: body,
         config: cfg,
       });
@@ -162,6 +166,7 @@ import { parseToolRequest, formatToolResult } from './tools.js';
  * @param {number}   [opts.maxTokens]
  * @param {number}   [opts.temperature]
  * @param {number}   [opts.maxSteps]        tool-call budget (default config.tools.maxCallsPerTurn)
+ * @param {string}   [opts.model]           per-call model override (per-agent config)
  * @param {Function} [opts._generate]       injectable generate fn (hermetic tests)
  * @param {boolean}  [opts._legacyProtocol] force the prompt-protocol transport (hermetic tests)
  * @returns {Promise<{text: string, toolCalls: number}|null>}
@@ -173,23 +178,25 @@ export async function generateAgentic({
   maxTokens = 700,
   temperature = 0.7,
   maxSteps = config.tools.maxCallsPerTurn,
+  model = config.llm.model,
   _generate = generate,
-  _legacyProtocol = isLegacyGemma(),
+  _legacyProtocol = undefined,
 } = {}) {
+  const legacy = _legacyProtocol !== undefined ? _legacyProtocol : isLegacyGemma(model);
   if (!toolbox || !toolbox.declarations?.length) {
-    const res = await _generate({ system, user, maxTokens, temperature });
+    const res = await _generate({ system, user, maxTokens, temperature, model });
     return res?.text ? { text: res.text.trim(), toolCalls: 0 } : null;
   }
   const seenCalls = new Set();
 
-  if (!_legacyProtocol) {
+  if (!legacy) {
     // Native function calling: grow a contents array of turns. Toolbox policy
     // (e.g. the external-source attribution rule) rides on the system prompt.
     const sysNative = toolbox.policy ? `${system}\n\n${toolbox.policy}` : system;
     const contents = [{ role: 'user', parts: [{ text: user }] }];
     for (let step = 0; step <= maxSteps; step++) {
       const res = await _generate({
-        system: sysNative, contents, tools: toolset(toolbox.declarations), maxTokens, temperature,
+        system: sysNative, contents, tools: toolset(toolbox.declarations), maxTokens, temperature, model,
       });
       if (!res) return null;
       const calls = res.functionCalls || [];
@@ -217,7 +224,7 @@ export async function generateAgentic({
   const sys = `${system}\n\n${toolbox.instructions}`;
   let convo = user;
   for (let step = 0; step <= maxSteps; step++) {
-    const res = await _generate({ system: sys, user: convo, maxTokens, temperature });
+    const res = await _generate({ system: sys, user: convo, maxTokens, temperature, model });
     if (!res?.text) return null;
     const req = parseToolRequest(res.text);
     if (!req) return { text: res.text.trim(), toolCalls: toolbox.trace.length };
