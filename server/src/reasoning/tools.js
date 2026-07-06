@@ -23,6 +23,7 @@
 import { Type } from '@google/genai';
 import { config } from '../config.js';
 import { search as searchKnowledgeBase } from '../storage/retrieval.js';
+import { insertDocument } from '../storage/knowledge.repo.js';
 import { getSetting } from '../storage/settings.repo.js';
 
 export const WEB_SEARCH_SETTING_KEY = 'webSearchEnabled';
@@ -93,6 +94,9 @@ export function formatToolResult(name, result) {
       ...results.map((r) => `- ${r.title}（${r.url}）：${r.snippet}`),
     ].join('\n');
   }
+  if (name === 'remember') {
+    return `（已寫入你的知識庫：《${result?.title || ''}》。請繼續你的發言。）`;
+  }
   return JSON.stringify(result);
 }
 
@@ -103,6 +107,7 @@ export function formatToolResult(name, result) {
  * @param {object} opts.employee            the employee this turn runs as (scopes search_knowledge)
  * @param {boolean} [opts.research]         research mode: bigger result sets + richer content per query
  * @param {Function} [opts.searchKnowledge] injectable retrieval fn (hermetic tests)
+ * @param {Function} [opts.saveMemory]      injectable persistence fn for `remember` (hermetic tests)
  * @param {Function} [opts.fetchImpl]       injectable fetch (hermetic tests)
  * @param {boolean} [opts._webEnabled]      injectable web gate (hermetic tests)
  * @returns {{
@@ -117,6 +122,7 @@ export function buildToolbox({
   employee,
   research = false,
   searchKnowledge = searchKnowledgeBase,
+  saveMemory = (employeeId, data) => insertDocument(employeeId, data),
   fetchImpl = fetch,
   _webEnabled = undefined,
 } = {}) {
@@ -150,6 +156,18 @@ export function buildToolbox({
       },
     });
   }
+  declarations.push({
+    name: 'remember',
+    description: '把一個值得長期記住的具體事實或決議寫進你自己的知識庫（例如你查證到的關鍵數據、你做出的承諾）。只記真正重要、日後會用到的事，不要記閒聊。',
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING, description: '簡短標題' },
+        fact: { type: Type.STRING, description: '要記住的內容（1–3 句，具體）' },
+      },
+      required: ['title', 'fact'],
+    },
+  });
 
   const toolMenu = declarations.map((d) => `- ${d.name}：${d.description}`).join('\n');
   // Policy that applies on BOTH transports (native function calling folds it
@@ -209,6 +227,20 @@ export function buildToolbox({
         for (const r of results) collectedSources.push({ title: r.title, url: r.url });
         entry.ok = true;
         return { results, ...(data.answer ? { answer: snippet(data.answer, 400) } : {}) };
+      }
+      if (name === 'remember') {
+        const title = String(args.title || '').trim();
+        const fact = String(args.fact || '').trim();
+        if (!title || !fact) return { error: 'remember 需要 title 與 fact' };
+        const doc = saveMemory(employee.id, {
+          title: `記憶：${title}`,
+          content: fact,
+          source: 'memory',
+          tags: ['memory', 'self'],
+          metadata: { rememberedBy: employee.name },
+        });
+        entry.ok = true;
+        return { saved: true, title: doc?.title || title };
       }
       return { error: `未知的工具：${name}` };
     } catch (err) {

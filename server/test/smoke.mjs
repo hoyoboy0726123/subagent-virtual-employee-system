@@ -17,6 +17,10 @@ process.env.OPENCLAW_DISABLE = '1';
 // machine. The REAL MarkItDown path is exercised by the opt-in
 // test/smoke.markitdown.mjs (it needs Python + the markitdown package).
 process.env.MARKITDOWN_DISABLE = '1';
+// Keep the long-standing knowledge-count assertions stable: meeting-memory
+// distillation is off by default here and turned on inside its dedicated step
+// (the flag is read per call, so toggling process.env mid-test works).
+process.env.MEETING_MEMORY_DISABLE = '1';
 const { app } = await import('../src/index.js');
 
 const server = app.listen(0);
@@ -381,6 +385,37 @@ try {
     const q2 = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('物流 夥伴')}&employeeIds=${empId}`);
     assert.ok(q2.json.results.some((r) => r.documentId === doc.id), 'multi-term Chinese query matches');
     await api('DELETE', `/api/knowledge/${doc.id}`);
+  });
+
+  await step('cross-meeting memory: a finished meeting writes each participant a memory document', async () => {
+    delete process.env.MEETING_MEMORY_DISABLE; // feature on for this step only
+    try {
+      const { json: alice } = await api('POST', '/api/employees', { name: 'Memory Alice', roleTitle: '產品經理' });
+      const { json: bob } = await api('POST', '/api/employees', { name: 'Memory Bob', roleTitle: '工程師' });
+
+      const { status, json: meeting } = await api('POST', '/api/meetings', {
+        topic: '記憶功能驗證會議', participantIds: [alice.id, bob.id], rounds: 2,
+      });
+      assert.equal(status, 201);
+      assert.equal(meeting.memories.length, 2, 'one distilled memory per participant');
+      assert.ok(meeting.memories.every((m) => m.documentId), 'memories are real knowledge documents');
+
+      const { json: aliceFull } = await api('GET', `/api/employees/${alice.id}`);
+      const mem = aliceFull.knowledge.find((k) => k.source === 'memory');
+      assert.ok(mem, 'memory doc lands in the participant knowledge base');
+      assert.ok(mem.title.includes('記憶功能驗證會議'), 'titled after the meeting topic');
+      assert.ok(mem.tags.includes('meeting'));
+      assert.ok(mem.chunkCount > 0, 'memory is chunked → retrievable in future groundings');
+
+      // The whole point: a topic-related query now surfaces the memory.
+      const q = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('記憶功能 驗證')}&employeeIds=${alice.id}`);
+      assert.ok(q.json.results.some((r) => r.documentId === mem.id), 'the next meeting WOULD ground on this memory');
+
+      await api('DELETE', `/api/employees/${alice.id}`);
+      await api('DELETE', `/api/employees/${bob.id}`);
+    } finally {
+      process.env.MEETING_MEMORY_DISABLE = '1';
+    }
   });
 
   await step('web-search toggle: reported off and un-enableable without a provider key', async () => {

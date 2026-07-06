@@ -3,6 +3,7 @@
 import * as repo from '../storage/meetings.repo.js';
 import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
+import { distillMeetingMemories } from '../orchestration/MemoryDistiller.js';
 import { badRequest, notFound } from '../util/http.js';
 
 export function list(filters = {}) {
@@ -25,7 +26,7 @@ export async function create({ topic, participantIds, rounds } = {}) {
   const runtime = getActiveRuntime();
   const result = await runtime.runMeeting({ topic, participants, rounds: boundedRounds });
 
-  return repo.insertMeeting({
+  const meeting = repo.insertMeeting({
     topic,
     participantIds: participants.map((p) => p.id),
     participants: participants.map((p) => ({ id: p.id, name: p.name, roleTitle: p.roleTitle })),
@@ -36,6 +37,23 @@ export async function create({ topic, participantIds, rounds } = {}) {
     grounding: result.grounding || [],
     runtime: result.runtime || {},
   });
+
+  // Cross-meeting memory (Phase 15): distill what each participant should
+  // remember and write it into their own knowledge base. Failures here must
+  // never lose the meeting itself.
+  try {
+    meeting.memories = await distillMeetingMemories({
+      meetingId: meeting.id,
+      topic,
+      participants,
+      transcript: result.transcript,
+      report: result.report,
+    });
+  } catch (err) {
+    console.warn(`[memory] distillation failed (meeting kept): ${err.message}`);
+    meeting.memories = [];
+  }
+  return meeting;
 }
 
 export function remove(id) {

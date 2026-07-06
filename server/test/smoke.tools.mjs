@@ -138,6 +138,23 @@ try {
     }
   });
 
+  await step('toolbox: remember persists a fact into the agent\'s own knowledge base', async () => {
+    const saved = [];
+    const tb = buildToolbox({
+      employee,
+      searchKnowledge: fakeSearch,
+      saveMemory: (empId, data) => { saved.push({ empId, data }); return { title: data.title }; },
+    });
+    assert.ok(tb.declarations.some((d) => d.name === 'remember'), 'remember is always offered');
+    const res = await tb.execute('remember', { title: 'SLA 基準', fact: '客服 SLA 為 24 小時內首次回覆。' });
+    assert.equal(res.saved, true);
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0].empId, employee.id, 'writes to THIS agent\'s knowledge base only');
+    assert.equal(saved[0].data.source, 'memory');
+    const bad = await tb.execute('remember', { title: '', fact: '' });
+    assert.ok(bad.error, 'empty memory is refused');
+  });
+
   await step('toolbox: per-agent webSearch=false forbids the tool even when globally enabled', async () => {
     const restricted = { ...employee, agentConfig: { webSearch: false } };
     const tb = buildToolbox({ employee: restricted, searchKnowledge: fakeSearch, _webEnabled: true });

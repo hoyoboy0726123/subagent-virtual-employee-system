@@ -343,6 +343,14 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                       📄 {TYPE_LABELS[k.metadata?.sourceType] || '檔案'}
                     </span>
                   )}
+                  {k.source === 'memory' && (
+                    <span className="tag" title={k.metadata?.topic ? `來自會議：${k.metadata.topic}` : '代理自主記憶'}>
+                      🧠 記憶
+                    </span>
+                  )}
+                  {k.source === 'research' && (
+                    <span className="tag tag-blue" title="經你核准的自主研究報告">🔍 研究</span>
+                  )}
                   {k.metadata?.parseStatus === 'fallback' && (
                     <span className="tag" title={k.metadata?.parseError || ''}>內建擷取</span>
                   )}
