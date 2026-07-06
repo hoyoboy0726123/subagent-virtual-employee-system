@@ -13,8 +13,9 @@
     "build": "vite build --config client/vite.config.js",
     "start": "node server/src/index.js",
     "serve": "npm run build && npm run start",
-    "test": "node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
+    "test": "node server/test/smoke.tools.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
     "test:orchestration": "node server/test/smoke.orchestration.mjs",
+    "test:tools": "node server/test/smoke.tools.mjs",
     "test:openclaw": "node server/test/smoke.openclaw.mjs",
     "test:markitdown": "node server/test/smoke.markitdown.mjs"
   },

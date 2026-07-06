@@ -19,7 +19,8 @@
 // (network/quota/empty), the executor degrades *per turn* to the deterministic
 // engine and marks that turn `live: false` — so the orchestration is real either
 // way, and the runtime metadata can report exactly how much ran live.
-import { generate, llmEnabled } from '../reasoning/llm.js';
+import { generateAgentic, llmEnabled } from '../reasoning/llm.js';
+import { buildToolbox } from '../reasoning/tools.js';
 import * as engine from '../reasoning/engine.js';
 import { config } from '../config.js';
 import { polishUtterance } from './output.js';
@@ -151,13 +152,13 @@ export async function meetingTurn({ employee, grounding, context }) {
     user = lines.join('\n');
   }
 
-  const text = await runOrFallback({
+  const turn = await runOrFallback({
     employee,
     grounding,
     user,
     fallback: () => engine.speak(employee, topic, round, context.priorSpeakers || [], grounding),
   });
-  return { ...text, citations: citationsFor(grounding) };
+  return withCitations(turn, grounding);
 }
 
 /**
@@ -189,29 +190,48 @@ export async function goalTurn({ employee, grounding, context }) {
     '約 4–6 句，具體、口語，只輸出內容，不要條列編號、不要標題。',
   ].filter(Boolean).join('\n');
 
-  const text = await runOrFallback({
+  const turn = await runOrFallback({
     employee,
     grounding,
     user,
     fallback: () => engine.goalApproach(employee, title, grounding),
   });
-  return { ...text, citations: citationsFor(grounding) };
+  return withCitations(turn, grounding);
 }
 
-// Single live model turn with one retry; deterministic fallback on failure.
-// Returns { text, live }. `live` is true only when the model actually answered.
-// Temperature is nudged per-employee so distinct personas also phrase distinctly.
+// Merge the pre-injected grounding with whatever the agent looked up ITSELF via
+// search_knowledge mid-turn — so citations honestly cover both sources.
+function withCitations(turn, grounding) {
+  const citations = citationsFor(grounding);
+  const seen = new Set(citations.map((c) => `${c.documentTitle}|${c.snippet}`));
+  for (const h of turn.toolHits || []) {
+    const k = `${h.documentTitle}|${h.snippet}`;
+    if (seen.has(k) || citations.length >= 4) continue;
+    seen.add(k);
+    citations.push({ documentTitle: h.documentTitle, snippet: h.snippet });
+  }
+  const { toolHits, ...rest } = turn;
+  return { ...rest, citations };
+}
+
+// Single live agentic turn (with tool use) plus one retry; deterministic
+// fallback on failure. Returns { text, live, toolCalls, toolHits }. `live` is
+// true only when the model actually answered. Temperature is nudged
+// per-employee so distinct personas also phrase distinctly.
 async function runOrFallback({ employee, grounding, user, fallback }) {
   if (llmEnabled()) {
     const system = personaSystem(employee, grounding);
     const temperature = 0.72 + ((seedOf(employee.id || employee.name) % 16) / 100); // 0.72–0.87
     for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await generate({ system, user, maxTokens: 700, temperature });
-      const t = polishUtterance(res?.text?.trim() || '');
-      if (t) return { text: t, live: true };
+      const toolbox = buildToolbox({ employee });
+      const res = await generateAgentic({ system, user, toolbox, maxTokens: 700, temperature });
+      const t = polishUtterance(res?.text || '');
+      if (t) {
+        return { text: t, live: true, toolCalls: res.toolCalls, toolHits: toolbox.knowledgeHits() };
+      }
     }
   }
-  return { text: polishUtterance(fallback()), live: false };
+  return { text: polishUtterance(fallback()), live: false, toolCalls: 0, toolHits: [] };
 }
 
 // Honest model identity for runtime metadata.

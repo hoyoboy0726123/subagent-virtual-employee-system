@@ -52,6 +52,26 @@ export const config = {
     disabled: /^(1|true|yes|on)$/i.test(process.env.MARKITDOWN_DISABLE || ''),
   },
 
+  // Agentic tool use (Phase 13). When the live LLM is active, each employee
+  // agent may CALL TOOLS during its turn instead of only answering from the
+  // pre-injected grounding: it can re-query its own knowledge base mid-turn
+  // (always available) and, when a web-search provider is configured, search
+  // the web on its own initiative. Both are enhancements — the offline engine
+  // and the zero-config path are unaffected (standalone-first, like the LLM
+  // and MarkItDown).
+  tools: {
+    // Hard ceiling on tool calls per agent turn (loop guard).
+    maxCallsPerTurn: Number(process.env.AGENT_MAX_TOOL_CALLS) || 3,
+    // Optional web search. Enabled only when an API key is present; the default
+    // endpoint speaks the Tavily search API shape but is overridable.
+    webSearch: {
+      apiKey: process.env.TAVILY_API_KEY || process.env.WEB_SEARCH_API_KEY || '',
+      endpoint: process.env.WEB_SEARCH_ENDPOINT || 'https://api.tavily.com/search',
+      maxResults: Number(process.env.WEB_SEARCH_MAX_RESULTS) || 5,
+      timeoutSec: Number(process.env.WEB_SEARCH_TIMEOUT_SEC) || 20,
+    },
+  },
+
   // Optional live LLM via Google Gen AI (@google/genai). Absent by default →
   // deterministic engine. Auth is by API key: prefer GEMINI_API_KEY, fall back
   // to GOOGLE_API_KEY. The model id is fixed to gemma-4-31b-it but overridable.

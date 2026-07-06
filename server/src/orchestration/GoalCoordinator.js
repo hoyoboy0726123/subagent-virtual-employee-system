@@ -51,6 +51,7 @@ export async function executeGoal({ title, description, assignees }) {
       subtask: engine.goalSubtask(emp, title),
       approach: turn.text,
       live: turn.live,
+      toolCalls: turn.toolCalls || 0,
       status: 'in-progress',
       order: i + 1,
     });

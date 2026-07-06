@@ -64,8 +64,18 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 > was de-boilerplated too, so the zero-key experience is distinct and concrete.
 > See [The standalone runtime](#-the-standalone-runtime-built-in-multi-agent).
 >
-> The full productization plan — through the planned Phases 9–10 (history/search
-> management, final packaging) — lives in **[ROADMAP.md](./ROADMAP.md)**.
+> **Phase 13 (shipped).** **Agentic tool use** — live agent turns are no longer
+> single-shot prompt calls: each employee agent can now *decide on its own* to
+> call tools before speaking. `search_knowledge` (always available) lets it
+> re-query its own knowledge base mid-turn with a query it formulates itself;
+> `web_search` (optional, provider-gated) lets it reach the web when a key is
+> configured — and is simply not offered otherwise, preserving standalone-first.
+> The loop is bounded (`AGENT_MAX_TOOL_CALLS`, default 3), refuses repeated
+> identical calls, records `toolCalls` on every transcript turn, and merges
+> looked-up chunks into the turn's citations so grounding stays honest.
+>
+> The full productization plan — through the planned Phase 14 (final packaging)
+> — lives in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---
 

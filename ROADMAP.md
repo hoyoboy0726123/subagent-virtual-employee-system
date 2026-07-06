@@ -122,7 +122,44 @@ _Deferred to a later pass: streaming/progress signal to the UI for long runs._
 _Deferred to a later pass: re-run / duplicate, archive / bulk export, and deeper
 run history actions beyond discoverability._
 
-## 🧭 Phase 10 — Final product polish & packaging
+## ✅ Phases 10–12 — Offline output naturalness *(shipped)*
+
+**Goal:** three small polish passes on output quality (previously untracked here
+— reconciling this doc with the git history).
+
+- [x] Phase 10: output reliability + demo polish (`orchestration/output.js`
+      utterance/artifact polishing, dangling-tail repair).
+- [x] Phase 11: de-echo and naturalize offline meeting output.
+- [x] Phase 12: reduce template bleed in offline reports.
+
+## ✅ Phase 13 — Agentic tool use *(shipped)*
+
+**Goal:** agents stop being push-fed prompt functions and start *pulling* what
+they need — the first step toward true subagent autonomy.
+
+- [x] **Toolbox registry** (`reasoning/tools.js`): declarative tool schemas +
+      one `execute()` dispatcher + an honest per-turn `trace`.
+- [x] **`search_knowledge`** — always available: mid-turn, an agent can re-query
+      *its own* knowledge base with a query it formulates itself (e.g. a term a
+      colleague just raised), instead of relying only on the topic-keyword
+      grounding pre-injected by the orchestrator. Looked-up chunks merge into the
+      turn's citations, so grounding stays honest.
+- [x] **`web_search`** — optional, provider-gated (`TAVILY_API_KEY` /
+      `WEB_SEARCH_API_KEY`); without a key the tool is simply not offered —
+      standalone-first, exactly like the live LLM and MarkItDown.
+- [x] **Agentic loop** (`llm.js generateAgentic`): bounded perceive → act →
+      observe. Native function calling on models that support it; a prompt
+      protocol (single-line JSON request → result fed back → speak) for Gemma,
+      which lacks native tool support. Guards: `AGENT_MAX_TOOL_CALLS` per turn
+      (default 3) + repeated-identical-call refusal; any failure falls back
+      cleanly to the deterministic engine.
+- [x] Transcript turns and goal tasks record `toolCalls`; `GET /api/health`
+      advertises `tools: { knowledgeSearch, webSearch, maxCallsPerTurn }`.
+- [x] Hermetic tests (`npm run test:tools`, part of `npm test`): protocol
+      parsing, employee scoping, provider gating (no network), the
+      search-then-speak loop, loop bounding, and the zero-overhead no-tool path.
+
+## 🧭 Phase 14 — Final product polish & packaging
 
 **Goal:** ship-ready operational clarity.
 

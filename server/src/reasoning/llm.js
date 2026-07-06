@@ -101,3 +101,98 @@ export async function complete(system, user, maxTokens = 1500) {
   const result = await generate({ system, user, maxTokens });
   return result?.text ? result.text.trim() : null;
 }
+
+// ---------------------------------------------------------------------------
+// Agentic generation (Phase 13): a bounded perceive → act → observe loop that
+// lets one agent turn CALL TOOLS before speaking. Two transports, one behaviour:
+//   • non-Gemma models → native function calling (`tools` + `.functionCalls`,
+//     answered with `functionResponse` parts on the contents array);
+//   • Gemma (the default) → a prompt protocol: the model asks for a tool by
+//     replying with a single JSON line, we execute it and re-prompt with the
+//     result (see tools.js parseToolRequest/formatToolResult).
+// The loop is guarded by config.tools.maxCallsPerTurn and repeated-call
+// detection; on any failure it returns null so callers fall back cleanly.
+// ---------------------------------------------------------------------------
+import { parseToolRequest, formatToolResult } from './tools.js';
+
+/**
+ * @param {object}   opts
+ * @param {string}   opts.system        persona system instruction
+ * @param {string}   opts.user          the turn prompt
+ * @param {object}   opts.toolbox       from buildToolbox() — declarations/instructions/execute/trace
+ * @param {number}   [opts.maxTokens]
+ * @param {number}   [opts.temperature]
+ * @param {Function} [opts._generate]   injectable generate fn (hermetic tests)
+ * @returns {Promise<{text: string, toolCalls: number}|null>}
+ */
+export async function generateAgentic({
+  system,
+  user,
+  toolbox,
+  maxTokens = 700,
+  temperature = 0.7,
+  _generate = generate,
+} = {}) {
+  if (!toolbox || !toolbox.declarations?.length) {
+    const res = await _generate({ system, user, maxTokens, temperature });
+    return res?.text ? { text: res.text.trim(), toolCalls: 0 } : null;
+  }
+  const maxSteps = config.tools.maxCallsPerTurn;
+  const seenCalls = new Set();
+
+  if (!isGemma()) {
+    // Native function calling: grow a contents array of turns.
+    const contents = [{ role: 'user', parts: [{ text: user }] }];
+    for (let step = 0; step <= maxSteps; step++) {
+      const res = await _generate({
+        system, contents, tools: toolset(toolbox.declarations), maxTokens, temperature,
+      });
+      if (!res) return null;
+      const calls = res.functionCalls || [];
+      if (!calls.length) {
+        return res.text ? { text: res.text.trim(), toolCalls: toolbox.trace.length } : null;
+      }
+      if (step === maxSteps) return null; // still asking for tools with no budget left
+      contents.push({ role: 'model', parts: calls.map((c) => ({ functionCall: c })) });
+      const parts = [];
+      for (const call of calls) {
+        const key = `${call.name}:${JSON.stringify(call.args || {})}`;
+        const response = seenCalls.has(key)
+          ? { error: '你已經用相同參數查過了，請直接發言。' }
+          : await toolbox.execute(call.name, call.args || {});
+        seenCalls.add(key);
+        parts.push({ functionResponse: { name: call.name, response } });
+      }
+      contents.push({ role: 'user', parts });
+    }
+    return null;
+  }
+
+  // Gemma prompt protocol: the tool contract lives in the instructions block.
+  const sys = `${system}\n\n${toolbox.instructions}`;
+  let convo = user;
+  for (let step = 0; step <= maxSteps; step++) {
+    const res = await _generate({ system: sys, user: convo, maxTokens, temperature });
+    if (!res?.text) return null;
+    const req = parseToolRequest(res.text);
+    if (!req) return { text: res.text.trim(), toolCalls: toolbox.trace.length };
+    if (step === maxSteps) return null;
+    const key = `${req.tool}:${JSON.stringify(req.args)}`;
+    const result = seenCalls.has(key)
+      ? { error: '你已經用相同參數查過了，請直接發言。' }
+      : await toolbox.execute(req.tool, req.args);
+    seenCalls.add(key);
+    const remaining = maxSteps - step - 1;
+    convo = [
+      convo,
+      '',
+      `（你呼叫了工具 ${req.tool}，參數 ${JSON.stringify(req.args)}。）`,
+      formatToolResult(req.tool, result),
+      '',
+      remaining > 0
+        ? `請根據以上結果繼續：若仍需查詢可再輸出一行工具 JSON（剩餘 ${remaining} 次），否則直接輸出你的正式發言。`
+        : '查詢次數已用完。請直接輸出你的正式發言，不要再輸出 JSON。',
+    ].join('\n');
+  }
+  return null;
+}

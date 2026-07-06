@@ -79,6 +79,7 @@ export async function runMeeting({ topic, participants, rounds }) {
         speakerId: emp.id,
         text: turn.text,
         live: turn.live,
+        toolCalls: turn.toolCalls || 0,
         citations: turn.citations,
       });
     }
