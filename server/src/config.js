@@ -79,6 +79,12 @@ export const config = {
     provider: 'google',
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemma-4-31b-it',
+    // Gemma 4 is a thinking model; its reasoning tokens count against
+    // maxOutputTokens and add latency, which short conversational agent turns
+    // don't need. 'MINIMAL' is the ONLY level the Gemini API accepts for Gemma 4
+    // (NONE/LOW are rejected) and empirically suppresses thought parts entirely.
+    // Set LLM_THINKING_LEVEL='' to restore the model's default (full thinking).
+    thinkingLevel: process.env.LLM_THINKING_LEVEL ?? 'MINIMAL',
   },
 
   // Real OpenClaw runtime wiring. Employees are executed as real OpenClaw

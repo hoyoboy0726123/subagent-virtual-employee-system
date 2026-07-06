@@ -72,6 +72,12 @@ export async function generate({
   if (!ai) return null;
 
   const cfg = { maxOutputTokens: maxTokens, temperature };
+  // Suppress Gemma 4's always-on thinking (see config.llm.thinkingLevel): turns
+  // come back faster, and small output budgets are spent on the answer instead
+  // of thought parts. Applied only to gemma-4* — other models keep their default.
+  if (config.llm.thinkingLevel && /^gemma-4/i.test(config.llm.model)) {
+    cfg.thinkingConfig = { thinkingLevel: config.llm.thinkingLevel };
+  }
   let body = contents ?? user ?? '';
   if (system) {
     if (isLegacyGemma()) body = `${system}\n\n${body}`;
