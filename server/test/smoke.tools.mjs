@@ -55,7 +55,28 @@ try {
     assert.ok(res.error, 'direct call reports it is disabled instead of hitting the network');
   });
 
-  await step('generateAgentic (Gemma protocol): agent decides to search, gets results, then speaks', async () => {
+  await step('generateAgentic (native function calling — Gemma 4+/Gemini path): search then speak', async () => {
+    const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
+    const seen = [];
+    const fake = async ({ contents }) => {
+      seen.push(contents);
+      return seen.length === 1
+        ? { text: null, functionCalls: [{ name: 'search_knowledge', args: { query: 'SLA' } }] }
+        : { text: '根據客服手冊，SLA 是 24 小時內首次回覆，我建議以此為驗收基準。', functionCalls: [] };
+    };
+    const res = await generateAgentic({
+      system: 'persona', user: '請發言', toolbox: tb, _generate: fake, _legacyProtocol: false,
+    });
+    assert.ok(res.text.includes('24 小時'), 'final utterance uses what the tool returned');
+    assert.equal(res.toolCalls, 1);
+    const responseTurn = seen[1].find((c) => c.parts?.some((p) => p.functionResponse));
+    assert.ok(responseTurn, 'tool result was sent back as a functionResponse turn');
+    const payload = JSON.stringify(responseTurn);
+    assert.ok(payload.includes('客服手冊') && payload.includes('24 小時內首次回覆'),
+      'the retrieved hit itself is what the agent observes');
+  });
+
+  await step('generateAgentic (legacy Gemma 1–3 prompt protocol): search then speak', async () => {
     const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
     const prompts = [];
     const fake = async ({ user }) => {
@@ -64,19 +85,27 @@ try {
         ? { text: '{"tool":"search_knowledge","args":{"query":"SLA"}}', functionCalls: [] }
         : { text: '根據客服手冊，SLA 是 24 小時內首次回覆，我建議以此為驗收基準。', functionCalls: [] };
     };
-    const res = await generateAgentic({ system: 'persona', user: '請發言', toolbox: tb, _generate: fake });
+    const res = await generateAgentic({
+      system: 'persona', user: '請發言', toolbox: tb, _generate: fake, _legacyProtocol: true,
+    });
     assert.ok(res.text.includes('24 小時'), 'final utterance uses what the tool returned');
     assert.equal(res.toolCalls, 1);
     assert.ok(prompts[1].includes('客服手冊'), 'tool result was fed back into the follow-up prompt');
     assert.ok(prompts[1].includes('標準 SLA'), 'the retrieved snippet itself is visible to the agent');
   });
 
-  await step('generateAgentic: loop is bounded and repeated identical calls are refused', async () => {
-    const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
-    const fake = async () => ({ text: '{"tool":"search_knowledge","args":{"query":"SLA"}}', functionCalls: [] });
-    const res = await generateAgentic({ system: 'p', user: 'u', toolbox: tb, _generate: fake });
-    assert.equal(res, null, 'a model that never stops asking for tools falls back cleanly');
-    assert.equal(tb.trace.length, 1, `identical call executed once, not ${config.tools.maxCallsPerTurn}+ times`);
+  await step('generateAgentic: loop is bounded and repeated identical calls are refused (both paths)', async () => {
+    for (const legacy of [false, true]) {
+      const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
+      const fake = async () => (legacy
+        ? { text: '{"tool":"search_knowledge","args":{"query":"SLA"}}', functionCalls: [] }
+        : { text: null, functionCalls: [{ name: 'search_knowledge', args: { query: 'SLA' } }] });
+      const res = await generateAgentic({
+        system: 'p', user: 'u', toolbox: tb, _generate: fake, _legacyProtocol: legacy,
+      });
+      assert.equal(res, null, 'a model that never stops asking for tools falls back cleanly');
+      assert.equal(tb.trace.length, 1, `identical call executed once, not ${config.tools.maxCallsPerTurn}+ times`);
+    }
   });
 
   await step('generateAgentic: an agent that does not need tools just speaks (zero overhead)', async () => {

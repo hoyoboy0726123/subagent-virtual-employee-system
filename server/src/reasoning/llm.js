@@ -13,9 +13,11 @@
 //   • `generate()` returns a normalized { text, functionCalls } shape so future
 //     tool/function-calling can be layered in without touching call sites — pass
 //     `tools` (see `toolset()` / `Type`) and read `.functionCalls`.
-//   • Gemma models on the Gemini API don't accept a separate system role, so a
-//     system instruction is folded into the prompt for them (and passed as a
-//     real `systemInstruction` for non-Gemma models).
+//   • Gemma 4+ handles system instructions and function calling natively at the
+//     model level (same google-genai SDK surface as Gemini — see
+//     https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api). Only LEGACY
+//     Gemma (1–3) lacked a separate system role, so the fold-into-prompt shim
+//     now applies to those models alone.
 import { GoogleGenAI, Type } from '@google/genai';
 import { config, llmEnabled } from '../config.js';
 
@@ -30,7 +32,9 @@ function getClient() {
   return client;
 }
 
-const isGemma = () => /^gemma/i.test(config.llm.model);
+// Gemma 1–3 needed prompt-folding for system instructions and a prompt protocol
+// for tools; Gemma 4+ supports both natively, exactly like Gemini models.
+const isLegacyGemma = () => /^gemma-[1-3]\b/i.test(config.llm.model);
 
 /**
  * Light abstraction point for (future) function calling: wrap plain function
@@ -70,27 +74,55 @@ export async function generate({
   const cfg = { maxOutputTokens: maxTokens, temperature };
   let body = contents ?? user ?? '';
   if (system) {
-    if (isGemma()) body = `${system}\n\n${body}`;
+    if (isLegacyGemma()) body = `${system}\n\n${body}`;
     else cfg.systemInstruction = system;
   }
   if (tools) cfg.tools = tools;
   if (toolConfig) cfg.toolConfig = toolConfig;
 
-  try {
-    const res = await ai.models.generateContent({
-      model: config.llm.model,
-      contents: body,
-      config: cfg,
-    });
-    return {
-      text: res.text ?? null,
-      functionCalls: res.functionCalls ?? [],
-      raw: res,
-    };
-  } catch (err) {
-    console.warn(`[llm] Google Gen AI request failed, falling back to deterministic engine: ${err.message}`);
-    return null;
+  // Resilience, learned against the real API:
+  //   • the Gemini API intermittently returns 500/503 on newer models (measured
+  //     ~40% of calls on gemma-4-31b-it at launch, independent of parameters)
+  //     and 429 under quota pressure — transient, so retry up to 5 attempts
+  //     with a short backoff (drives per-call failure odds to ~1%);
+  //   • gemma-4-31b-it is a THINKING model whose reasoning tokens count against
+  //     maxOutputTokens (and thinkingConfig is not supported on it) — a tight
+  //     budget can be consumed entirely by thought parts, yielding
+  //     finishReason=MAX_TOKENS with NO text. Detect that and retry with a
+  //     tripled budget instead of failing the turn.
+  // Non-transient errors (bad key, bad request) fail immediately; callers fall
+  // back to the deterministic engine on null.
+  const TRANSIENT = /"code":\s*(429|500|503)|INTERNAL|UNAVAILABLE|RESOURCE_EXHAUSTED/;
+  const MAX_ATTEMPTS = 5;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    try {
+      const res = await ai.models.generateContent({
+        model: config.llm.model,
+        contents: body,
+        config: cfg,
+      });
+      const finish = res.candidates?.[0]?.finishReason;
+      const starved = !res.text && !(res.functionCalls?.length) && finish === 'MAX_TOKENS';
+      if (starved && cfg.maxOutputTokens && attempt < MAX_ATTEMPTS - 1) {
+        cfg.maxOutputTokens *= 3; // thinking ate the whole budget — give it room
+        continue;
+      }
+      return {
+        text: res.text ?? null,
+        functionCalls: res.functionCalls ?? [],
+        raw: res,
+      };
+    } catch (err) {
+      const transient = TRANSIENT.test(err.message || '');
+      if (transient && attempt < MAX_ATTEMPTS - 1) {
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1) ** 2)); // 0.4s → 6.4s
+        continue;
+      }
+      console.warn(`[llm] Google Gen AI request failed, falling back to deterministic engine: ${err.message}`);
+      return null;
+    }
   }
+  return null;
 }
 
 /**
@@ -105,9 +137,10 @@ export async function complete(system, user, maxTokens = 1500) {
 // ---------------------------------------------------------------------------
 // Agentic generation (Phase 13): a bounded perceive → act → observe loop that
 // lets one agent turn CALL TOOLS before speaking. Two transports, one behaviour:
-//   • non-Gemma models → native function calling (`tools` + `.functionCalls`,
-//     answered with `functionResponse` parts on the contents array);
-//   • Gemma (the default) → a prompt protocol: the model asks for a tool by
+//   • Gemma 4+ (the default) and Gemini → NATIVE function calling (`tools` +
+//     `.functionCalls`, answered with `functionResponse` parts on the contents
+//     array) — Gemma 4 supports this at the model level;
+//   • legacy Gemma (1–3) → a prompt protocol: the model asks for a tool by
 //     replying with a single JSON line, we execute it and re-prompt with the
 //     result (see tools.js parseToolRequest/formatToolResult).
 // The loop is guarded by config.tools.maxCallsPerTurn and repeated-call
@@ -122,7 +155,8 @@ import { parseToolRequest, formatToolResult } from './tools.js';
  * @param {object}   opts.toolbox       from buildToolbox() — declarations/instructions/execute/trace
  * @param {number}   [opts.maxTokens]
  * @param {number}   [opts.temperature]
- * @param {Function} [opts._generate]   injectable generate fn (hermetic tests)
+ * @param {Function} [opts._generate]       injectable generate fn (hermetic tests)
+ * @param {boolean}  [opts._legacyProtocol] force the prompt-protocol transport (hermetic tests)
  * @returns {Promise<{text: string, toolCalls: number}|null>}
  */
 export async function generateAgentic({
@@ -132,6 +166,7 @@ export async function generateAgentic({
   maxTokens = 700,
   temperature = 0.7,
   _generate = generate,
+  _legacyProtocol = isLegacyGemma(),
 } = {}) {
   if (!toolbox || !toolbox.declarations?.length) {
     const res = await _generate({ system, user, maxTokens, temperature });
@@ -140,7 +175,7 @@ export async function generateAgentic({
   const maxSteps = config.tools.maxCallsPerTurn;
   const seenCalls = new Set();
 
-  if (!isGemma()) {
+  if (!_legacyProtocol) {
     // Native function calling: grow a contents array of turns.
     const contents = [{ role: 'user', parts: [{ text: user }] }];
     for (let step = 0; step <= maxSteps; step++) {
@@ -168,7 +203,8 @@ export async function generateAgentic({
     return null;
   }
 
-  // Gemma prompt protocol: the tool contract lives in the instructions block.
+  // Legacy Gemma (1–3) prompt protocol: the tool contract lives in the
+  // instructions block instead of native declarations.
   const sys = `${system}\n\n${toolbox.instructions}`;
   let convo = user;
   for (let step = 0; step <= maxSteps; step++) {

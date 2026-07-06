@@ -16,6 +16,7 @@
     "test": "node server/test/smoke.tools.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
     "test:orchestration": "node server/test/smoke.orchestration.mjs",
     "test:tools": "node server/test/smoke.tools.mjs",
+    "test:live": "node server/test/live.agentic.mjs",
     "test:openclaw": "node server/test/smoke.openclaw.mjs",
     "test:markitdown": "node server/test/smoke.markitdown.mjs"
   },
