@@ -93,8 +93,11 @@ export async function synthesizeGoalOutput({ title, description, assignees, task
 }
 
 // One manager turn. Returns the trimmed text, or null to signal "fall back".
+// 4096 output tokens: a full manager report for a long meeting (many rounds ×
+// many participants) can overflow 1800; gemma-4's output ceiling is 32K so
+// there is ample headroom, and short reports simply stop early.
 async function run(user) {
   if (!llmEnabled()) return null;
-  const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: 1800, temperature: 0.55 });
+  const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: 4096, temperature: 0.55 });
   return polishArtifact(res?.text?.trim() || '') || null;
 }
