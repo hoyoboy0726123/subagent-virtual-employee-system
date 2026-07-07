@@ -19,7 +19,7 @@
 // (network/quota/empty), the executor degrades *per turn* to the deterministic
 // engine and marks that turn `live: false` — so the orchestration is real either
 // way, and the runtime metadata can report exactly how much ran live.
-import { generateAgentic, llmEnabled } from '../reasoning/llm.js';
+import { generateAgentic, llmEnabled, activeModelInfo } from '../reasoning/llm.js';
 import { buildToolbox } from '../reasoning/tools.js';
 import * as engine from '../reasoning/engine.js';
 import { config } from '../config.js';
@@ -283,7 +283,8 @@ async function runOrFallback({ employee, grounding, user, fallback }) {
   return { text: polishUtterance(fallback()), live: false, toolCalls: 0, toolHits: [], webSources: [] };
 }
 
-// Honest model identity for runtime metadata.
+// Honest model identity for runtime metadata (provider-aware, Phase 18).
 export function agentModel() {
-  return { model: config.llm.model, provider: config.llm.provider };
+  const { model, provider } = activeModelInfo();
+  return { model, provider };
 }

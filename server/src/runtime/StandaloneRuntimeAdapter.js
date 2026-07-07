@@ -17,17 +17,18 @@
 import { AgentRuntimeAdapter } from './AgentRuntimeAdapter.js';
 import * as meetingOrchestrator from '../orchestration/MeetingOrchestrator.js';
 import * as goalCoordinator from '../orchestration/GoalCoordinator.js';
-import { llmEnabled } from '../reasoning/llm.js';
+import { llmEnabled, activeModelInfo } from '../reasoning/llm.js';
 import { config } from '../config.js';
 
 export class StandaloneRuntimeAdapter extends AgentRuntimeAdapter {
   get mode() { return 'standalone'; }
 
   get label() {
-    return llmEnabled() ? `內建多代理（${config.llm.model}）` : '內建多代理（離線推理）';
+    return llmEnabled() ? `內建多代理（${activeModelInfo().model}）` : '內建多代理（離線推理）';
   }
 
   async health() {
+    const info = activeModelInfo();
     return {
       mode: this.mode,
       label: this.label,
@@ -35,8 +36,8 @@ export class StandaloneRuntimeAdapter extends AgentRuntimeAdapter {
       live: llmEnabled(),    // true when agent turns run on the live model
       engine: llmEnabled() ? 'standalone-genai' : 'deterministic',
       llm: llmEnabled(),
-      model: llmEnabled() ? config.llm.model : null,
-      provider: llmEnabled() ? config.llm.provider : null,
+      model: llmEnabled() ? info.model : null,
+      provider: llmEnabled() ? info.provider : null,
     };
   }
 

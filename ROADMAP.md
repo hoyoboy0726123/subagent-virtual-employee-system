@@ -242,7 +242,46 @@ let agents grow their own knowledge base — with the manager as gatekeeper.
       late interjection refused); live-verified — employees visibly pivot to
       the manager's directive in the continued round.
 
-## 🧭 Phase 17 — Final product polish & packaging
+## ✅ Phase 17 — OpenClaw removal, UI alignment, themes *(shipped)*
+
+- [x] OpenClaw integration removed end-to-end (adapter/CLI bridge/config/health/
+      UI); the adapter seam remains with standalone as the only runtime.
+- [x] Filter toolbars aligned (labels above full-width controls).
+- [x] Claude.ai-inspired light theme (cream + terracotta + serif headings),
+      now the DEFAULT; dark stays one click away and the choice persists.
+- [x] Knowledge viewer: click any document → full Markdown + its retrievable
+      chunks (`GET /api/knowledge/:id`).
+
+## ✅ Phase 18 — Subscription reasoning providers *(shipped)*
+
+**Goal:** run the agents' brain on an already-paid subscription instead of a
+metered API key.
+
+- [x] `LLM_PROVIDER = google | claude-cli | codex-cli`. CLI providers drive the
+      OFFICIAL binaries (`claude -p --output-format json`, `codex exec --json`)
+      as subprocesses — auth stays inside the CLI; we never touch tokens.
+- [x] Same `generate()` contract (null → deterministic-engine fallback), so
+      every caller is untouched; agentic tool use automatically routes to the
+      legacy prompt protocol (`nativeToolsSupported()`), so search_knowledge /
+      web_search / remember all still work on subscription brains.
+- [x] Guardrails: metered-billing env vars stripped from the child
+      (`ANTHROPIC_API_KEY` / `AUTH_TOKEN` / `BASE_URL`) + a loud warning when
+      `total_cost_usd > 0` (our live test caught a real mis-billing case);
+      Claude Code's own tools disabled (`--disallowedTools`); codex runs
+      `--sandbox read-only` in an empty scratch dir; FIFO semaphore caps
+      concurrent turns (subscription windows are shared).
+- [x] Windows: npm `.cmd` shims can't be exec'd without a shell — `resolveCli`
+      locates the packaged real `.exe` (verified live for `claude`).
+- [x] Honest identity everywhere: `activeModelInfo()` flows into runtime
+      metadata, health, boot banner, and the UI pill.
+- [x] ToS notes (researched 2026-07): single-user local use of your own
+      subscription is the documented, supported path; routing your credentials
+      for other users violates provider terms. Documented in README.
+- [x] Tests: 69 hermetic checks (fake-CLI providers: args/stdin/env/JSON+JSONL
+      parsing/error paths/gating) + live proof on this machine (probe → real
+      in-persona reply through `claude` in 8s, cost guard firing as designed).
+
+## 🧭 Phase 19 — Final product polish & packaging
 
 **Goal:** ship-ready operational clarity.
 

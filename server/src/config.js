@@ -79,11 +79,20 @@ export const config = {
     researchMaxCalls: Number(process.env.RESEARCH_MAX_TOOL_CALLS) || 6,
   },
 
-  // Optional live LLM via Google Gen AI (@google/genai). Absent by default →
-  // deterministic engine. Auth is by API key: prefer GEMINI_API_KEY, fall back
-  // to GOOGLE_API_KEY. The model id is fixed to gemma-4-31b-it but overridable.
+  // Live LLM reasoning brain (Phase 18: pluggable providers).
+  //   google      — Google Gen AI API (@google/genai), keyed by GEMINI_API_KEY.
+  //   claude-cli  — your Claude Pro/Max SUBSCRIPTION via the official `claude`
+  //                 CLI in headless mode (`claude -p`); usage draws from the
+  //                 subscription's limits. Single-user, local machine only —
+  //                 routing your subscription for other users violates
+  //                 Anthropic's terms.
+  //   codex-cli   — your ChatGPT Plus/Pro subscription via the official
+  //                 `codex` CLI (`codex exec`); same single-user caveat.
+  // CLI providers have no native function calling — agents automatically use
+  // the built-in prompt tool protocol, so tool autonomy still works.
   llm: {
-    provider: 'google',
+    provider: (process.env.LLM_PROVIDER || 'google').toLowerCase(),
+    // --- google ---
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemma-4-31b-it',
     // Gemma 4 is a thinking model; its reasoning tokens count against
@@ -92,10 +101,23 @@ export const config = {
     // (NONE/LOW are rejected) and empirically suppresses thought parts entirely.
     // Set LLM_THINKING_LEVEL='' to restore the model's default (full thinking).
     thinkingLevel: process.env.LLM_THINKING_LEVEL ?? 'MINIMAL',
+    // --- claude-cli (subscription) ---
+    claudeCli: {
+      cli: process.env.CLAUDE_CLI || 'claude',
+      model: process.env.CLAUDE_MODEL || 'sonnet', // sonnet | opus | haiku | full id
+      timeoutSec: Number(process.env.CLAUDE_CLI_TIMEOUT_SEC) || 300,
+      maxConcurrent: Number(process.env.CLAUDE_CLI_MAX_CONCURRENT) || 2,
+      // Long-lived headless token from `claude setup-token` (optional — the
+      // interactive `claude` login credentials work too).
+      oauthToken: process.env.CLAUDE_CODE_OAUTH_TOKEN || '',
+    },
+    // --- codex-cli (subscription) ---
+    codexCli: {
+      cli: process.env.CODEX_CLI || 'codex',
+      model: process.env.CODEX_MODEL || 'gpt-5.5-codex',
+      timeoutSec: Number(process.env.CODEX_CLI_TIMEOUT_SEC) || 300,
+      maxConcurrent: Number(process.env.CODEX_CLI_MAX_CONCURRENT) || 2,
+    },
   },
 
 };
-
-export function llmEnabled() {
-  return Boolean(config.llm.apiKey);
-}

@@ -83,7 +83,16 @@ either way, and the runtime metadata says honestly how much ran on the live mode
 > review — approval ingests it into that employee's knowledge base; rejection
 > archives it. Live-proven end-to-end (`npm run test:live:research`).
 >
-> The full productization plan — through the planned Phase 16 (final packaging)
+> **Phase 18 (shipped).** **訂閱制推理大腦** — set `LLM_PROVIDER=claude-cli`
+> (Claude Pro/Max via the official `claude` CLI) or `codex-cli` (ChatGPT
+> Plus/Pro via `codex`) and every agent turn runs on your existing
+> subscription instead of a metered API key. Agentic tools still work (prompt
+> protocol); metered-billing env vars are stripped and any non-zero
+> `total_cost_usd` triggers a loud warning. **僅限你本人、單機使用** — routing
+> your subscription credentials for other users violates the providers' terms.
+> Model overrides: `CLAUDE_MODEL`（sonnet/opus/haiku）、`CODEX_MODEL`.
+>
+> The full productization plan — through the planned Phase 19 (final packaging)
 > — lives in **[ROADMAP.md](./ROADMAP.md)**.
 
 ---

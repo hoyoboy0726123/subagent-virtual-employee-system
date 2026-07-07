@@ -19,11 +19,43 @@
 //     Gemma (1–3) lacked a separate system role, so the fold-into-prompt shim
 //     now applies to those models alone.
 import { GoogleGenAI, Type } from '@google/genai';
-import { config, llmEnabled } from '../config.js';
+import { config } from '../config.js';
+import { cliProvider, isCliProvider } from './providers/index.js';
 
 // Re-exported so callers can build function-declaration schemas without importing
 // the SDK directly (keeps the coupling in one place).
-export { llmEnabled, Type };
+export { Type };
+
+/**
+ * Is a live reasoning brain available? Provider-aware (Phase 18):
+ *   google     → a Gemini/Google API key is configured
+ *   claude-cli — the official `claude` CLI answers a version probe
+ *   codex-cli  — the official `codex` CLI answers a version probe
+ * Everything that gates live-vs-deterministic behaviour flows through here.
+ */
+export function llmEnabled() {
+  if (isCliProvider()) return cliProvider().availableSync();
+  return Boolean(config.llm.apiKey);
+}
+
+/** Honest identity of the active brain (runtime metadata / health / UI). */
+export function activeModelInfo() {
+  if (isCliProvider()) {
+    const p = cliProvider();
+    return { provider: p.name, model: p.modelId(), label: p.label() };
+  }
+  return {
+    provider: 'google',
+    model: config.llm.model,
+    label: `Google Gen AI · ${config.llm.model}`,
+  };
+}
+
+/** Native function calling is a google-API capability (Gemma 4+/Gemini). CLI
+ *  providers always speak the legacy prompt tool protocol instead. */
+export function nativeToolsSupported(model) {
+  return !isCliProvider() && !isLegacyGemma(model || config.llm.model);
+}
 
 let client = null;
 function getClient() {
@@ -70,21 +102,30 @@ export async function generate({
   toolConfig,
   maxTokens = 1500,
   temperature = 0.6,
-  model = config.llm.model,
+  model,
 } = {}) {
+  // Phase 18: CLI subscription providers take the whole call. They are plain
+  // text generators (no contents arrays / native tools — the agentic layer
+  // already routes those cases to the prompt protocol).
+  if (isCliProvider()) {
+    if (contents !== undefined && typeof contents !== 'string') return null;
+    return cliProvider().generate({ system, user: contents ?? user, maxTokens, model });
+  }
+
   const ai = getClient();
   if (!ai) return null;
+  const effModel = model || config.llm.model;
 
   const cfg = { maxOutputTokens: maxTokens, temperature };
   // Suppress Gemma 4's always-on thinking (see config.llm.thinkingLevel): turns
   // come back faster, and small output budgets are spent on the answer instead
   // of thought parts. Applied only to gemma-4* — other models keep their default.
-  if (config.llm.thinkingLevel && /^gemma-4/i.test(model)) {
+  if (config.llm.thinkingLevel && /^gemma-4/i.test(effModel)) {
     cfg.thinkingConfig = { thinkingLevel: config.llm.thinkingLevel };
   }
   let body = contents ?? user ?? '';
   if (system) {
-    if (isLegacyGemma(model)) body = `${system}\n\n${body}`;
+    if (isLegacyGemma(effModel)) body = `${system}\n\n${body}`;
     else cfg.systemInstruction = system;
   }
   if (tools) cfg.tools = tools;
@@ -107,7 +148,7 @@ export async function generate({
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     try {
       const res = await ai.models.generateContent({
-        model,
+        model: effModel,
         contents: body,
         config: cfg,
       });
@@ -178,11 +219,13 @@ export async function generateAgentic({
   maxTokens = 700,
   temperature = 0.7,
   maxSteps = config.tools.maxCallsPerTurn,
-  model = config.llm.model,
+  model,
   _generate = generate,
   _legacyProtocol = undefined,
 } = {}) {
-  const legacy = _legacyProtocol !== undefined ? _legacyProtocol : isLegacyGemma(model);
+  // CLI subscription providers and legacy Gemma both lack native function
+  // calling → the prompt tool protocol carries agentic tool use for them.
+  const legacy = _legacyProtocol !== undefined ? _legacyProtocol : !nativeToolsSupported(model);
   if (!toolbox || !toolbox.declarations?.length) {
     const res = await _generate({ system, user, maxTokens, temperature, model });
     return res?.text ? { text: res.text.trim(), toolCalls: 0 } : null;
