@@ -578,6 +578,18 @@ try {
     await api('DELETE', `/api/knowledge/${json.document.id}`);
   });
 
+  await step('knowledge viewer: document detail exposes full content + ordered chunks', async () => {
+    const { status, json } = await api('GET', `/api/knowledge/${docId}`);
+    assert.equal(status, 200);
+    assert.ok(json.content.length > 0, 'full content returned');
+    assert.ok(Array.isArray(json.chunks) && json.chunks.length === json.chunkCount,
+      'chunks array matches the advertised count');
+    assert.deepEqual(json.chunks.map((c) => c.chunkIndex), json.chunks.map((_, i) => i), 'chunks are ordered');
+    assert.ok(json.chunks[0].content.length > 0, 'chunk text is the retrievable slice');
+    const missing = await api('GET', '/api/knowledge/doc_nope');
+    assert.equal(missing.status, 404);
+  });
+
   await step('delete knowledge document', async () => {
     const { status } = await api('DELETE', `/api/knowledge/${docId}`);
     assert.equal(status, 200);

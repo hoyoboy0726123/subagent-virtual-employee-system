@@ -54,6 +54,14 @@ export function getDocument(documentId) {
   return rowToDocument(row, n);
 }
 
+/** The retrievable chunks of one document, in order — exactly what the FTS
+ *  index serves to agents during grounding/search. */
+export function listChunks(documentId) {
+  return getDb()
+    .prepare('SELECT id, chunk_index AS chunkIndex, content FROM chunks WHERE document_id = ? ORDER BY chunk_index ASC')
+    .all(documentId);
+}
+
 export function insertDocument(employeeId, data) {
   const db = getDb();
   const doc = {

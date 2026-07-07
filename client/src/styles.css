@@ -312,3 +312,9 @@ textarea { resize: vertical; }
 [data-theme='light'] .web-toggle input,
 [data-theme='light'] .agent-config-check input { accent-color: #c96442; }
 [data-theme='light'] .research-report-body a { color: #c96442; }
+
+/* Knowledge viewer */
+.note-open { cursor: pointer; }
+.note-open:hover strong { text-decoration: underline; }
+.doc-viewer-body { max-height: 480px; overflow-y: auto; display: block; }
+.chunk-text { white-space: pre-wrap; margin: 4px 0 0; font-size: 13.5px; color: var(--turn-text); }

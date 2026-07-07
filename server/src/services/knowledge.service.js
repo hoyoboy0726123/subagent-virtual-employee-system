@@ -32,6 +32,13 @@ export function removeDocument(documentId) {
   return { ok: true };
 }
 
+/** Full document detail + its retrievable chunks (the knowledge viewer). */
+export function getDocumentWithChunks(documentId) {
+  const doc = docs.getDocument(documentId);
+  if (!doc) throw notFound('找不到該文件');
+  return { ...doc, chunks: docs.listChunks(documentId) };
+}
+
 /**
  * Ingest an uploaded knowledge file (Phase 7): convert it to canonical Markdown
  * via MarkItDown (with a built-in fallback for text-like types), then feed the

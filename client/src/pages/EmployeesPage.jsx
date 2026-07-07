@@ -244,7 +244,12 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   const [note, setNote] = useState({ title: '', content: '' });
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState({ busy: false, err: '', ok: '' });
+  const [viewDoc, setViewDoc] = useState(null); // knowledge viewer (doc + chunks)
   const fileRef = useRef(null);
+
+  const openDoc = async (docId) => {
+    try { setViewDoc(await api.get(`/knowledge/${docId}`)); } catch { /* ignore */ }
+  };
 
   const addNote = async () => {
     if (!note.content.trim()) return;
@@ -337,7 +342,14 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
           <ul className="notes">
             {(employee.knowledge || []).map((k) => (
               <li key={k.id} className="note">
-                <div>
+                <div
+                  className="note-open"
+                  role="button"
+                  tabIndex={0}
+                  title="點擊查看完整內容與檢索片段"
+                  onClick={() => openDoc(k.id)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') openDoc(k.id); }}
+                >
                   <strong>{k.title}</strong>
                   {k.source === 'file' && (
                     <span className="tag tag-blue" title={k.metadata?.originalFilename || ''}>
@@ -378,10 +390,57 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
         </section>
       </div>
 
+      {viewDoc && <DocViewer doc={viewDoc} onClose={() => setViewDoc(null)} />}
+
       <div className="modal-actions between">
         <button className="btn-danger" onClick={remove}>刪除員工</button>
         <button className="btn" onClick={onEdit}>編輯檔案</button>
       </div>
+    </Modal>
+  );
+}
+
+// Knowledge viewer: the FULL document plus its retrievable chunks — the exact
+// slices the FTS index serves to agents during grounding and search_knowledge.
+function DocViewer({ doc, onClose }) {
+  const [view, setView] = useState('content');
+  const SOURCE_LABELS = { note: '手動筆記', file: '上傳文件', memory: '會議／自主記憶', research: '核准的研究報告' };
+  return (
+    <Modal title={`📄 ${doc.title}`} onClose={onClose} wide>
+      <div className="detail-meta">
+        <span className="tag">{SOURCE_LABELS[doc.source] || doc.source}</span>
+        {(doc.tags || []).map((t) => <span key={t} className="tag">{TYPE_LABELS[t] || t}</span>)}
+        <span className="muted sm">建立於 {new Date(doc.createdAt).toLocaleString('zh-Hant')}</span>
+      </div>
+      <div className="subtabs">
+        <button className={view === 'content' ? 'subtab on' : 'subtab'} onClick={() => setView('content')}>完整內容</button>
+        <button className={view === 'chunks' ? 'subtab on' : 'subtab'} onClick={() => setView('chunks')}>
+          檢索片段（{doc.chunks?.length || 0}）
+        </button>
+      </div>
+
+      {view === 'content' && (
+        <div className="profile-box doc-viewer-body"><Markdown text={doc.content} /></div>
+      )}
+
+      {view === 'chunks' && (
+        <div className="doc-viewer-body">
+          <p className="muted sm">
+            這些是文件切割後的檢索片段——員工代理在會議、目標與自主研究中，
+            透過知識檢索實際「讀到」的就是這些原文。
+          </p>
+          <ul className="notes">
+            {(doc.chunks || []).map((c) => (
+              <li key={c.id} className="note">
+                <div>
+                  <strong className="muted">片段 #{c.chunkIndex + 1}</strong>
+                  <p className="chunk-text">{c.content}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </Modal>
   );
 }

@@ -13,6 +13,11 @@ knowledgeRouter.get('/knowledge/search', asyncHandler(async (req, res) => {
   });
 }));
 
+// Knowledge viewer: full document content + its retrievable chunks.
+knowledgeRouter.get('/knowledge/:id', asyncHandler(async (req, res) => {
+  res.json(knowledge.getDocumentWithChunks(req.params.id));
+}));
+
 knowledgeRouter.delete('/knowledge/:id', asyncHandler(async (req, res) => {
   res.json(knowledge.removeDocument(req.params.id));
 }));
