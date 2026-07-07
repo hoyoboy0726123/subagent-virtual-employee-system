@@ -105,10 +105,15 @@ export async function convert(filePath, { timeoutSec } = {}) {
   const timeoutMs = (timeoutSec || config.ingest.timeoutSec) * 1000;
   const { json, spawnError, stderr } = await run(info.python, ['--convert', filePath], { timeoutMs });
   if (spawnError) {
-    const reason = /timed out|ETIMEDOUT/i.test(String(spawnError.message || '') + stderr)
-      ? 'MarkItDown 轉換逾時。'
-      : `MarkItDown 執行失敗：${(stderr || spawnError.message || '').slice(0, 300)}`;
-    return { ok: false, error: reason };
+    const isTimeout = /timed out|ETIMEDOUT/i.test(String(spawnError.message || '') + stderr);
+    // Log raw detail server-side for debugging; return only a generic message so
+    // temp paths / Python tracebacks don't leak to the client.
+    const detail = (stderr || spawnError.message || '').slice(0, 500);
+    if (detail) console.warn(`[markitdown] convert failed: ${detail}`);
+    return {
+      ok: false,
+      error: isTimeout ? 'MarkItDown 轉換逾時。' : 'MarkItDown 無法解析此檔案，已改用內建擷取或請確認檔案內容。',
+    };
   }
   if (!json || !json.ok) {
     return { ok: false, error: (json && json.error) || 'MarkItDown 轉換失敗。' };

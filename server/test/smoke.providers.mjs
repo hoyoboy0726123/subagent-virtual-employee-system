@@ -29,8 +29,9 @@ function fakeExec(stdout) {
     seen.cmd = cmd; seen.args = args; seen.opts = opts;
     return {
       stdin: {
+        on: () => {}, // real child.stdin has an 'error' listener hook
         write: (d) => { seen.stdin += d; },
-        end: () => cb(null, typeof stdout === 'function' ? stdout(seen) : stdout, ''),
+        end: (d) => { if (d) seen.stdin += d; cb(null, typeof stdout === 'function' ? stdout(seen) : stdout, ''); },
       },
     };
   };

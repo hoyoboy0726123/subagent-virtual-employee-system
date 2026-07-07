@@ -22,7 +22,6 @@
 import { generateAgentic, llmEnabled, activeModelInfo } from '../reasoning/llm.js';
 import { buildToolbox } from '../reasoning/tools.js';
 import * as engine from '../reasoning/engine.js';
-import { config } from '../config.js';
 import { polishUtterance } from './output.js';
 
 const asList = (v) =>

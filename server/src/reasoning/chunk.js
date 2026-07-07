@@ -20,9 +20,13 @@ export function chunkText(text, opts = {}) {
   const clean = String(text || '').replace(/\r\n/g, '\n').trim();
   if (!clean) return [];
 
-  // Split into sentence-ish units, preserving the delimiter.
+  // Split into sentence-ish units, preserving the delimiter. Handles BOTH Latin
+  // (.!? + following whitespace) and CJK (full-width 。！？；… which are NOT
+  // followed by a space) — without the CJK case, a Chinese document with no
+  // blank lines was one giant unsplittable unit (this app's primary language is
+  // Chinese), so chunks overran their size and boundaries fell mid-sentence.
   const units = clean
-    .split(/(?<=[.!?])\s+|\n{2,}/)
+    .split(/(?<=[。！？；…])|(?<=[.!?])\s+|\n{2,}/u)
     .map((s) => s.trim())
     .filter(Boolean);
 

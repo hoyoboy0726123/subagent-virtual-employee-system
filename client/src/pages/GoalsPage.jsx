@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
 
@@ -25,7 +25,13 @@ export default function GoalsPage({ refreshKey, onChange }) {
     setEmployees(employeeList);
     setGoalData(goals);
   };
-  useEffect(() => { reload(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); }, [refreshKey]);
+  // Single fetch path: [filters] owns loading; refreshKey just resets filters
+  // (skipping the mount tick so the list isn't double-fetched or racy).
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    setFilters({ ...DEFAULT_FILTERS });
+  }, [refreshKey]);
   useEffect(() => { reload(filters); }, [filters]);
 
   const toggle = (id) =>

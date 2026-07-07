@@ -141,10 +141,15 @@ export function insertMeeting(data) {
 /**
  * Patch a live meeting (Phase 16: continue / interject / conclude update the
  * stored transcript, artifacts, runtime stats, rounds, and status).
+ * @param {object} [opts]
+ * @param {string} [opts.expectStatus] compare-and-set guard: only patch when
+ *   the CURRENT row still has this status (blocks double-conclude races).
+ * @returns {object|null} the merged meeting, or null if not found / CAS missed.
  */
-export function updateMeeting(meetingId, patch = {}) {
+export function updateMeeting(meetingId, patch = {}, { expectStatus } = {}) {
   const existing = getMeeting(meetingId);
   if (!existing) return null;
+  if (expectStatus !== undefined && existing.status !== expectStatus) return null;
   const merged = { ...existing, ...patch, id: existing.id, createdAt: existing.createdAt };
   getDb()
     .prepare(`UPDATE meetings SET

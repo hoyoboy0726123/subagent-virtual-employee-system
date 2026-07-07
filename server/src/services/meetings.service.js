@@ -7,6 +7,11 @@ import { distillMeetingMemories } from '../orchestration/MemoryDistiller.js';
 import { interject as interjectLive } from '../orchestration/MeetingOrchestrator.js';
 import { badRequest, notFound } from '../util/http.js';
 import { id as newId } from '../util/ids.js';
+import { withLock } from '../util/locks.js';
+
+// Serialize continue/interject/conclude PER meeting so a long LLM await can't
+// let two requests read the same transcript and clobber each other's turns.
+const mkey = (id) => `meeting:${id}`;
 
 const MANAGER_TURN = { speaker: '主管', role: '會議主持人', speakerId: 'manager' };
 
@@ -109,8 +114,7 @@ export async function startDiscussion({ topic, participantIds, rounds } = {}, on
     throw badRequest('主題與至少一位與會者為必填');
   }
   const runtime = requireInteractiveRuntime();
-  const runId = newId('run');
-  try { onEvent?.({ type: 'run', runId }); } catch { /* ignore */ }
+  const runId = newId('run'); // the orchestrator registers the mailbox + emits 'run'
 
   const result = await runtime.runMeetingRounds({
     topic, participants, rounds: boundRounds(rounds), runId, onEvent,
@@ -130,31 +134,36 @@ export async function startDiscussion({ topic, participantIds, rounds } = {}, on
 
 /** Continue a discussing meeting for more rounds (transcript carries over). */
 export async function continueDiscussion(meetingId, { rounds } = {}, onEvent) {
-  const meeting = repo.getMeeting(meetingId);
-  if (!meeting) throw notFound('找不到該會議');
-  if (meeting.status !== 'discussing') throw badRequest('這場會議已經結束，無法繼續討論。');
-  const participants = getEmployees(meeting.participantIds);
-  if (!participants.length) throw badRequest('與會者已不存在');
+  return withLock(mkey(meetingId), async () => {
+    const meeting = repo.getMeeting(meetingId);
+    if (!meeting) throw notFound('找不到該會議');
+    if (meeting.status !== 'discussing') throw badRequest('這場會議已經結束，無法繼續討論。');
+    const participants = getEmployees(meeting.participantIds);
+    if (!participants.length) throw badRequest('與會者已不存在');
 
-  const runtime = requireInteractiveRuntime();
-  const runId = newId('run');
-  try { onEvent?.({ type: 'run', runId }); } catch { /* ignore */ }
+    const runtime = requireInteractiveRuntime();
+    const runId = newId('run'); // orchestrator registers the mailbox + emits 'run'
 
-  const more = boundRounds(rounds, 1);
-  const result = await runtime.runMeetingRounds({
-    topic: meeting.topic,
-    participants,
-    rounds: more,
-    priorTranscript: meeting.transcript,
-    runId,
-    onEvent,
-  });
+    const more = boundRounds(rounds, 1);
+    const result = await runtime.runMeetingRounds({
+      topic: meeting.topic,
+      participants,
+      rounds: more,
+      priorTranscript: meeting.transcript,
+      runId,
+      onEvent,
+    });
 
-  return repo.updateMeeting(meetingId, {
-    rounds: meeting.rounds + more,
-    transcript: result.transcript,
-    grounding: dedupeGrounding([...(meeting.grounding || []), ...(result.grounding || [])]),
-    runtime: mergeRuntime(meeting.runtime, result.runtime),
+    // Re-read: a stored interjection may have been appended while we ran.
+    const fresh = repo.getMeeting(meetingId) || meeting;
+    const updated = repo.updateMeeting(meetingId, {
+      rounds: fresh.rounds + more,
+      transcript: result.transcript,
+      grounding: dedupeGrounding([...(fresh.grounding || []), ...(result.grounding || [])]),
+      runtime: mergeRuntime(fresh.runtime, result.runtime),
+    });
+    if (!updated) throw notFound('會議在討論期間已被刪除');
+    return updated;
   });
 }
 
@@ -205,12 +214,16 @@ export async function concludeDiscussion(meetingId, onEvent) {
     onEvent,
   });
 
+  // CAS: flip discussing → concluded only if still discussing. Guards against a
+  // double-conclude (each would otherwise write a duplicate report + a second
+  // set of per-participant memories) and against deletion mid-run.
   const updated = repo.updateMeeting(meetingId, {
     minutes: result.minutes,
     report: result.report,
     runtime: mergeRuntime(meeting.runtime, result.runtime),
     status: 'concluded',
-  });
+  }, { expectStatus: 'discussing' });
+  if (!updated) throw badRequest('這場會議已經產出過報告或已被刪除。');
 
   try { onEvent?.({ type: 'memory' }); } catch { /* ignore */ }
   try {

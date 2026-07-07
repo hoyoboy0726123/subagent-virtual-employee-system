@@ -441,15 +441,24 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
     setDialogue((d) => ({ ...d, transcript: [...d.transcript, { who: 'manager', text }] }));
     try {
       setDialogue(await api.post(`/dialogues/${dialogue.id}/messages`, { text }));
-    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+    } catch (e) {
+      // Roll the optimistic echo back and give the manager their words back —
+      // otherwise the message silently vanishes on the next successful send.
+      setErr(e.message);
+      setDialogue((d) => ({ ...d, transcript: d.transcript.slice(0, -1) }));
+      setDraft(text);
+    } finally { setBusy(false); }
   };
 
+  const [ending, setEnding] = useState(false);
   const end = async (save) => {
+    if (ending) return; // double-click guard
+    setEnding(true);
     try {
       const res = await api.post(`/dialogues/${dialogue.id}/close`, { save });
       if (res.saved) onSaved();
       else onClose();
-    } catch (e) { setErr(e.message); }
+    } catch (e) { setErr(e.message); setEnding(false); }
   };
 
   return (
@@ -663,7 +672,7 @@ function ResearchSection({ employee, onChange }) {
                     {r.sources.length > 0 && (
                       <div className="muted sm">
                         引用來源：
-                        {r.sources.map((s) => (
+                        {r.sources.filter((s) => /^https?:\/\//i.test(s.url || '')).map((s) => (
                           <div key={s.url}>
                             <a href={s.url} target="_blank" rel="noreferrer noopener">{s.title || s.url}</a>
                           </div>

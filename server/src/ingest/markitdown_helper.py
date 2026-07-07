@@ -124,25 +124,37 @@ def _pdf_tables_markdown(path):
         lines += ["| " + " | ".join(_cell(c) for c in row) + " |" for row in body]
         return f"（第 {page_no} 頁）\n" + "\n".join(lines)
 
+    # Budget: table enrichment is a nice-to-have that must never blow the base
+    # conversion's time budget. Cap pages scanned and wall-clock; the expensive
+    # text-strategy pass (per-page word clustering) is skipped once time is
+    # tight. flush_cache() keeps memory flat on long PDFs.
+    import time
+    MAX_PAGES = 60
+    TIME_BUDGET_S = 25.0
+    started = time.monotonic()
     blocks = []
     try:
         with pdfplumber.open(path) as pdf:
             for page_no, page in enumerate(pdf.pages, start=1):
+                if page_no > MAX_PAGES or (time.monotonic() - started) > TIME_BUDGET_S:
+                    break
                 found = []
                 # Primary: ruled tables (cell borders drawn as lines).
                 for table in page.extract_tables() or []:
                     rows = [r for r in table if r and any(str(c or "").strip() for c in r)]
                     if credible(rows, strict=False):
                         found.append(rows)
-                # Fallback: borderless tables laid out purely by position —
-                # infer the grid from text alignment, with the strict filter.
-                if not found:
+                # Fallback: borderless tables laid out purely by position — infer
+                # the grid from text alignment (expensive), only while there's
+                # ample time budget left.
+                if not found and (time.monotonic() - started) < TIME_BUDGET_S * 0.5:
                     settings = {"vertical_strategy": "text", "horizontal_strategy": "text"}
                     for table in page.extract_tables(settings) or []:
                         rows = [r for r in table if r and any(str(c or "").strip() for c in r)]
                         if credible(rows, strict=True):
                             found.append(rows)
                 blocks += [to_block(rows, page_no) for rows in found]
+                page.flush_cache()
     except Exception:
         return ""
     if not blocks:

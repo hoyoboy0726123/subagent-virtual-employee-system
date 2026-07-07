@@ -1,11 +1,34 @@
 {
   "name": "subagent-virtual-employee-system",
   "version": "1.0.0",
-  "private": true,
-  "description": "A digital virtual-employee system: create AI employee roles, give them knowledge, run meetings, and assign collaborative goals.",
+  "description": "A standalone virtual-employee system with built-in multi-agent orchestration: create AI employees, give them knowledge, run manager-chaired meetings, assign collaborative goals, and hold 1-on-1s — grounded in retrieval, runnable with zero API keys.",
   "type": "module",
+  "license": "MIT",
+  "author": "hoyoboy0726 <hoyoboy0726@gmail.com>",
+  "homepage": "https://github.com/hoyoboy0726123/subagent-virtual-employee-system#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hoyoboy0726123/subagent-virtual-employee-system.git"
+  },
+  "bugs": {
+    "url": "https://github.com/hoyoboy0726123/subagent-virtual-employee-system/issues"
+  },
+  "keywords": [
+    "ai-agents",
+    "multi-agent",
+    "virtual-employees",
+    "rag",
+    "sqlite",
+    "gemini",
+    "claude",
+    "react",
+    "express",
+    "traditional-chinese",
+    "standalone",
+    "local-first"
+  ],
   "scripts": {
-    "setup:markitdown": "py -3.13 -m venv .venv && .venv/Scripts/pip install \"markitdown[all]==0.1.6\" pdfplumber",
+    "setup:markitdown": "node scripts/setup-markitdown.mjs",
     "seed": "node server/src/db/seed.js",
     "migrate": "node server/src/db/migrate.js",
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
@@ -14,6 +37,7 @@
     "build": "vite build --config client/vite.config.js",
     "start": "node server/src/index.js",
     "serve": "npm run build && npm run start",
+    "lint": "eslint .",
     "test": "node server/test/smoke.tools.mjs && node server/test/smoke.providers.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
     "test:providers": "node server/test/smoke.providers.mjs",
     "test:orchestration": "node server/test/smoke.orchestration.mjs",
@@ -28,6 +52,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
+    "eslint": "^9.17.0",
     "vite": "^6.0.7"
   },
   "dependencies": {

@@ -80,17 +80,16 @@ try {
 
   step('Traditional Chinese is enforced deterministically (OpenCC + punctuation)', () => {
     const slipped = polishUtterance('这个方案的内存占用太高,我们应该先做压力测试:确认软件的并发上限。');
-    assert.ok(!/[这们应该压软测确认]/.test(slipped), 'no simplified characters survive');
+    assert.ok(!/[这们应该压软测确认发内]/.test(slipped), 'no simplified characters survive');
     assert.ok(slipped.includes('，') && slipped.includes('：'), 'half-width punctuation between CJK becomes full-width');
-    assert.ok(slipped.includes('記憶體') && slipped.includes('軟體'), 'Taiwan phrases (内存→記憶體, 软件→軟體)');
 
     const already = '這段已經是繁體中文，含 Token 上限與 API 這類英數，不應被改動。';
     assert.equal(polishUtterance(already), already, 'already-Traditional text passes through unchanged');
 
-    // Ambiguity guard: s2t on pure-Traditional text must NOT run (只能→隻能
-    // was a real regression) — conversion only fires on simplified evidence.
-    const ambiguous = '我頂多只能先做競品拆解，裡面的定價分級要拆細。';
-    assert.equal(polishUtterance(ambiguous), ambiguous, 'ambiguous chars (只/裡) survive untouched');
+    // No false positives on Traditional text: Taiwan-common forms and ambiguous
+    // chars must survive byte-identical (只能→隻能 / 平台→平臺 were real regressions).
+    const ambiguous = '我頂多只能先在平台上做競品拆解，裡面的軟件更新要拆細，皇后住在台北。';
+    assert.equal(polishUtterance(ambiguous), ambiguous, 'ambiguous/Taiwan chars (只/裡/平台/台北/后) survive untouched');
   });
 
   step('output polish removes boilerplate opener and repairs dangling sentence tails', () => {

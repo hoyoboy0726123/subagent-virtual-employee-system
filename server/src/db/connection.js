@@ -29,19 +29,18 @@ export function getDb() {
 }
 
 // Drop everything and re-migrate. Used by the seed script's --reset path and by
-// tests that want a clean slate. Safe because the schema is fully recreated.
+// tests that want a clean slate. Dropped dynamically from sqlite_master so new
+// migrations' tables (research_reports, dialogues, …) are always cleared —
+// hard-coding the list silently broke `npm run seed` when v2/v6 landed.
 export function resetDb() {
   const conn = getDb();
-  conn.exec(`
-    DROP TABLE IF EXISTS chunks_fts;
-    DROP TABLE IF EXISTS chunks;
-    DROP TABLE IF EXISTS documents;
-    DROP TABLE IF EXISTS meetings;
-    DROP TABLE IF EXISTS goals;
-    DROP TABLE IF EXISTS settings;
-    DROP TABLE IF EXISTS employees;
-    PRAGMA user_version = 0;
-  `);
+  const tables = conn
+    .prepare("SELECT name FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%'")
+    .all()
+    .map((r) => r.name);
+  conn.exec('PRAGMA foreign_keys = OFF;');
+  for (const name of tables) conn.exec(`DROP TABLE IF EXISTS "${name}";`);
+  conn.exec('PRAGMA foreign_keys = ON; PRAGMA user_version = 0;');
   migrate(conn);
   return conn;
 }

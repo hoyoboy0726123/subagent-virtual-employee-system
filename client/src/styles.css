@@ -247,21 +247,21 @@ textarea { resize: vertical; }
 /* Phase 14 — web-search toggle + autonomous research */
 .web-toggle { display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .web-toggle input { accent-color: #2f6fed; width: 16px; height: 16px; cursor: pointer; }
-.research-box { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--border, #d9dee7); }
+.research-box { margin-top: 18px; padding-top: 12px; border-top: 1px dashed var(--line); }
 .research-box .sm { font-size: 0.85rem; }
 .research-report > div > div { display: flex; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .research-report-body { display: block; margin-top: 8px; max-height: 420px; overflow-y: auto; }
 .research-report-body a { color: #2f6fed; word-break: break-all; }
 
 /* Phase 15 — per-agent config */
-.agent-config { margin: 14px 0; padding: 10px 12px; border: 1px dashed var(--border, #d9dee7); border-radius: 8px; }
+.agent-config { margin: 14px 0; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 8px; }
 .agent-config summary { cursor: pointer; font-weight: 600; font-size: 0.92rem; }
 .agent-config .form-grid { margin-top: 10px; }
 .agent-config-check { display: flex; align-items: center; gap: 8px; flex-direction: row !important; }
 .agent-config-check input { width: 16px; height: 16px; accent-color: #2f6fed; }
 
 /* Phase 15 — live meeting progress (SSE) */
-.live-progress { margin-top: 12px; padding: 12px; border: 1px solid var(--border, #d9dee7); border-radius: 10px; background: rgba(47, 111, 237, 0.04); }
+.live-progress { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(47, 111, 237, 0.04); }
 .live-progress-head { font-weight: 600; margin-bottom: 8px; }
 .live-progress-turns .turn { margin-bottom: 8px; animation: turn-in 0.25s ease-out; }
 .turn-question { font-size: 0.85rem; margin: 2px 0; }

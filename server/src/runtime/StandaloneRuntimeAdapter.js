@@ -18,7 +18,6 @@ import { AgentRuntimeAdapter } from './AgentRuntimeAdapter.js';
 import * as meetingOrchestrator from '../orchestration/MeetingOrchestrator.js';
 import * as goalCoordinator from '../orchestration/GoalCoordinator.js';
 import { llmEnabled, activeModelInfo } from '../reasoning/llm.js';
-import { config } from '../config.js';
 
 export class StandaloneRuntimeAdapter extends AgentRuntimeAdapter {
   get mode() { return 'standalone'; }

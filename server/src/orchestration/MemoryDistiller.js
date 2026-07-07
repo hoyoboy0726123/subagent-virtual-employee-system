@@ -16,6 +16,7 @@
 // MEETING_MEMORY_DISABLE=1 turns the whole feature off.
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
+import { normalizeTraditional } from './output.js';
 
 const disabled = () => /^(1|true|yes|on)$/i.test(process.env.MEETING_MEMORY_DISABLE || '');
 
@@ -88,7 +89,7 @@ export async function distillMeetingMemories({ meetingId, topic, participants, t
     if (!memory) continue;
     const doc = insertDocument(p.id, {
       title: `會議記憶：${topic}`,
-      content: memory,
+      content: normalizeTraditional(memory), // enforce TC before it enters the KB
       source: 'memory',
       tags: ['memory', 'meeting'],
       metadata: { meetingId, topic, distilled: live ? 'live' : 'deterministic' },

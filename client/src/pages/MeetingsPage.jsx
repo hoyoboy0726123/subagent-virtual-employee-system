@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
 
@@ -26,7 +26,13 @@ export default function MeetingsPage({ refreshKey, onChange }) {
     setEmployees(employeeList);
     setMeetingData(meetings);
   };
-  useEffect(() => { reload(DEFAULT_FILTERS); setFilters(DEFAULT_FILTERS); }, [refreshKey]);
+  // Single fetch path: [filters] owns loading; refreshKey just resets filters
+  // (skipping the mount tick so the list isn't double-fetched or racy).
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) { mounted.current = true; return; }
+    setFilters({ ...DEFAULT_FILTERS });
+  }, [refreshKey]);
   useEffect(() => { reload(filters); }, [filters]);
 
   const toggle = (id) =>
@@ -63,8 +69,11 @@ export default function MeetingsPage({ refreshKey, onChange }) {
       }));
       onChange?.();
     } catch (e) {
+      // Keep the room (and everything already said) visible — the discussion
+      // segment may already be persisted as 'discussing'; dropping the room
+      // here made the streamed turns vanish in front of the user.
       setErr(e.message);
-      setRoom(null);
+      setRoom((r) => (r ? { ...r, streaming: false, runId: null, phase: null } : r));
     } finally { setBusy(false); }
   };
 

@@ -25,6 +25,7 @@ import { config } from '../config.js';
 import { search as searchKnowledgeBase } from '../storage/retrieval.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
 import { getSetting } from '../storage/settings.repo.js';
+import { normalizeTraditional } from '../orchestration/output.js';
 
 export const WEB_SEARCH_SETTING_KEY = 'webSearchEnabled';
 
@@ -62,18 +63,35 @@ const snippet = (text = '', n = 200) => {
  */
 export function parseToolRequest(text = '') {
   const cleaned = String(text).replace(/```(?:json)?/gi, '').trim();
-  // A tool request must lead the reply — JSON quoted mid-sentence is speech.
-  if (!cleaned.startsWith('{')) return null;
-  const candidates = [cleaned];
-  const m = cleaned.match(/\{[^{}]*"tool"[^{}]*\}/s);
-  if (m) candidates.push(m[0]);
-  for (const c of candidates) {
-    try {
-      const obj = JSON.parse(c);
-      if (obj && typeof obj.tool === 'string' && obj.tool) {
-        return { tool: obj.tool, args: (obj.args && typeof obj.args === 'object') ? obj.args : {} };
-      }
-    } catch { /* keep trying */ }
+  // Find the first balanced {...} that begins near the start of the reply.
+  // Conversational models (esp. CLI providers, whose ONLY tool channel is this
+  // protocol) often wrap the JSON in a lead-in ("好的，我先查：{...}") or a
+  // trailing sentence — the old "whole string / no nested braces" rule silently
+  // lost those calls AND leaked the raw JSON into the transcript. We still
+  // require the JSON to LEAD the reply (short preamble only) so a JSON example
+  // quoted mid-speech isn't mistaken for a tool call.
+  const start = cleaned.indexOf('{');
+  if (start < 0 || start > 40) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+    } else if (ch === '"') inStr = true;
+    else if (ch === '{') depth++;
+    else if (ch === '}' && --depth === 0) {
+      try {
+        const obj = JSON.parse(cleaned.slice(start, i + 1));
+        if (obj && typeof obj.tool === 'string' && obj.tool) {
+          return { tool: obj.tool, args: (obj.args && typeof obj.args === 'object') ? obj.args : {} };
+        }
+      } catch { /* not valid JSON → treat as speech */ }
+      return null;
+    }
   }
   return null;
 }
@@ -217,6 +235,9 @@ export function buildToolbox({
             max_results: research ? Math.max(maxResults, 8) : maxResults,
             ...(research ? { include_raw_content: false, include_answer: 'basic' } : {}),
           }),
+          // Don't follow redirects — a compromised/misconfigured upstream must
+          // not bounce this authenticated request at an internal host.
+          redirect: 'error',
           signal: AbortSignal.timeout(timeoutSec * 1000),
         });
         if (!res.ok) return { error: `搜尋服務回應 ${res.status}` };
@@ -235,8 +256,8 @@ export function buildToolbox({
         const fact = String(args.fact || '').trim();
         if (!title || !fact) return { error: 'remember 需要 title 與 fact' };
         const doc = saveMemory(employee.id, {
-          title: `記憶：${title}`,
-          content: fact,
+          title: `記憶：${normalizeTraditional(title)}`,
+          content: normalizeTraditional(fact), // enforce TC before it enters the KB
           source: 'memory',
           tags: ['memory', 'self'],
           metadata: { rememberedBy: employee.name },

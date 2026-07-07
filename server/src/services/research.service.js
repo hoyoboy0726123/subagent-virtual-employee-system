@@ -10,6 +10,7 @@
 // without the manager's sign-off.
 import { generateAgentic, llmEnabled } from '../reasoning/llm.js';
 import { buildToolbox, webSearchConfigured, webSearchEnabled } from '../reasoning/tools.js';
+import { normalizeTraditional } from '../orchestration/output.js';
 import * as repo from '../storage/research.repo.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
@@ -72,7 +73,7 @@ export async function runResearch(employeeId, topic) {
   return repo.insertReport({
     employeeId,
     topic: subject,
-    report: res.text,
+    report: normalizeTraditional(res.text), // enforce TC before it can enter the KB
     sources: toolbox.webSources(),
     queries: webQueries,
     live: true,

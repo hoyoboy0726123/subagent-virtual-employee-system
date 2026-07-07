@@ -42,9 +42,13 @@ export function createCodexCliProvider({ execFileImpl = execFile, _available } =
   let probedVersion = null;
   let scratchDir = null;
   let resolvedCmd = cfg().cli;
+  let probedAt = 0;
+  const NEG_TTL_MS = 60_000; // re-probe a negative result so a fresh install/login is picked up
 
   function availableSync() {
-    if (probed !== undefined) return probed;
+    if (_available !== undefined) return _available; // injected (tests) — fixed
+    if (probed === true) return true;
+    if (probed === false && (Date.now() - probedAt) < NEG_TTL_MS) return false;
     const found = resolveCli(cfg().cli);
     if (found) {
       resolvedCmd = found.cmd;
@@ -52,6 +56,7 @@ export function createCodexCliProvider({ execFileImpl = execFile, _available } =
       probed = true;
     } else {
       probed = false;
+      probedAt = Date.now();
     }
     return probed;
   }
@@ -95,8 +100,10 @@ export function createCodexCliProvider({ execFileImpl = execFile, _available } =
           },
           (err, out) => resolve(err && !out ? null : String(out || '')),
         );
-        child?.stdin?.write(prompt);
-        child?.stdin?.end();
+        // Mandatory stdin error handler — see claudeCli.js: a CLI that exits
+        // before draining a large prompt would otherwise crash the server.
+        child?.stdin?.on('error', () => {});
+        child?.stdin?.end(prompt);
       });
       if (!stdout) return null;
       const text = parseCodexJsonl(stdout);

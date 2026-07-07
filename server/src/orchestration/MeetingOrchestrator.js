@@ -49,10 +49,13 @@ function planRounds(rounds) {
 // ---------------------------------------------------------------------------
 const interjectionQueues = new Map();
 
+// Deliver a live interjection — ONLY to a run that has registered its mailbox
+// (i.e. is actually streaming right now). Returning false for an unknown/stale
+// runId is what lets the service fall back to the stored path instead of
+// silently losing the note (and leaking a Map entry that no run ever drains).
 export function interject(runId, text) {
   const note = String(text || '').trim();
-  if (!runId || !note) return false;
-  if (!interjectionQueues.has(runId)) interjectionQueues.set(runId, []);
+  if (!runId || !note || !interjectionQueues.has(runId)) return false;
   interjectionQueues.get(runId).push(note);
   return true;
 }
@@ -87,6 +90,13 @@ function drainInterjections(runId, convo, roundNo, roundTitle, emit) {
  */
 export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], runId, onEvent }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
+  // Register the interjection mailbox SYNCHRONOUSLY, before the run event is
+  // emitted — so a manager who interjects the instant they receive the runId
+  // can never hit a not-yet-registered window (BUG: notes were lost + leaked).
+  if (runId) {
+    interjectionQueues.set(runId, []);
+    emit({ type: 'run', runId });
+  }
   const { byEmployee, flat } = groundingFor({ query: topic, employees: participants });
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
 

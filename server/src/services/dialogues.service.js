@@ -12,6 +12,12 @@ import { search as retrievalSearch } from '../storage/retrieval.js';
 import { oneOnOneTurn } from '../orchestration/EmployeeAgentExecutor.js';
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import { badRequest, notFound } from '../util/http.js';
+import { withLock } from '../util/locks.js';
+import { normalizeTraditional } from '../orchestration/output.js';
+
+// Serialize say()/close() per dialogue so a long LLM turn can't let two
+// requests read the same transcript and lose a message (or double-save).
+const dkey = (id) => `dialogue:${id}`;
 
 /** Open (or resume) the employee's 1-on-1. One open dialogue per employee. */
 export function open(employeeId) {
@@ -82,6 +88,10 @@ function fallbackRecord(emp, transcript) {
  * just archives the dialogue.
  */
 export async function close(dialogueId, { save } = {}) {
+  return withLock(dkey(dialogueId), () => closeLocked(dialogueId, { save }));
+}
+
+async function closeLocked(dialogueId, { save } = {}) {
   const d = get(dialogueId);
   if (d.status !== 'open') throw badRequest('這場面談已經結束。');
   const emp = getEmployee(d.employeeId);
@@ -99,7 +109,7 @@ export async function close(dialogueId, { save } = {}) {
     const firstMsg = d.transcript.find((t) => t.who === 'manager')?.text || '面談';
     const doc = insertDocument(emp.id, {
       title: `1on1 紀錄：${firstMsg.slice(0, 40)}${firstMsg.length > 40 ? '…' : ''}`,
-      content,
+      content: normalizeTraditional(content), // enforce TC before it enters the KB
       source: 'dialogue',
       format: 'markdown',
       tags: ['1on1'],

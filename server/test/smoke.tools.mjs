@@ -36,7 +36,16 @@ try {
       parseToolRequest('```json\n{"tool":"web_search","args":{"query":"法規"}}\n```'),
       { tool: 'web_search', args: { query: '法規' } });
     assert.equal(parseToolRequest('我認為 SLA 應該是 24 小時。'), null, 'prose is not a tool request');
-    assert.equal(parseToolRequest('我建議參考 {"tool":"x"} 這種格式'), null, 'JSON quoted mid-sentence is speech');
+    assert.equal(
+      parseToolRequest('我認為在設計這套工具呼叫協議的時候應該要特別小心不要誤判發言，例如像這種順口提到的範例格式 {"tool":"x"} 就不該被當成呼叫'),
+      null, 'JSON deep in a sentence (preamble > lead-in threshold) is speech, not a tool call');
+    // Real CLI-model shapes: short lead-in / trailing sentence / nested args.
+    assert.deepEqual(
+      parseToolRequest('好的，我先查：{"tool":"web_search","args":{"query":"最新法規"}}'),
+      { tool: 'web_search', args: { query: '最新法規' } }, 'short lead-in before the JSON is accepted');
+    assert.deepEqual(
+      parseToolRequest('{"tool":"search_knowledge","args":{"query":"SLA","limit":3}} 查完再回報。'),
+      { tool: 'search_knowledge', args: { query: 'SLA', limit: 3 } }, 'trailing sentence + nested args parse');
   });
 
   await step('toolbox: search_knowledge is scoped to the employee and records honest hits', async () => {

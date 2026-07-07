@@ -1,0 +1,13 @@
+node_modules
+client/dist
+.venv
+__pycache__
+server/data/*.db
+server/data/*.db-shm
+server/data/*.db-wal
+.git
+.github
+*.log
+.env
+.DS_Store
+docs

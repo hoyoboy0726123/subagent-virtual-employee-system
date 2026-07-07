@@ -14,24 +14,22 @@
 // already Traditional passes through byte-identical.
 import * as OpenCC from 'opencc-js';
 
-const toTaiwanese = OpenCC.Converter({ from: 'cn', to: 'twp' });
+// Deterministic Simplified→Traditional, applied PER CHARACTER with cn→t (plain
+// s2t, not the twp phrase variant). Per-char conversion avoids OpenCC's phrase
+// context (which damaged 只能→隻能), and a small keep-list protects the handful
+// of characters that are valid in Taiwan Traditional writing yet OpenCC still
+// "corrects" per-char (台→臺, 后→後, 里→裏, 范→範) — so 平台 / 台北 / 皇后 survive.
+// Genuinely-simplified chars (软→軟, 内→內, 计→計, 户→戶, 转→轉…) still convert.
+// Traditional text is left byte-identical; no manual simplified list needed.
+const cn2t = OpenCC.Converter({ from: 'cn', to: 't' });
 const HAS_CJK = /[㐀-鿿]/;
-
-// Conversion gate: OpenCC's s2t on ALREADY-Traditional text can damage
-// ambiguous characters (只能→隻能), so we convert only when the text contains
-// characters that exist exclusively in Simplified Chinese. High-frequency
-// simplified-only forms — one hit is enough evidence of slippage.
-const SIMPLIFIED_HINT = new RegExp('[' +
-  '这们对说问诶题应该来时还没关键义务东车书长门马风飞鸟龙齐单双发变导报读话语调认识让证据' +
-  '与后台确达记译网络电脑软见观觉际实现动务备练买卖乐仅优价传伤储签办协复够广归尽层迟迁' +
-  '邮释错项预验鱼齿龟检测继续满盘针钱银锁闭闻阅陈险随隐页顶顺须驱鲁点开选条约进转评为经过样' +
-  ']');
+const KEEP = new Set(['台', '后', '里', '范']); // Taiwan-valid; OpenCC over-converts these per-char
 
 export function normalizeTraditional(text = '') {
   const s = String(text || '');
   if (!HAS_CJK.test(s)) return s;
-  const converted = SIMPLIFIED_HINT.test(s) ? toTaiwanese(s) : s;
-  return converted
+  return s
+    .replace(/[㐀-鿿]/g, (ch) => (KEEP.has(ch) ? ch : cn2t(ch)))
     .replace(/([㐀-鿿]),(?=[㐀-鿿])/g, '$1，')
     .replace(/([㐀-鿿]):(?=[㐀-鿿])/g, '$1：')
     .replace(/([㐀-鿿]);(?=[㐀-鿿])/g, '$1；');
@@ -92,8 +90,19 @@ function ensureTerminal(text = '') {
   return SENTENCE_END.test(s) ? s : `${s}。`;
 }
 
+// Structured content (a 1-on-1 report may contain a code block, a Markdown
+// table, or a bullet list) must NOT be whitespace-compacted, tail-trimmed, or
+// terminal-punctuated — those steps flatten code indentation, append 。 after a
+// ``` fence, and delete short final list items. Detect it and only normalize
+// Traditional Chinese + tidy line whitespace, leaving the structure intact.
+const STRUCTURED = /```|(^|\n)\s*\|.*\|/;
+
 export function polishUtterance(text = '') {
-  let out = compact(text);
+  const raw = String(text || '');
+  if (STRUCTURED.test(raw)) {
+    return normalizeTraditional(raw.replace(/\r/g, '').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim());
+  }
+  let out = compact(raw);
   out = stripSpeakerPrefix(out);
   out = stripBannedOpeners(out);
   out = removeDanglingTail(out);

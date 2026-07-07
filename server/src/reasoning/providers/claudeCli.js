@@ -24,6 +24,8 @@ import { resolveCli } from './resolveCli.js';
 
 // Tiny FIFO semaphore: subscription rate windows are shared, so we cap
 // concurrent CLI turns instead of letting a 5-person meeting stampede them.
+let costNoticeShown = false; // module-level: show the usage-estimate note once
+
 function createSemaphore(max) {
   let active = 0;
   const queue = [];
@@ -50,9 +52,13 @@ export function createClaudeCliProvider({ execFileImpl = execFile, _available } 
   let probed = _available;
   let probedVersion = null;
   let resolvedCmd = cfg().cli;
+  let probedAt = 0;
+  const NEG_TTL_MS = 60_000; // re-probe a negative result so a fresh install/login is picked up without restart
 
   function availableSync() {
-    if (probed !== undefined) return probed;
+    if (_available !== undefined) return _available; // injected (tests) — fixed
+    if (probed === true) return true;
+    if (probed === false && (Date.now() - probedAt) < NEG_TTL_MS) return false;
     const found = resolveCli(cfg().cli);
     if (found) {
       resolvedCmd = found.cmd;
@@ -60,6 +66,7 @@ export function createClaudeCliProvider({ execFileImpl = execFile, _available } 
       probed = true;
     } else {
       probed = false;
+      probedAt = Date.now();
     }
     return probed;
   }
@@ -69,10 +76,15 @@ export function createClaudeCliProvider({ execFileImpl = execFile, _available } 
     // subscription login; surface the optional long-lived headless token when
     // configured. (Without this, a stray key silently re-routes subscription
     // traffic to per-token API billing — our live test caught exactly that.)
+    // Bedrock/Vertex are the same hazard by another route (enterprise dev
+    // machines often have these set), so they are cleared too.
     const {
       ANTHROPIC_API_KEY,
       ANTHROPIC_AUTH_TOKEN,
       ANTHROPIC_BASE_URL,
+      ANTHROPIC_MODEL,
+      CLAUDE_CODE_USE_BEDROCK,
+      CLAUDE_CODE_USE_VERTEX,
       ...env
     } = process.env;
     if (cfg().oauthToken) env.CLAUDE_CODE_OAUTH_TOKEN = cfg().oauthToken;
@@ -92,6 +104,10 @@ export function createClaudeCliProvider({ execFileImpl = execFile, _available } 
       // (knowledge search / Tavily / remember) is the only tool surface, so
       // Claude Code's built-ins are disabled to avoid double agency.
       '--disallowedTools', 'Bash,Edit,Write,Read,Glob,Grep,WebSearch,WebFetch,NotebookEdit,Agent',
+      // Ignore the host's MCP servers and project/user CLAUDE.md so a virtual
+      // employee turn can't reach external tools or be steered by unrelated
+      // repo instructions — it is just an isolated persona completion.
+      '--strict-mcp-config',
     ];
     if (system) args.push('--append-system-prompt', system);
 
@@ -113,17 +129,26 @@ export function createClaudeCliProvider({ execFileImpl = execFile, _available } 
           (err, out) => resolve(err && !out ? null : String(out || '')),
         );
         // The user prompt rides stdin — immune to argv quoting/length limits.
-        child?.stdin?.write(prompt);
-        child?.stdin?.end();
+        // An 'error' handler is MANDATORY: if the CLI exits before draining a
+        // large prompt (>~64KB pipe buffer), the EPIPE/EOF surfaces as an
+        // async stream error that bypasses try/catch and would crash the whole
+        // server (a failed agent turn must degrade, not take the process down).
+        child?.stdin?.on('error', () => {});
+        child?.stdin?.end(prompt);
       });
       if (!stdout) return null;
 
       const parsed = parseClaudeJson(stdout);
       if (!parsed || parsed.is_error) return null;
-      if (Number(parsed.total_cost_usd) > 0) {
-        console.warn(
-          `[claude-cli] 警告：這次呼叫回報了 API 計費（$${parsed.total_cost_usd}）。`
-          + '訂閱路徑應為 $0 — 請確認 CLI 是以訂閱帳號登入，且環境中沒有 ANTHROPIC_API_KEY。',
+      // total_cost_usd is the CLI's list-price ESTIMATE of usage; on a Pro/Max
+      // subscription login it is non-zero yet draws from the subscription (no
+      // extra charge). We've stripped every metered-billing credential, so this
+      // is informational only — note it ONCE per process, not per turn.
+      if (Number(parsed.total_cost_usd) > 0 && !costNoticeShown) {
+        costNoticeShown = true;
+        console.info(
+          `[claude-cli] 提示：CLI 回報用量估算約 $${parsed.total_cost_usd}/次（訂閱牌價換算）。`
+          + '若你是以 Pro/Max 訂閱登入，這計入訂閱額度、不會額外計費。',
         );
       }
       const text = typeof parsed.result === 'string' ? parsed.result.trim() : '';
