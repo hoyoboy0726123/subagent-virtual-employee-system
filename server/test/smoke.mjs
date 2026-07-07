@@ -506,6 +506,53 @@ try {
     await api('DELETE', `/api/meetings/${m.id}`);
   });
 
+  await step('1-on-1 dialogue: unlimited turns, then the manager decides whether to save', async () => {
+    // Open (and resume — a second open returns the same session).
+    const { status, json: d } = await api('POST', `/api/employees/${empId}/dialogue`);
+    assert.equal(status, 201);
+    assert.equal(d.status, 'open');
+    const { json: resumed } = await api('POST', `/api/employees/${empId}/dialogue`);
+    assert.equal(resumed.id, d.id, 'open dialogues resume instead of forking');
+
+    // Multiple turns — no limit; each manager message gets an employee reply.
+    const one = await api('POST', `/api/dialogues/${d.id}/messages`, { text: '目前回歸測試的規劃你怎麼看？' });
+    assert.equal(one.status, 200);
+    assert.equal(one.json.transcript.length, 2);
+    assert.equal(one.json.transcript[1].who, 'employee');
+    assert.ok(one.json.transcript[1].text.length > 10, 'employee gives a substantive reply');
+
+    const two = await api('POST', `/api/dialogues/${d.id}/messages`, { text: '那風險最大的部分是什麼？' });
+    const three = await api('POST', `/api/dialogues/${d.id}/messages`, { text: '好，先做一版計畫給我。' });
+    assert.equal(three.json.transcript.length, 6, 'turns keep accumulating');
+    assert.ok(two.json.transcript[3].text !== three.json.transcript[5].text, 'replies are not one canned string');
+
+    // Close WITH save → distilled record lands in the knowledge base.
+    const closed = await api('POST', `/api/dialogues/${d.id}/close`, { save: true });
+    assert.equal(closed.status, 200);
+    assert.equal(closed.json.status, 'closed');
+    assert.equal(closed.json.saved, true);
+    const { json: emp } = await api('GET', `/api/employees/${empId}`);
+    const doc = emp.knowledge.find((k) => k.id === closed.json.savedDocId);
+    assert.ok(doc, 'record saved to the knowledge base');
+    assert.equal(doc.source, 'dialogue');
+    assert.ok(doc.title.startsWith('1on1 紀錄'), 'titled as a 1on1 record');
+
+    // A closed dialogue takes no more messages; double-close refused.
+    const late = await api('POST', `/api/dialogues/${d.id}/messages`, { text: 'x' });
+    assert.equal(late.status, 400);
+    const again = await api('POST', `/api/dialogues/${d.id}/close`, { save: false });
+    assert.equal(again.status, 400);
+
+    // Close WITHOUT save → no knowledge doc.
+    const { json: d2 } = await api('POST', `/api/employees/${empId}/dialogue`);
+    await api('POST', `/api/dialogues/${d2.id}/messages`, { text: '隨便聊聊。' });
+    const discarded = await api('POST', `/api/dialogues/${d2.id}/close`, { save: false });
+    assert.equal(discarded.json.saved, false);
+    assert.equal(discarded.json.savedDocId, null);
+
+    await api('DELETE', `/api/knowledge/${closed.json.savedDocId}`);
+  });
+
   await step('cross-meeting memory: a finished meeting writes each participant a memory document', async () => {
     delete process.env.MEETING_MEMORY_DISABLE; // feature on for this step only
     try {

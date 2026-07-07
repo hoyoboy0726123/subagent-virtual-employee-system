@@ -86,6 +86,11 @@ try {
 
     const already = '這段已經是繁體中文，含 Token 上限與 API 這類英數，不應被改動。';
     assert.equal(polishUtterance(already), already, 'already-Traditional text passes through unchanged');
+
+    // Ambiguity guard: s2t on pure-Traditional text must NOT run (只能→隻能
+    // was a real regression) — conversion only fires on simplified evidence.
+    const ambiguous = '我頂多只能先做競品拆解，裡面的定價分級要拆細。';
+    assert.equal(polishUtterance(ambiguous), ambiguous, 'ambiguous chars (只/裡) survive untouched');
   });
 
   step('output polish removes boilerplate opener and repairs dangling sentence tails', () => {

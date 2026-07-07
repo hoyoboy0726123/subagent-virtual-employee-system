@@ -17,10 +17,21 @@ import * as OpenCC from 'opencc-js';
 const toTaiwanese = OpenCC.Converter({ from: 'cn', to: 'twp' });
 const HAS_CJK = /[㐀-鿿]/;
 
+// Conversion gate: OpenCC's s2t on ALREADY-Traditional text can damage
+// ambiguous characters (只能→隻能), so we convert only when the text contains
+// characters that exist exclusively in Simplified Chinese. High-frequency
+// simplified-only forms — one hit is enough evidence of slippage.
+const SIMPLIFIED_HINT = new RegExp('[' +
+  '这们对说问诶题应该来时还没关键义务东车书长门马风飞鸟龙齐单双发变导报读话语调认识让证据' +
+  '与后台确达记译网络电脑软见观觉际实现动务备练买卖乐仅优价传伤储签办协复够广归尽层迟迁' +
+  '邮释错项预验鱼齿龟检测继续满盘针钱银锁闭闻阅陈险随隐页顶顺须驱鲁点开选条约进转评为经过样' +
+  ']');
+
 export function normalizeTraditional(text = '') {
   const s = String(text || '');
   if (!HAS_CJK.test(s)) return s;
-  return toTaiwanese(s)
+  const converted = SIMPLIFIED_HINT.test(s) ? toTaiwanese(s) : s;
+  return converted
     .replace(/([㐀-鿿]),(?=[㐀-鿿])/g, '$1，')
     .replace(/([㐀-鿿]):(?=[㐀-鿿])/g, '$1：')
     .replace(/([㐀-鿿]);(?=[㐀-鿿])/g, '$1；');

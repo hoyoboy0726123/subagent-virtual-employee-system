@@ -245,6 +245,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState({ busy: false, err: '', ok: '' });
   const [viewDoc, setViewDoc] = useState(null); // knowledge viewer (doc + chunks)
+  const [oneOnOne, setOneOnOne] = useState(false); // 1-on-1 chat modal (Phase 19)
   const fileRef = useRef(null);
 
   const openDoc = async (docId) => {
@@ -364,6 +365,9 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                   {k.source === 'research' && (
                     <span className="tag tag-blue" title="經你核准的自主研究報告">🔍 研究</span>
                   )}
+                  {k.source === 'dialogue' && (
+                    <span className="tag" title="1 on 1 面談紀錄">💬 1on1</span>
+                  )}
                   {k.metadata?.parseStatus === 'fallback' && (
                     <span className="tag" title={k.metadata?.parseError || ''}>內建擷取</span>
                   )}
@@ -394,8 +398,125 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
 
       <div className="modal-actions between">
         <button className="btn-danger" onClick={remove}>刪除員工</button>
-        <button className="btn" onClick={onEdit}>編輯檔案</button>
+        <div className="actions">
+          <button className="btn-ghost" onClick={() => setOneOnOne(true)}>💬 1 on 1 面談</button>
+          <button className="btn" onClick={onEdit}>編輯檔案</button>
+        </div>
       </div>
+
+      {oneOnOne && (
+        <OneOnOneModal
+          employee={employee}
+          onClose={() => setOneOnOne(false)}
+          onSaved={() => { setOneOnOne(false); onChange(); }}
+        />
+      )}
+    </Modal>
+  );
+}
+
+// Phase 19 — the manager's 1-on-1. No turn limit: the conversation continues
+// until the MANAGER ends it, and only then do they choose whether the record
+// is distilled into this employee's knowledge base.
+function OneOnOneModal({ employee, onClose, onSaved }) {
+  const [dialogue, setDialogue] = useState(null);
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [closing, setClosing] = useState(false); // showing the save/discard choice
+  const [err, setErr] = useState('');
+  const endRef = useRef(null);
+
+  useEffect(() => {
+    api.post(`/employees/${employee.id}/dialogue`).then(setDialogue).catch((e) => setErr(e.message));
+  }, [employee.id]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [dialogue?.transcript?.length, busy]);
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy || !dialogue) return;
+    setErr('');
+    setBusy(true);
+    setDraft('');
+    // Optimistic echo of the manager's message while the agent thinks.
+    setDialogue((d) => ({ ...d, transcript: [...d.transcript, { who: 'manager', text }] }));
+    try {
+      setDialogue(await api.post(`/dialogues/${dialogue.id}/messages`, { text }));
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  };
+
+  const end = async (save) => {
+    try {
+      const res = await api.post(`/dialogues/${dialogue.id}/close`, { save });
+      if (res.saved) onSaved();
+      else onClose();
+    } catch (e) { setErr(e.message); }
+  };
+
+  return (
+    <Modal title={`💬 與 ${employee.name} 的 1 on 1`} onClose={onClose} wide>
+      <p className="muted sm">
+        沒有輪數限制——談到你滿意為止。要他查資料就直接說（例如「幫我查一下…的最新現況」）。
+      </p>
+      {err && <div className="banner-err sm">{err}</div>}
+
+      <div className="chat-box">
+        {(!dialogue || dialogue.transcript.length === 0) && (
+          <p className="muted">（面談開始——說點什麼吧。）</p>
+        )}
+        {(dialogue?.transcript || []).map((t, i) => (
+          t.who === 'manager' ? (
+            <div key={i} className="chat-row chat-manager">
+              <div className="chat-bubble chat-bubble-manager">{t.text}</div>
+            </div>
+          ) : (
+            <div key={i} className="chat-row">
+              <div className="turn-av">{employee.name.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
+              <div className="chat-bubble">
+                {t.toolCalls > 0 && <div className="muted sm">🛠 查證了 {t.toolCalls} 次</div>}
+                <Markdown text={t.text} />
+                {(t.citations || []).length > 0 && (
+                  <div className="citations">
+                    {t.citations.map((c, ci) => (
+                      <span key={ci} className="cite" title={c.snippet}>{c.web ? '🌐' : '📎'} {c.documentTitle}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        ))}
+        {busy && <p className="muted">💭 {employee.name} 思考中（需要查資料時會久一點）…</p>}
+        <div ref={endRef} />
+      </div>
+
+      {!closing ? (
+        <div className="chat-controls">
+          <div className="interject-row">
+            <input
+              placeholder={`對 ${employee.name} 說…（Enter 送出）`}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+              disabled={busy || !dialogue}
+            />
+            <button className="btn sm" onClick={send} disabled={busy || !draft.trim() || !dialogue}>送出</button>
+          </div>
+          <div className="row end">
+            <button className="btn-ghost sm" onClick={() => setClosing(true)} disabled={busy || !dialogue}>
+              ⏹ 結束面談…
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="chat-controls">
+          <p className="muted">要把這場面談的紀錄整理後存進 {employee.name} 的知識庫嗎？（存下來，他之後開會就記得這些結論。）</p>
+          <div className="row end">
+            <button className="btn-ghost sm" onClick={() => setClosing(false)}>取消</button>
+            <button className="btn-ghost sm" onClick={() => end(false)}>不儲存，直接結束</button>
+            <button className="btn sm" onClick={() => end(true)}>💾 儲存到知識庫並結束</button>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -404,7 +525,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
 // slices the FTS index serves to agents during grounding and search_knowledge.
 function DocViewer({ doc, onClose }) {
   const [view, setView] = useState('content');
-  const SOURCE_LABELS = { note: '手動筆記', file: '上傳文件', memory: '會議／自主記憶', research: '核准的研究報告' };
+  const SOURCE_LABELS = { note: '手動筆記', file: '上傳文件', memory: '會議／自主記憶', research: '核准的研究報告', dialogue: '1 on 1 面談紀錄' };
   return (
     <Modal title={`📄 ${doc.title}`} onClose={onClose} wide>
       <div className="detail-meta">

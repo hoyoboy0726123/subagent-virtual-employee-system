@@ -281,7 +281,32 @@ metered API key.
       parsing/error paths/gating) + live proof on this machine (probe → real
       in-persona reply through `claude` in 8s, cost guard firing as designed).
 
-## 🧭 Phase 19 — Final product polish & packaging
+## ✅ Phase 19 — Manager 1-on-1 dialogues + TC hardening *(shipped)*
+
+**Goal:** a private, unlimited-turn conversation between the manager and one
+employee — with real tool use — whose record only enters the knowledge base if
+the manager says so.
+
+- [x] `dialogues` table (migration v6) + REST: open/resume (one open dialogue
+      per employee), POST message → in-persona agentic reply (full toolbox:
+      「幫我查一下」actually triggers Tavily/knowledge search; per-agent config
+      honoured), close with `{save}`.
+- [x] Save-and-close distills the conversation into a knowledge document
+      (主題／結論與共識／主管的指示／員工的承諾／查證到的關鍵事實, sources kept;
+      formatted transcript offline) — source `dialogue`, 💬 1on1 badge, viewable
+      in the knowledge viewer. Close-without-save archives only.
+- [x] Chat UI in the employee detail modal: bubbles, 🛠 查證 badges + citations,
+      optimistic send, end-dialogue flow with the save/discard choice.
+- [x] Deterministic Traditional Chinese enforcement hardened: OpenCC cn→twp on
+      polished output, gated on simplified-only character evidence so
+      pure-Traditional text is never damaged (只能→隻能 regression caught by a
+      browser test and fixed), plus CJK half-width punctuation normalization.
+- [x] Live-verified: employee web-researched on request (real sources + her own
+      meeting memory cited), stayed honest about unavailable 2026 data,
+      follow-up turn answered from context, distilled record landed in the
+      knowledge base. 72 hermetic checks pass.
+
+## 🧭 Phase 20 — Final product polish & packaging
 
 **Goal:** ship-ready operational clarity.
 

@@ -220,6 +220,84 @@ export async function goalTurn({ employee, grounding, context }) {
   return withCitations(turn, grounding);
 }
 
+/**
+ * Run one employee's 1-ON-1 turn (Phase 19): a private conversation with the
+ * MANAGER (the human). Unlimited turns — history is re-injected each call —
+ * and the full toolbox is live, so「幫我查一下」actually triggers web/knowledge
+ * search.
+ * @param {object} opts
+ * @param {object} opts.employee
+ * @param {Array}  opts.grounding   chunks retrieved for the manager's message
+ * @param {Array}  opts.history     prior turns [{who:'manager'|'employee', text}]
+ * @param {string} opts.message     what the manager just said
+ * @returns {Promise<{text:string, live:boolean, toolCalls:number, citations:Array}>}
+ */
+export async function oneOnOneTurn({ employee, grounding, history, message }) {
+  const expertise = asList(employee.expertise);
+  const knowledge = grounding.length
+    ? grounding.map((h) => `- 《${h.documentTitle}》：${snippet(h.content)}`).join('\n')
+    : '（這則訊息沒有直接命中你的知識庫，需要時請用工具查詢。）';
+
+  const system = [
+    `你是 ${employee.name}（${employee.roleTitle}），正在和你的主管進行一對一面談。`,
+    employee.personality ? `你的個性：${employee.personality}。` : '',
+    employee.communicationStyle ? `你的溝通風格：${employee.communicationStyle}。` : '',
+    `你的專長：${expertise.join('、') || '一般問題解決'}。`,
+    '',
+    '【面談守則】',
+    '- 誠實、具體、有立場：主管要的是專業判斷，不是奉承或場面話。',
+    '- 主管要求查資料時，務必先用工具查證（web_search／search_knowledge）再回答，並說明出處。',
+    '- 涉及最新資訊或你不確定的事實，先查再說；查不到就直說查不到。',
+    '- 回覆長度跟著問題走：閒聊短答，要求分析或報告時可以完整展開。',
+    '- 全程繁體中文，只輸出你要對主管說的話，不要旁白或名字前綴。',
+    '',
+    '【你被授權參考的個人知識】',
+    knowledge,
+  ].filter(Boolean).join('\n');
+
+  const recent = (history || []).slice(-16);
+  const lines = recent.map((t) => `${t.who === 'manager' ? '主管' : '你'}：${t.text}`);
+  const user = [
+    lines.length ? '【你們到目前為止的對話】' : '【這是本次面談的開場】',
+    ...lines,
+    '',
+    `主管：${message}`,
+    '',
+    '請直接回應主管。',
+  ].join('\n');
+
+  if (llmEnabled()) {
+    const agentCfg = employee.agentConfig || {};
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const toolbox = buildToolbox({ employee });
+      const res = await generateAgentic({
+        system,
+        user,
+        toolbox,
+        maxTokens: 1200,
+        temperature: Number.isFinite(agentCfg.temperature) ? agentCfg.temperature : 0.65,
+        ...(agentCfg.model ? { model: agentCfg.model } : {}),
+        ...(agentCfg.maxToolCalls ? { maxSteps: agentCfg.maxToolCalls } : {}),
+      });
+      const t = polishUtterance(res?.text || '');
+      if (t) {
+        return withCitations(
+          { text: t, live: true, toolCalls: res.toolCalls, toolHits: toolbox.knowledgeHits(), webSources: toolbox.webSources() },
+          grounding,
+        );
+      }
+    }
+  }
+  // Offline: a persona-grounded deterministic answer, honestly non-live. The
+  // engine round rotates with the conversation depth so consecutive replies in
+  // one dialogue vary instead of repeating a single canned shape.
+  const fallback = engine.speak(employee, message, (history?.length || 0) % 3, [], grounding);
+  return withCitations(
+    { text: polishUtterance(fallback), live: false, toolCalls: 0, toolHits: [], webSources: [] },
+    grounding,
+  );
+}
+
 // Merge the pre-injected grounding with whatever the agent looked up ITSELF —
 // knowledge-base hits AND consulted web sources — so citations honestly cover
 // everything the utterance drew on. Web sources carry `web: true` + url so the

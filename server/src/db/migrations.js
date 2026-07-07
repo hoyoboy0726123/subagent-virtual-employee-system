@@ -159,6 +159,27 @@ const MIGRATIONS = [
   (db) => {
     db.exec("ALTER TABLE meetings ADD COLUMN status TEXT NOT NULL DEFAULT 'concluded';");
   },
+
+  // v6 — manager 1-on-1 dialogues (Phase 19). An unlimited-turn conversation
+  // between the MANAGER (the human) and ONE employee agent; on close the
+  // manager decides whether the record is distilled into the employee's
+  // knowledge base.
+  (db) => {
+    db.exec(`
+      CREATE TABLE dialogues (
+        id          TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL,
+        transcript  TEXT NOT NULL DEFAULT '[]',  -- JSON: [{who:'manager'|'employee', text, toolCalls, citations, at}]
+        status      TEXT NOT NULL DEFAULT 'open', -- open | closed
+        saved_doc_id TEXT DEFAULT NULL,           -- knowledge doc created on save-and-close
+        created_at  TEXT NOT NULL,
+        updated_at  TEXT NOT NULL,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      );
+      CREATE INDEX idx_dialogues_employee ON dialogues(employee_id);
+      CREATE INDEX idx_dialogues_status ON dialogues(status);
+    `);
+  },
 ];
 
 export function migrate(db) {
