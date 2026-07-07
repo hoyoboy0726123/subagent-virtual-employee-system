@@ -1,11 +1,16 @@
 // Phase 13 agentic-tool-use unit checks. These exercise the toolbox and the
-// agentic generation loop directly — no HTTP, no DB, no API key, no network:
+// agentic generation loop directly — no HTTP, no API key, no network:
 // retrieval and the model are injected as fakes, so the checks are hermetic.
 // Run: part of `npm test`, or standalone `node server/test/smoke.tools.mjs`.
 import assert from 'node:assert/strict';
-import { buildToolbox, parseToolRequest, formatToolResult, webSearchEnabled } from '../src/reasoning/tools.js';
-import { generateAgentic } from '../src/reasoning/llm.js';
-import { config } from '../src/config.js';
+
+// The provider-aware llm layer may consult the settings store — keep that in
+// memory so this test never touches a real database file.
+process.env.DB_FILE = ':memory:';
+
+const { buildToolbox, parseToolRequest, formatToolResult, webSearchEnabled } = await import('../src/reasoning/tools.js');
+const { generateAgentic } = await import('../src/reasoning/llm.js');
+const { config } = await import('../src/config.js');
 
 let passed = 0;
 function step(name, fn) {

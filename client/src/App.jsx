@@ -43,6 +43,17 @@ export default function App() {
     }
   };
 
+  // Phase 18: switch the reasoning brain (google API / Claude 訂閱 / Codex 訂閱).
+  const switchBrain = async (id) => {
+    try {
+      const next = await api.put('/settings', { llmProvider: id });
+      setSettings((s) => ({ ...s, ...next }));
+      refresh();
+    } catch (e) {
+      alert(e.message); // e.g. 已安裝但未登入
+    }
+  };
+
   return (
     <div className="app">
       <header className="topbar">
@@ -71,14 +82,29 @@ export default function App() {
               </span>
             </label>
           )}
-          {health && (
-            <span
-              className={`pill ${health.standalone?.live ? 'pill-live' : 'pill-sim'}`}
-              title={health.standalone?.live
-                ? `內建多代理以即時模型執行每個代理回合${health.standalone.model ? `（${health.standalone.model}）` : ''}`
-                : '未設定 Google API 金鑰；內建多代理以離線推理引擎（persona + RAG）執行'}
+          {settings?.llm && (
+            <label
+              className="runtime-switch brain-switch"
+              title={settings.llm.providers?.find((p) => p.id === settings.llm.provider)?.detail || '選擇驅動 AI 員工的推理大腦'}
             >
-              {health.standalone?.live ? `內建多代理：即時（${health.standalone.model || 'Gemma'}）` : '內建多代理：離線推理'}
+              <span className="runtime-label">🧠 大腦</span>
+              <select value={settings.llm.provider} onChange={(e) => switchBrain(e.target.value)}>
+                {(settings.llm.providers || []).map((p) => (
+                  <option key={p.id} value={p.id} disabled={!p.selectable} title={p.detail}>
+                    {p.label}{p.available ? '' : `（${p.id === 'google' ? '離線' : (p.detail.includes('未登入') ? '未登入' : '未安裝')}）`}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {settings?.llm && (
+            <span
+              className={`pill ${settings.llm.live ? 'pill-live' : 'pill-sim'}`}
+              title={settings.llm.live
+                ? `每個代理回合由「${settings.llm.active?.label}」即時執行`
+                : '目前的大腦不可用或未設定金鑰；以離線推理引擎（persona + RAG）執行，仍為真實多代理編排'}
+            >
+              {settings.llm.live ? `即時：${settings.llm.active?.model}` : '離線推理'}
             </span>
           )}
           <button

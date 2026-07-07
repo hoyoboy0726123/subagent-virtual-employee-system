@@ -1,13 +1,34 @@
-// Service: settings. The web-search toggle (and room for future switches); the
-// store is generic key/value. Runtime selection was removed in Phase 17 — the
-// built-in standalone multi-agent orchestration is the only runtime.
+// Service: settings. The web-search toggle + the reasoning-brain (LLM
+// provider) selector; the store is generic key/value. Runtime selection was
+// removed in Phase 17 — the built-in standalone multi-agent orchestration is
+// the only runtime.
 import { setSetting } from '../storage/settings.repo.js';
 import { getRuntimeAdapter, DEFAULT_RUNTIME_MODE } from '../runtime/index.js';
 import { badRequest } from '../util/http.js';
 import { WEB_SEARCH_SETTING_KEY, webSearchConfigured, webSearchEnabled } from '../reasoning/tools.js';
+import { LLM_PROVIDER_SETTING_KEY, PROVIDER_IDS, listProviders, currentProviderName } from '../reasoning/providers/index.js';
+import { activeModelInfo, llmEnabled } from '../reasoning/llm.js';
 
 export function getActiveRuntime() {
   return getRuntimeAdapter(DEFAULT_RUNTIME_MODE);
+}
+
+/**
+ * Switch the reasoning brain (Phase 18): google | claude-cli | codex-cli.
+ * CLI subscription brains must be installed AND logged in before they can be
+ * selected; google is always selectable (without a key it honestly runs the
+ * offline deterministic engine).
+ */
+export function setLlmProvider(id) {
+  if (!PROVIDER_IDS.includes(id)) {
+    throw badRequest(`未知的大腦「${id}」——可選：${PROVIDER_IDS.join('、')}`);
+  }
+  const status = listProviders().find((p) => p.id === id);
+  if (!status.selectable) {
+    throw badRequest(`無法切換到「${status.label}」：${status.detail}`);
+  }
+  setSetting(LLM_PROVIDER_SETTING_KEY, id);
+  return getSettings();
 }
 
 /**
@@ -28,6 +49,12 @@ export function getSettings() {
     webSearch: {
       keyConfigured: webSearchConfigured(),
       enabled: webSearchEnabled(),
+    },
+    llm: {
+      provider: currentProviderName(),
+      live: llmEnabled(),
+      active: activeModelInfo(),
+      providers: listProviders(),
     },
   };
 }

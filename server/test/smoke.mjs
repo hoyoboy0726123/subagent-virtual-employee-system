@@ -337,6 +337,26 @@ try {
     assert.ok(s.webSearch, 'web-search settings still reported');
   });
 
+  await step('brain selector: providers listed with status; switching is validated', async () => {
+    const { json: s } = await api('GET', '/api/settings');
+    const ids = s.llm.providers.map((p) => p.id);
+    assert.deepEqual(ids, ['google', 'claude-cli', 'codex-cli'], 'all three brains are listed');
+    for (const p of s.llm.providers) {
+      assert.ok(typeof p.selectable === 'boolean' && typeof p.detail === 'string' && p.label,
+        'each brain reports availability + a human-readable reason');
+    }
+    assert.equal(s.llm.providers.find((p) => p.id === 'google').selectable, true,
+      'google is always selectable (offline engine without a key)');
+
+    const bad = await api('PUT', '/api/settings', { llmProvider: 'nonsense' });
+    assert.equal(bad.status, 400, 'unknown brain is rejected');
+
+    const ok = await api('PUT', '/api/settings', { llmProvider: 'google' });
+    assert.equal(ok.status, 200);
+    assert.equal(ok.json.llm.provider, 'google');
+    assert.equal(ok.json.llm.providers.find((p) => p.id === 'google').active, true);
+  });
+
   await step('per-agent config: persisted, sanitized, and editable', async () => {
     const { status, json: created } = await api('POST', '/api/employees', {
       name: 'Config Test', roleTitle: '測試員',
