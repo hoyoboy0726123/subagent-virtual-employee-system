@@ -5,6 +5,7 @@
   "description": "A digital virtual-employee system: create AI employee roles, give them knowledge, run meetings, and assign collaborative goals.",
   "type": "module",
   "scripts": {
+    "setup:markitdown": "py -3.13 -m venv .venv && .venv/Scripts/pip install \"markitdown[all]==0.1.6\"",
     "seed": "node server/src/db/seed.js",
     "migrate": "node server/src/db/migrate.js",
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",

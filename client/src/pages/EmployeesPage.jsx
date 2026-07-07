@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown } from '../components/ui.jsx';
 
-// The upload types Phase 7 accepts. Kept in sync with the server's SUPPORTED_TYPES.
-const ACCEPT = '.pdf,.docx,.txt,.md,.markdown,.html,.htm';
-const TYPE_LABELS = { pdf: 'PDF', docx: 'DOCX', txt: 'TXT', md: 'Markdown', html: 'HTML' };
+// The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
+// everything is canonicalized to Markdown by MarkItDown on ingestion.
+const ACCEPT = '.pdf,.docx,.pptx,.xlsx,.csv,.txt,.md,.markdown,.html,.htm';
+const TYPE_LABELS = { pdf: 'PDF', docx: 'DOCX', pptx: 'PPTX', xlsx: 'XLSX', csv: 'CSV', txt: 'TXT', md: 'Markdown', html: 'HTML' };
 
 const BLANK = {
   name: '', roleTitle: '', personality: '', expertise: '',
@@ -306,7 +307,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
               >
                 {upload.busy ? '解析中…' : '⬆ 上傳文件'}
               </button>
-              <span className="muted upload-hint">支援 PDF、DOCX、TXT、Markdown、HTML；經 MarkItDown 轉為 Markdown 後匯入。</span>
+              <span className="muted upload-hint">支援 PDF、DOCX、PPTX、XLSX、CSV、TXT、Markdown、HTML；一律經 MarkItDown 轉為 Markdown 後匯入。</span>
               <input
                 ref={fileRef}
                 type="file"

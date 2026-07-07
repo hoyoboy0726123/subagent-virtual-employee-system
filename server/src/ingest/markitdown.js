@@ -40,7 +40,17 @@ function run(python, args, { timeoutMs } = {}) {
     execFile(
       python,
       [HELPER, ...args],
-      { timeout: timeoutMs || 120_000, maxBuffer: 64 * 1024 * 1024, windowsHide: true },
+      {
+        timeout: timeoutMs || 120_000,
+        maxBuffer: 64 * 1024 * 1024,
+        windowsHide: true,
+        // Force Python into UTF-8 mode. On Windows the default stdio/file
+        // encoding is the legacy code page (cp950/charmap), which blows up
+        // ('charmap' codec can't encode …) as soon as a document contains
+        // Chinese — both when MarkItDown reads text files and when the helper
+        // prints its JSON to stdout.
+        env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
+      },
       (err, stdout, stderr) => {
         if (err && !stdout) {
           resolve({ spawnError: err, stderr: String(stderr || '') });

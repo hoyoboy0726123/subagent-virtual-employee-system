@@ -11,8 +11,10 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import * as markitdown from './markitdown.js';
 
-// The supported upload matrix. `binary` types can only be parsed by MarkItDown;
-// `textLike` types have a built-in fallback.
+// The supported upload matrix. MarkItDown is the ONE canonical converter for
+// every type (everything becomes Markdown through it); `binary` types can only
+// be parsed by MarkItDown, while `textLike` types additionally keep a built-in
+// pure-JS fallback so a machine without Python still ingests plain text.
 export const SUPPORTED_TYPES = {
   pdf: { ext: '.pdf', mime: 'application/pdf', binary: true },
   docx: {
@@ -20,6 +22,18 @@ export const SUPPORTED_TYPES = {
     mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     binary: true,
   },
+  pptx: {
+    ext: '.pptx',
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    binary: true,
+  },
+  xlsx: {
+    ext: '.xlsx',
+    mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    binary: true,
+  },
+  // Tables only become proper Markdown tables through MarkItDown.
+  csv: { ext: '.csv', mime: 'text/csv', binary: true },
   txt: { ext: '.txt', mime: 'text/plain', textLike: true },
   md: { ext: '.md', mime: 'text/markdown', textLike: true },
   html: { ext: '.html', mime: 'text/html', textLike: true },
@@ -71,7 +85,7 @@ export async function extractToMarkdown({ filePath, filename, mimeType }) {
       ok: false,
       parser: null,
       parseStatus: 'unsupported',
-      parseError: `不支援的檔案類型（支援：PDF、DOCX、TXT、MD、HTML）。`,
+      parseError: `不支援的檔案類型（支援：PDF、DOCX、PPTX、XLSX、CSV、TXT、MD、HTML）。`,
       markdown: '',
       text: '',
     };
@@ -119,7 +133,7 @@ export async function extractToMarkdown({ filePath, filename, mimeType }) {
     parseStatus: 'failed',
     parseError:
       converted.error
-      || '無法從此檔案擷取內容。' + (SUPPORTED_TYPES[sourceType].binary ? '（PDF／DOCX 需要 MarkItDown）' : ''),
+      || '無法從此檔案擷取內容。' + (SUPPORTED_TYPES[sourceType].binary ? '（此格式需要 MarkItDown：npm run setup:markitdown）' : ''),
     markdown: '',
     text: '',
   };

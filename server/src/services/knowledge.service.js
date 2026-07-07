@@ -49,7 +49,7 @@ export async function ingestUpload(employeeId, file) {
   if (!sourceType) {
     throw badRequest(
       `不支援的檔案類型「${path.extname(originalFilename) || file.mimetype || '未知'}」。`
-      + `目前支援：PDF、DOCX、TXT、MD、HTML。`,
+      + `目前支援：PDF、DOCX、PPTX、XLSX、CSV、TXT、MD、HTML。`,
     );
   }
   if (file.size > config.ingest.maxBytes) {
