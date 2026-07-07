@@ -280,24 +280,35 @@ textarea { resize: vertical; }
 /* Phase 17 — light theme. Dark stays the default; the topbar toggle sets
    html[data-theme='light'] and everything themed via CSS variables follows. */
 [data-theme='light'] {
-  --bg: #f4f6fa;
-  --bg-glow: #dde6f7;
-  --panel: #ffffff;
-  --panel-2: #eef1f7;
-  --line: #d7dce6;
-  --text: #1c2330;
-  --muted: #5b6577;
-  --brand: #3b63e0;
-  --brand-2: #6d4fd6;
-  --green: #158a5c;
-  --amber: #b07a12;
-  --red: #cc4536;
-  --shadow: 0 8px 30px rgba(30, 40, 70, 0.12);
-  --btn-ghost-hover: #e3e8f2;
-  --backdrop: rgba(40, 50, 70, 0.45);
-  --turn-text: #2a3345;
+  /* Claude.ai-inspired palette: warm cream surfaces, terracotta accent,
+     soft warm-gray ink. */
+  --bg: #f5f4ee;            /* cream */
+  --bg-glow: #ece7da;       /* warm glow */
+  --panel: #fdfcf8;         /* bone white cards */
+  --panel-2: #f0eee6;
+  --line: #e4e1d5;
+  --text: #1f1e1d;          /* warm near-black ink */
+  --muted: #73716a;
+  --brand: #c96442;         /* Claude terracotta */
+  --brand-2: #b25534;
+  --green: #427745;
+  --amber: #a56f16;
+  --red: #b53a2c;
+  --shadow: 0 8px 30px rgba(80, 60, 40, 0.10);
+  --btn-ghost-hover: #ece9df;
+  --backdrop: rgba(64, 52, 40, 0.45);
+  --turn-text: #3a3833;
 }
-[data-theme='light'] .pill-live { background: rgba(21, 138, 92, 0.1); }
-[data-theme='light'] .pill-sim { background: rgba(59, 99, 224, 0.1); }
-[data-theme='light'] .tag-live { background: rgba(21, 138, 92, 0.12); color: #158a5c; }
+[data-theme='light'] .pill-live { background: rgba(66, 119, 69, 0.1); }
+[data-theme='light'] .pill-sim { background: rgba(201, 100, 66, 0.1); }
+[data-theme='light'] .tag-live { background: rgba(66, 119, 69, 0.12); color: #427745; }
 .theme-toggle { font-size: 17px; }
+
+[data-theme='light'] h1, [data-theme='light'] h2, [data-theme='light'] h3,
+[data-theme='light'] .brand h1 {
+  font-family: Georgia, 'Noto Serif TC', 'Songti TC', serif;
+  letter-spacing: 0;
+}
+[data-theme='light'] .web-toggle input,
+[data-theme='light'] .agent-config-check input { accent-color: #c96442; }
+[data-theme='light'] .research-report-body a { color: #c96442; }
