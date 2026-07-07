@@ -4,6 +4,27 @@
 //   1) shave off model-y boilerplate when a live turn/report starts with it,
 //   2) repair common half-sentence / dangling-tail endings,
 //   3) keep utterances and artifacts shaped like demo-ready deliverables.
+//
+// Phase 19 addition — DETERMINISTIC Traditional Chinese enforcement: some
+// models (observed with claude-cli brains) occasionally slip into Simplified
+// Chinese or half-width punctuation mid-turn. Prompt rules alone can't
+// guarantee it, so every polished utterance/artifact is normalized through
+// OpenCC (cn → twp, Taiwan standard with phrase conversion: 软件→軟體) and
+// half-width ，：； between CJK characters become full-width. Text that is
+// already Traditional passes through byte-identical.
+import * as OpenCC from 'opencc-js';
+
+const toTaiwanese = OpenCC.Converter({ from: 'cn', to: 'twp' });
+const HAS_CJK = /[㐀-鿿]/;
+
+export function normalizeTraditional(text = '') {
+  const s = String(text || '');
+  if (!HAS_CJK.test(s)) return s;
+  return toTaiwanese(s)
+    .replace(/([㐀-鿿]),(?=[㐀-鿿])/g, '$1，')
+    .replace(/([㐀-鿿]):(?=[㐀-鿿])/g, '$1：')
+    .replace(/([㐀-鿿]);(?=[㐀-鿿])/g, '$1；');
+}
 
 const SENTENCE_END = /[。！？!?）)]$/;
 const CONNECTOR_WORDS = '(以及|而且|但是|不過|並且|因此|所以|例如|包含|像是|尤其是|同時|另外|接著|然後|如果|並|與|跟|或|及)';
@@ -66,7 +87,7 @@ export function polishUtterance(text = '') {
   out = stripBannedOpeners(out);
   out = removeDanglingTail(out);
   out = ensureTerminal(out);
-  return compact(out);
+  return normalizeTraditional(compact(out));
 }
 
 function polishMarkdownBullets(text = '') {
@@ -98,5 +119,5 @@ export function polishArtifact(text = '') {
     }
     break;
   }
-  return compact(lines.join('\n'));
+  return normalizeTraditional(compact(lines.join('\n')));
 }

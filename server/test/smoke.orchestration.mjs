@@ -78,6 +78,16 @@ try {
     }
   });
 
+  step('Traditional Chinese is enforced deterministically (OpenCC + punctuation)', () => {
+    const slipped = polishUtterance('这个方案的内存占用太高,我们应该先做压力测试:确认软件的并发上限。');
+    assert.ok(!/[这们应该压软测确认]/.test(slipped), 'no simplified characters survive');
+    assert.ok(slipped.includes('，') && slipped.includes('：'), 'half-width punctuation between CJK becomes full-width');
+    assert.ok(slipped.includes('記憶體') && slipped.includes('軟體'), 'Taiwan phrases (内存→記憶體, 软件→軟體)');
+
+    const already = '這段已經是繁體中文，含 Token 上限與 API 這類英數，不應被改動。';
+    assert.equal(polishUtterance(already), already, 'already-Traditional text passes through unchanged');
+  });
+
   step('output polish removes boilerplate opener and repairs dangling sentence tails', () => {
     const cleaned = polishUtterance('從我的角度來看，這題要先看指標，而且');
     assert.equal(cleaned, '這題要先看指標。');
