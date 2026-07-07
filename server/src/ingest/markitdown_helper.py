@@ -61,6 +61,8 @@ def convert(path):
         if markdown is None:
             markdown = getattr(result, "text_content", "") or ""
         title = getattr(result, "title", None)
+        if str(path).lower().endswith(".pdf"):
+            markdown = (markdown or "") + _pdf_tables_markdown(path)
         _emit({
             "ok": True,
             "available": True,
@@ -74,6 +76,78 @@ def convert(path):
             "available": True,
             "error": f"{type(exc).__name__}: {exc}",
         })
+
+
+def _cell(v):
+    """One table cell → safe Markdown (no pipes/newlines)."""
+    return " ".join(str(v or "").split()).replace("|", "\\|")
+
+
+def _pdf_tables_markdown(path):
+    """Extract genuine tables from a PDF as Markdown tables via pdfplumber.
+
+    MarkItDown's PDF path (pdfminer in the pinned 0.1.x line) flattens tabular
+    layouts into loose text and loses row association entirely. pdfplumber
+    reconstructs tables from page geometry, so we append them as a clearly
+    labelled section AFTER the canonical MarkItDown text. If pdfplumber isn't
+    installed, or nothing credible is found, we return "" and the document is
+    just the plain conversion, exactly as before — enrichment must never break
+    the base pipeline.
+    """
+    try:
+        import pdfplumber
+    except Exception:
+        return ""
+    def credible(rows, strict):
+        """Filter out things that are not really tables (stray lines / prose)."""
+        if len(rows) < 2 or max(len(r) for r in rows) < 2:
+            return False
+        if not strict:
+            return True
+        # Text-strategy tables are inferred from word positions, so prose can
+        # masquerade as a table. Demand a consistent rectangular grid with
+        # mostly filled cells before we believe it.
+        widths = {len(r) for r in rows}
+        if len(widths) != 1:
+            return False
+        cells = [str(c or "").strip() for r in rows for c in r]
+        return sum(1 for c in cells if c) / len(cells) >= 0.75
+
+    def to_block(rows, page_no):
+        width = max(len(r) for r in rows)
+        norm = [list(r) + [""] * (width - len(r)) for r in rows]
+        header, body = norm[0], norm[1:]
+        lines = [
+            "| " + " | ".join(_cell(c) for c in header) + " |",
+            "| " + " | ".join(["---"] * width) + " |",
+        ]
+        lines += ["| " + " | ".join(_cell(c) for c in row) + " |" for row in body]
+        return f"（第 {page_no} 頁）\n" + "\n".join(lines)
+
+    blocks = []
+    try:
+        with pdfplumber.open(path) as pdf:
+            for page_no, page in enumerate(pdf.pages, start=1):
+                found = []
+                # Primary: ruled tables (cell borders drawn as lines).
+                for table in page.extract_tables() or []:
+                    rows = [r for r in table if r and any(str(c or "").strip() for c in r)]
+                    if credible(rows, strict=False):
+                        found.append(rows)
+                # Fallback: borderless tables laid out purely by position —
+                # infer the grid from text alignment, with the strict filter.
+                if not found:
+                    settings = {"vertical_strategy": "text", "horizontal_strategy": "text"}
+                    for table in page.extract_tables(settings) or []:
+                        rows = [r for r in table if r and any(str(c or "").strip() for c in r)]
+                        if credible(rows, strict=True):
+                            found.append(rows)
+                blocks += [to_block(rows, page_no) for rows in found]
+    except Exception:
+        return ""
+    if not blocks:
+        return ""
+    return "\n\n## 文件中的表格（自動抽取）\n\n" + "\n\n".join(blocks)
 
 
 def main(argv):
