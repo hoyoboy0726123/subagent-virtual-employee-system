@@ -159,8 +159,15 @@ export async function meetingTurn({ employee, grounding, context }) {
     if (view.myLastPoint) {
       lines.push('', `你上一輪的立場是：「${view.myLastPoint}」。請延續它、不要自相矛盾，並在此基礎上推進。`);
     }
+    if (context.managerDirective) {
+      lines.push(
+        '',
+        `⚠ 你的主管（人類主持人）在討論中發話：「${context.managerDirective}」。`,
+        '這是本場會議最高優先的指示——你的發言必須順著這個方向推進，先回應主管的點，再展開你的專業意見。',
+      );
+    }
     if (context.managerQuestion) {
-      lines.push('', `主持會議的主管點名你發言，並追問：「${context.managerQuestion}」。請正面回答這個問題，不要迴避。`);
+      lines.push('', `主持會議的主管代理點名你發言，並追問：「${context.managerQuestion}」。請正面回答這個問題，不要迴避。`);
     }
     lines.push('', `本輪目標：${roundGoal}。`, stance, speakClosing);
     user = lines.join('\n');

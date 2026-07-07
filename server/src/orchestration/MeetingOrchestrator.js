@@ -40,77 +40,159 @@ function planRounds(rounds) {
   return [ROUND_LIBRARY[0], ROUND_LIBRARY[1], ...middle, ROUND_LIBRARY[2], CLOSE_ROUND].slice(0, rounds);
 }
 
+// ---------------------------------------------------------------------------
+// Live interjection mailbox (Phase 16). While a discussion segment is running,
+// the MANAGER (the human user) can post a note at any time; it is drained
+// before the next speaker turn, lands in the transcript as a manager turn, and
+// steers every subsequent agent (via ConversationState + managerDirective).
+// Keyed by the caller-supplied runId; process-local, like the run itself.
+// ---------------------------------------------------------------------------
+const interjectionQueues = new Map();
+
+export function interject(runId, text) {
+  const note = String(text || '').trim();
+  if (!runId || !note) return false;
+  if (!interjectionQueues.has(runId)) interjectionQueues.set(runId, []);
+  interjectionQueues.get(runId).push(note);
+  return true;
+}
+
+const MANAGER_TURN = { speaker: '主管', role: '會議主持人', speakerId: 'manager' };
+
+function drainInterjections(runId, convo, roundNo, roundTitle, emit) {
+  const queue = runId ? interjectionQueues.get(runId) : null;
+  if (!queue || !queue.length) return;
+  while (queue.length) {
+    const added = convo.add({
+      round: roundNo,
+      roundTitle,
+      ...MANAGER_TURN,
+      text: queue.shift(),
+      live: true,
+      isManager: true,
+      toolCalls: 0,
+      citations: [],
+    });
+    emit({ type: 'turn', turn: added });
+  }
+}
+
 /**
- * @param {object} req  { topic, participants, rounds, onEvent? }
- *   onEvent — optional live-progress callback (Phase 15 streaming): receives
- *   {type:'round'|'turn'|'synthesizing', ...} as the meeting unfolds. Callback
- *   errors are swallowed so streaming can never break the meeting itself.
- * @returns {Promise<{transcript, minutes, report, grounding, stats}>}
+ * Run discussion rounds WITHOUT concluding (Phase 16). Appends to an existing
+ * transcript when `priorTranscript` is given (繼續討論), so round numbering and
+ * every agent's memory of the conversation carry over.
+ *
+ * @param {object} req  { topic, participants, rounds, priorTranscript?, runId?, onEvent? }
+ * @returns {Promise<{transcript, grounding, stats}>}
  */
-export async function runMeeting({ topic, participants, rounds, onEvent }) {
+export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], runId, onEvent }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   const { byEmployee, flat } = groundingFor({ query: topic, employees: participants });
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
-  const plan = planRounds(rounds);
 
   const convo = new ConversationState({ topic, participants });
+  for (const t of priorTranscript) convo.add(t);
+  const startRound = priorTranscript.reduce((m, t) => Math.max(m, t.round || 0), 0);
+
+  // First segment gets the open→analyse→decide arc; continuation segments are
+  // all deepening — the MANAGER decides when the meeting actually closes.
+  const plan = startRound === 0 ? planRounds(rounds) : Array.from({ length: rounds }, () => DEEPEN_ROUND);
   const stats = newStats();
 
-  for (let r = 0; r < rounds; r++) {
-    const { title: roundTitle, goal: roundGoal } = plan[r] || { title: `第 ${r + 1} 輪`, goal: '收斂結論' };
-    emit({ type: 'round', round: r + 1, rounds, roundTitle, roundGoal });
+  try {
+    for (let r = 0; r < rounds; r++) {
+      const roundNo = startRound + r + 1;
+      const { title: roundTitle, goal: roundGoal } = plan[r] || DEEPEN_ROUND;
+      emit({ type: 'round', round: roundNo, roundTitle, roundGoal });
 
-    // Phase 15: the manager agent chairs the round — it picks WHO speaks next
-    // (and may attach a follow-up question) from those yet to speak. Everyone
-    // still speaks exactly once per round; offline this degrades to the
-    // original deterministic order.
-    const remaining = [...participants];
-    while (remaining.length) {
-      const pick = await pickNextSpeaker({ topic, roundTitle, roundGoal, convo, remaining });
-      const emp = pick.employee;
-      remaining.splice(remaining.indexOf(emp), 1);
+      // The manager agent chairs the round — it picks WHO speaks next (and may
+      // attach a follow-up question). Everyone still speaks once per round;
+      // offline this degrades to the deterministic order.
+      const remaining = [...participants];
+      while (remaining.length) {
+        // The human manager's live interjections take the floor first.
+        drainInterjections(runId, convo, roundNo, roundTitle, emit);
 
-      const grounding = byEmployee[emp.id] || [];
-      const turn = await executor.meetingTurn({
-        employee: emp,
-        grounding,
-        context: {
-          topic,
-          rounds,
-          round: r,
+        const pick = await pickNextSpeaker({ topic, roundTitle, roundGoal, convo, remaining });
+        const emp = pick.employee;
+        remaining.splice(remaining.indexOf(emp), 1);
+
+        const view = convo.contextFor(emp.name, { window: Math.max(participants.length, 4) });
+        // Surface the manager's most recent interjection as a binding directive.
+        const managerTurns = convo.turns.filter((t) => t.isManager);
+        const managerDirective = managerTurns.length ? managerTurns[managerTurns.length - 1].text : null;
+
+        const turn = await executor.meetingTurn({
+          employee: emp,
+          grounding: byEmployee[emp.id] || [],
+          context: {
+            topic,
+            rounds: startRound + rounds,
+            round: roundNo - 1,
+            roundTitle,
+            roundGoal,
+            participantList,
+            managerQuestion: pick.question,
+            managerDirective,
+            convo: view,
+            priorSpeakers: convo.priorSpeakers().filter((n) => n !== emp.name),
+          },
+        });
+        record(stats, turn.live);
+        const added = convo.add({
+          round: roundNo,
           roundTitle,
-          roundGoal,
-          participantList,
-          managerQuestion: pick.question,
-          convo: convo.contextFor(emp.name, { window: Math.max(participants.length, 4) }),
-          priorSpeakers: convo.priorSpeakers().filter((n) => n !== emp.name),
-        },
-      });
-      record(stats, turn.live);
-      const added = convo.add({
-        round: r + 1,
-        roundTitle,
-        speaker: emp.name,
-        role: emp.roleTitle,
-        speakerId: emp.id,
-        text: turn.text,
-        live: turn.live,
-        toolCalls: turn.toolCalls || 0,
-        pickedBy: pick.live ? 'manager' : 'sequence',
-        managerQuestion: pick.question || null,
-        citations: turn.citations,
-      });
-      emit({ type: 'turn', turn: added });
+          speaker: emp.name,
+          role: emp.roleTitle,
+          speakerId: emp.id,
+          text: turn.text,
+          live: turn.live,
+          toolCalls: turn.toolCalls || 0,
+          pickedBy: pick.live ? 'manager' : 'sequence',
+          managerQuestion: pick.question || null,
+          citations: turn.citations,
+        });
+        emit({ type: 'turn', turn: added });
+      }
     }
+    // Anything the manager said after the final turn still enters the record.
+    drainInterjections(runId, convo, startRound + rounds, '討論中', emit);
+  } finally {
+    if (runId) interjectionQueues.delete(runId);
   }
 
-  emit({ type: 'synthesizing' });
-  const transcript = convo.transcript();
-  const minutes = engine.buildMinutes({ topic, participants, transcript });
-  const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding: flat });
-  record(stats, report.live);
+  return { transcript: convo.transcript(), grounding: flat, stats };
+}
 
-  return { transcript, minutes, report: report.text, grounding: flat, stats };
+/**
+ * Conclude a meeting (Phase 16): the MANAGER decided the discussion is done —
+ * only now are the minutes/report synthesized from the full transcript.
+ * @param {object} req  { topic, participants, transcript, grounding?, onEvent? }
+ * @returns {Promise<{minutes, report, stats}>}
+ */
+export async function concludeMeeting({ topic, participants, transcript, grounding = [], onEvent }) {
+  const emit = (e) => { try { onEvent?.(e); } catch { /* ignore */ } };
+  emit({ type: 'synthesizing' });
+  const stats = newStats();
+  const minutes = engine.buildMinutes({ topic, participants, transcript });
+  const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding });
+  record(stats, report.live);
+  return { minutes, report: report.text, stats };
+}
+
+/**
+ * Legacy one-shot meeting (API compatibility + OpenClaw parity): rounds then an
+ * immediate conclusion, exactly as before Phase 16.
+ * @param {object} req  { topic, participants, rounds, onEvent? }
+ * @returns {Promise<{transcript, minutes, report, grounding, stats}>}
+ */
+export async function runMeeting({ topic, participants, rounds, onEvent }) {
+  const ran = await runMeetingRounds({ topic, participants, rounds, onEvent });
+  const done = await concludeMeeting({
+    topic, participants, transcript: ran.transcript, grounding: ran.grounding, onEvent,
+  });
+  const stats = { ...ran.stats, total: ran.stats.total + done.stats.total, live: ran.stats.live + done.stats.live };
+  return { transcript: ran.transcript, minutes: done.minutes, report: done.report, grounding: ran.grounding, stats };
 }
 
 export function newStats() {

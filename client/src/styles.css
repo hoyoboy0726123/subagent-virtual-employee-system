@@ -261,3 +261,13 @@ textarea { resize: vertical; }
 .live-progress-turns .turn { margin-bottom: 8px; animation: turn-in 0.25s ease-out; }
 .turn-question { font-size: 0.85rem; margin: 2px 0; }
 @keyframes turn-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* Phase 16 — manager-chaired meeting room */
+.meeting-room-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.meeting-room-head h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tag-live { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+.meeting-room-transcript { max-height: 420px; overflow-y: auto; margin: 10px 0; }
+.meeting-room-controls .interject-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.meeting-room-controls .interject-row input { flex: 1; }
+.turn-manager .turn-text { border-left: 3px solid #e67e22; padding-left: 8px; font-weight: 600; }
+.turn-av-manager { background: rgba(230, 126, 34, 0.2); }

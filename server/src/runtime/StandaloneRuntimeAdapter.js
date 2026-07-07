@@ -51,6 +51,27 @@ export class StandaloneRuntimeAdapter extends AgentRuntimeAdapter {
     };
   }
 
+  // Phase 16 — manager-chaired lifecycle: run discussion rounds WITHOUT
+  // concluding (the human manager decides what happens next).
+  async runMeetingRounds(req) {
+    const r = await meetingOrchestrator.runMeetingRounds(req);
+    return {
+      transcript: r.transcript,
+      grounding: r.grounding,
+      runtime: this.#runtime(r.stats, r.grounding.length),
+    };
+  }
+
+  // Phase 16 — the manager decided to conclude: synthesize minutes + report.
+  async concludeMeeting(req) {
+    const r = await meetingOrchestrator.concludeMeeting(req);
+    return {
+      minutes: r.minutes,
+      report: r.report,
+      runtime: this.#runtime(r.stats, req.grounding?.length || 0),
+    };
+  }
+
   async executeGoal(req) {
     const r = await goalCoordinator.executeGoal(req);
     return {

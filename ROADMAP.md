@@ -221,7 +221,28 @@ let agents grow their own knowledge base — with the manager as gatekeeper.
       and the UI shows the conversation as it happens.
 - [x] Tests: 64 hermetic checks + 4/4 live agentic regression passing.
 
-## 🧭 Phase 16 — Final product polish & packaging
+## ✅ Phase 16 — Manager-chaired meetings *(shipped)*
+
+**Goal:** meetings stop being fixed-length scripts — the human MANAGER chairs.
+
+- [x] Meeting lifecycle (`status: discussing | concluded`, migration v5):
+      a discussion STOPS after its rounds and waits; only the manager's
+      conclusion synthesizes minutes/report and distills memories.
+- [x] 繼續討論: `POST /api/meetings/:id/continue/stream` resumes with the full
+      transcript (round numbering and every agent's context carry over).
+- [x] 主管插話: `POST /api/meetings/interject` — live into a running segment
+      (drained before the next speaker) or stored between segments; lands in
+      the transcript as a manager turn and is injected into every subsequent
+      agent prompt as the top-priority directive.
+- [x] 會議室 UI: full live transcript, interject input, continue / conclude
+      buttons, 「🟢 討論中」 meetings reopen from the history list.
+- [x] Legacy one-shot `POST /api/meetings(/stream)` kept for API compatibility.
+- [x] Tests: 65 hermetic checks incl. the full lifecycle (no report before
+      conclusion, stored interjection enters the record, double-conclude and
+      late interjection refused); live-verified — employees visibly pivot to
+      the manager's directive in the continued round.
+
+## 🧭 Phase 17 — Final product polish & packaging
 
 **Goal:** ship-ready operational clarity.
 

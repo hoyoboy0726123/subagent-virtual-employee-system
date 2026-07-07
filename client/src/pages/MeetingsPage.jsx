@@ -14,8 +14,9 @@ export default function MeetingsPage({ refreshKey, onChange }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
-  // Live progress while the multi-agent meeting streams (Phase 15).
-  const [progress, setProgress] = useState(null); // { phase, round, roundTitle, turns: [] }
+  // Phase 16 — the meeting room: a discussion the MANAGER is chairing right now.
+  // { meetingId, topic, transcript: [], runId, streaming, phase }
+  const [room, setRoom] = useState(null);
 
   const reload = async (next = filters) => {
     const [employeeList, meetings] = await Promise.all([
@@ -31,6 +32,17 @@ export default function MeetingsPage({ refreshKey, onChange }) {
   const toggle = (id) =>
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
+  // Shared SSE event handler: every segment (start / continue) feeds the room.
+  const roomEvents = (evt) => {
+    if (evt.type === 'run') setRoom((r) => ({ ...r, runId: evt.runId }));
+    else if (evt.type === 'round') setRoom((r) => ({ ...r, phase: `第 ${evt.round} 輪 — ${evt.roundTitle}` }));
+    else if (evt.type === 'turn') setRoom((r) => ({ ...r, transcript: [...(r?.transcript || []), evt.turn] }));
+    else if (evt.type === 'synthesizing') setRoom((r) => ({ ...r, phase: '主管代理正在統整決議與報告…' }));
+    else if (evt.type === 'memory') setRoom((r) => ({ ...r, phase: '正在為每位員工沉澱會議記憶…' }));
+  };
+
+  // Phase 16: start a DISCUSSION — it stops after the rounds and waits for the
+  // manager (you) to continue / interject / conclude.
   const run = async () => {
     setErr('');
     if (!topic.trim() || selected.length === 0) {
@@ -38,28 +50,68 @@ export default function MeetingsPage({ refreshKey, onChange }) {
       return;
     }
     setBusy(true);
-    setProgress({ phase: '準備中…', round: 0, roundTitle: '', turns: [] });
+    setRoom({ meetingId: null, topic, transcript: [], runId: null, streaming: true, phase: '準備中…' });
     try {
       const { meeting } = await api.stream(
-        '/meetings/stream',
+        '/meetings/discuss/stream',
         { topic, participantIds: selected, rounds: Number(rounds) },
-        (evt) => {
-          if (evt.type === 'round') {
-            setProgress((p) => ({ ...p, phase: null, round: evt.round, rounds: evt.rounds, roundTitle: evt.roundTitle }));
-          } else if (evt.type === 'turn') {
-            setProgress((p) => ({ ...p, turns: [...(p?.turns || []), evt.turn] }));
-          } else if (evt.type === 'synthesizing') {
-            setProgress((p) => ({ ...p, phase: '主管代理正在統整報告…' }));
-          } else if (evt.type === 'memory') {
-            setProgress((p) => ({ ...p, phase: '正在為每位員工沉澱會議記憶…' }));
-          }
-        },
+        roomEvents,
       );
       setTopic(''); setSelected([]);
+      setRoom((r) => ({
+        ...r, meetingId: meeting.id, transcript: meeting.transcript, streaming: false, runId: null, phase: null,
+      }));
+      onChange?.();
+    } catch (e) {
+      setErr(e.message);
+      setRoom(null);
+    } finally { setBusy(false); }
+  };
+
+  const continueRounds = async () => {
+    if (!room?.meetingId) return;
+    setErr('');
+    setRoom((r) => ({ ...r, streaming: true, phase: '討論繼續…' }));
+    try {
+      const { meeting } = await api.stream(`/meetings/${room.meetingId}/continue/stream`, { rounds: 1 }, roomEvents);
+      setRoom((r) => ({ ...r, transcript: meeting.transcript, streaming: false, runId: null, phase: null }));
+      onChange?.();
+    } catch (e) {
+      setErr(e.message);
+      setRoom((r) => (r ? { ...r, streaming: false, runId: null, phase: null } : r));
+    }
+  };
+
+  const interject = async (text) => {
+    if (!text.trim()) return;
+    const res = await api.post('/meetings/interject', {
+      meetingId: room?.meetingId, runId: room?.runId, text,
+    });
+    // Stored notes append immediately; live ones arrive through the stream.
+    if (res.delivery === 'stored' && res.turn) {
+      setRoom((r) => ({ ...r, transcript: [...r.transcript, res.turn] }));
+    }
+  };
+
+  const conclude = async () => {
+    if (!room?.meetingId) return;
+    setErr('');
+    setRoom((r) => ({ ...r, streaming: true, phase: '主管代理正在統整決議與報告…' }));
+    try {
+      const { meeting } = await api.stream(`/meetings/${room.meetingId}/conclude/stream`, {}, roomEvents);
+      setRoom(null);
       onChange?.();
       setOpen(meeting);
-    } catch (e) { setErr(e.message); } finally { setBusy(false); setProgress(null); }
+    } catch (e) {
+      setErr(e.message);
+      setRoom((r) => (r ? { ...r, streaming: false, phase: null } : r));
+    }
   };
+
+  // Re-open a still-discussing meeting from the list.
+  const reopenRoom = (m) => setRoom({
+    meetingId: m.id, topic: m.topic, transcript: m.transcript, runId: null, streaming: false, phase: null,
+  });
 
   const del = async (id) => { await api.del(`/meetings/${id}`); onChange?.(); };
   const patchFilters = (patch) => setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
@@ -86,34 +138,21 @@ export default function MeetingsPage({ refreshKey, onChange }) {
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          <button className="btn" onClick={run} disabled={busy}>{busy ? '討論進行中…' : '▶ 開始會議'}</button>
+          <button className="btn" onClick={run} disabled={busy || Boolean(room)} title={room ? '請先結束目前開著的會議室' : ''}>
+            {busy ? '開場中…' : '▶ 開始會議'}
+          </button>
         </div>
-
-        {busy && progress && (
-          <div className="live-progress">
-            <div className="live-progress-head">
-              {progress.phase
-                ? <span>⏳ {progress.phase}</span>
-                : <span>🗣️ 第 {progress.round}/{progress.rounds} 輪 — {progress.roundTitle}（已 {progress.turns.length} 則發言）</span>}
-            </div>
-            <div className="live-progress-turns">
-              {progress.turns.slice(-6).map((t, i) => (
-                <div key={i} className="turn">
-                  <div className="turn-av">{t.speaker.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
-                  <div>
-                    <div className="turn-who">
-                      {t.speaker} <span className="muted">· {t.role}</span>
-                      {t.pickedBy === 'manager' && <span className="tag" title={t.managerQuestion ? `主管追問：${t.managerQuestion}` : '主管代理點名'}>👔 點名</span>}
-                      {t.toolCalls > 0 && <span className="tag" title="此發言前代理自主查詢了資料">🛠 {t.toolCalls}</span>}
-                    </div>
-                    <div className="turn-text">{t.text}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      {room && (
+        <MeetingRoom
+          room={room}
+          onInterject={interject}
+          onContinue={continueRounds}
+          onConclude={conclude}
+          onLeave={() => setRoom(null)}
+        />
+      )}
 
       <div className="section-head">
         <h3 className="section-title">過往會議</h3>
@@ -167,14 +206,20 @@ export default function MeetingsPage({ refreshKey, onChange }) {
           <div className="list">
             {meetings.map((m) => (
               <div key={m.id} className="list-item">
-                <button className="list-main" onClick={() => setOpen(m)}>
-                  <strong>{m.topic}</strong>
+                <button
+                  className="list-main"
+                  onClick={() => (m.status === 'discussing' ? reopenRoom(m) : setOpen(m))}
+                >
+                  <strong>
+                    {m.status === 'discussing' && <span className="tag tag-live">🟢 討論中</span>}
+                    {m.topic}
+                  </strong>
                   <span className="muted">
                     {(m.participants || []).map((p) => p.name).join('、')} · {new Date(m.createdAt).toLocaleString('zh-Hant')}
                     {m.grounding?.length ? ` · 📚 ${m.grounding.length} 筆知識依據` : ''}
                   </span>
                 </button>
-                <ExportButtons path={`/meetings/${m.id}`} compact />
+                {m.status !== 'discussing' && <ExportButtons path={`/meetings/${m.id}`} compact />}
                 <button className="icon-btn" onClick={() => del(m.id)} aria-label="刪除會議">🗑</button>
               </div>
             ))}
@@ -184,6 +229,109 @@ export default function MeetingsPage({ refreshKey, onChange }) {
       )}
 
       {open && <MeetingView meeting={open} onClose={() => setOpen(null)} />}
+    </div>
+  );
+}
+
+// A single transcript turn — shared by the live meeting room and the archive
+// view. Manager (human) turns render distinctly from employee agents.
+function TurnRow({ t }) {
+  if (t.isManager) {
+    return (
+      <div className="turn turn-manager">
+        <div className="turn-av turn-av-manager">👔</div>
+        <div>
+          <div className="turn-who">主管 <span className="muted">· 你</span></div>
+          <div className="turn-text">{t.text}</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="turn">
+      <div className="turn-av">{t.speaker.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
+      <div>
+        <div className="turn-who">
+          {t.speaker} <span className="muted">· {t.role}</span>
+          {t.pickedBy === 'manager' && (
+            <span className="tag" title={t.managerQuestion ? `主管代理追問：${t.managerQuestion}` : '主管代理點名發言'}>👔 點名</span>
+          )}
+          {t.toolCalls > 0 && <span className="tag" title="此發言前，代理自主查詢了知識庫／網路">🛠 {t.toolCalls} 次查證</span>}
+        </div>
+        {t.managerQuestion && <div className="muted turn-question">主管代理追問：「{t.managerQuestion}」</div>}
+        <div className="turn-text">{t.text}</div>
+        {t.citations?.length > 0 && (
+          <div className="citations">
+            {t.citations.map((c, ci) => (
+              <span key={ci} className="cite" title={c.snippet}>{c.web ? '🌐' : '📎'} {c.documentTitle}</span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Phase 16 — the meeting room. The discussion never ends on its own: the
+// MANAGER (the user) interjects to steer, continues for more rounds, and
+// decides when to conclude into minutes + report.
+function MeetingRoom({ room, onInterject, onContinue, onConclude, onLeave }) {
+  const [note, setNote] = useState('');
+  const [sending, setSending] = useState(false);
+  const endRef = React.useRef(null);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [room.transcript.length]);
+
+  const send = async () => {
+    if (!note.trim() || sending) return;
+    setSending(true);
+    try { await onInterject(note); setNote(''); } finally { setSending(false); }
+  };
+
+  return (
+    <div className="panel meeting-room">
+      <div className="meeting-room-head">
+        <h3>
+          🗣️ 會議室：{room.topic}
+          <span className="tag tag-live">{room.streaming ? '🟢 進行中' : '⏸ 等待主管指示'}</span>
+        </h3>
+        {!room.streaming && (
+          <button className="btn-ghost sm" onClick={onLeave} title="先離開，稍後可從過往會議列表回來繼續">離開會議室</button>
+        )}
+      </div>
+
+      <div className="live-progress meeting-room-transcript">
+        {room.transcript.length === 0 && <p className="muted">（尚無發言）</p>}
+        <div className="live-progress-turns">
+          {room.transcript.map((t, i) => <TurnRow key={i} t={t} />)}
+          <div ref={endRef} />
+        </div>
+        {room.phase && <div className="live-progress-head">⏳ {room.phase}</div>}
+      </div>
+
+      <div className="meeting-room-controls">
+        <div className="interject-row">
+          <input
+            placeholder="以主管身分插話——員工會把這視為最高優先的討論方向…"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
+          />
+          <button className="btn sm" onClick={send} disabled={sending || !note.trim()}>💬 插話</button>
+        </div>
+        <div className="row end">
+          <button className="btn-ghost" onClick={onContinue} disabled={room.streaming || !room.meetingId}>
+            ▶ 繼續討論 1 輪
+          </button>
+          <button className="btn" onClick={onConclude} disabled={room.streaming || !room.meetingId}>
+            ✅ 結束會議，產出決議與報告
+          </button>
+        </div>
+        <p className="muted sm">
+          {room.streaming
+            ? '討論進行中也可以插話——下一位發言者開口前就會看到你的指示。'
+            : '會議不會自行結束：你可以插話後繼續討論，滿意了再產出報告。'}
+        </p>
+      </div>
     </div>
   );
 }
@@ -269,31 +417,7 @@ function MeetingView({ meeting, onClose }) {
             return (
               <div key={r} className="round">
                 <div className="round-title">第 {r} 輪 — {turns[0]?.roundTitle}</div>
-                {turns.map((t, i) => (
-                  <div key={i} className="turn">
-                    <div className="turn-av">{t.speaker.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
-                    <div>
-                      <div className="turn-who">
-                        {t.speaker} <span className="muted">· {t.role}</span>
-                        {t.pickedBy === 'manager' && (
-                          <span className="tag" title={t.managerQuestion ? `主管追問：${t.managerQuestion}` : '主管代理點名發言'}>👔 點名</span>
-                        )}
-                        {t.toolCalls > 0 && (
-                          <span className="tag" title="此發言前，代理自主查詢了知識庫／網路">🛠 {t.toolCalls} 次查證</span>
-                        )}
-                      </div>
-                      {t.managerQuestion && <div className="muted turn-question">主管追問：「{t.managerQuestion}」</div>}
-                      <div className="turn-text">{t.text}</div>
-                      {t.citations?.length > 0 && (
-                        <div className="citations">
-                          {t.citations.map((c, ci) => (
-                            <span key={ci} className="cite" title={c.snippet}>📎 {c.documentTitle}</span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                {turns.map((t, i) => <TurnRow key={i} t={t} />)}
               </div>
             );
           })}

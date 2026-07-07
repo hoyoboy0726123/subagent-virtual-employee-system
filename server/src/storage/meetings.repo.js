@@ -18,6 +18,7 @@ function rowToMeeting(row) {
     report: row.report,
     grounding: j(row.grounding, []),
     runtime: j(row.runtime, {}),
+    status: row.status || 'concluded',
     createdAt: row.created_at,
   };
 }
@@ -120,20 +121,41 @@ export function insertMeeting(data) {
     report: data.report || '',
     grounding: data.grounding || [],
     runtime: data.runtime || {},
+    status: data.status || 'concluded',
     createdAt: now(),
   };
   getDb()
     .prepare(`INSERT INTO meetings
-      (id, topic, participant_ids, participants, rounds, transcript, minutes, report, grounding, runtime, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, topic, participant_ids, participants, rounds, transcript, minutes, report, grounding, runtime, status, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       meeting.id, meeting.topic, JSON.stringify(meeting.participantIds),
       JSON.stringify(meeting.participants), meeting.rounds,
       JSON.stringify(meeting.transcript), JSON.stringify(meeting.minutes),
       meeting.report, JSON.stringify(meeting.grounding),
-      JSON.stringify(meeting.runtime), meeting.createdAt,
+      JSON.stringify(meeting.runtime), meeting.status, meeting.createdAt,
     );
   return meeting;
+}
+
+/**
+ * Patch a live meeting (Phase 16: continue / interject / conclude update the
+ * stored transcript, artifacts, runtime stats, rounds, and status).
+ */
+export function updateMeeting(meetingId, patch = {}) {
+  const existing = getMeeting(meetingId);
+  if (!existing) return null;
+  const merged = { ...existing, ...patch, id: existing.id, createdAt: existing.createdAt };
+  getDb()
+    .prepare(`UPDATE meetings SET
+      rounds = ?, transcript = ?, minutes = ?, report = ?, grounding = ?, runtime = ?, status = ?
+      WHERE id = ?`)
+    .run(
+      merged.rounds, JSON.stringify(merged.transcript), JSON.stringify(merged.minutes),
+      merged.report, JSON.stringify(merged.grounding), JSON.stringify(merged.runtime),
+      merged.status, meetingId,
+    );
+  return merged;
 }
 
 export function deleteMeeting(meetingId) {

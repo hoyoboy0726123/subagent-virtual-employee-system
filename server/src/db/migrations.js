@@ -151,6 +151,14 @@ const MIGRATIONS = [
     const CJK = /([㐀-䶿一-鿿豈-﫿])/g;
     for (const r of rows) ins.run(String(r.content).replace(CJK, ' $1 '), r.id, r.employee_id);
   },
+
+  // v5 — manager-chaired meeting lifecycle (Phase 16). A meeting is no longer a
+  // one-shot script: it stays 'discussing' after its rounds (the MANAGER decides
+  // whether to continue, interject, or conclude), and only concluding produces
+  // the minutes/report and distills memories. Existing rows are all concluded.
+  (db) => {
+    db.exec("ALTER TABLE meetings ADD COLUMN status TEXT NOT NULL DEFAULT 'concluded';");
+  },
 ];
 
 export function migrate(db) {

@@ -453,6 +453,59 @@ try {
     await api('DELETE', `/api/employees/${e2.id}`);
   });
 
+  await step('manager-chaired lifecycle: discuss → interject → continue → conclude', async () => {
+    const readSse = async (pathname, body) => {
+      const res = await fetch(base + pathname, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body || {}),
+      });
+      const text = await res.text();
+      return text.split('\n\n').filter(Boolean)
+        .map((f) => f.split('\n').find((l) => l.startsWith('data: ')))
+        .filter(Boolean).map((l) => JSON.parse(l.slice(6)));
+    };
+
+    // 1) Start a discussion — it must STOP without minutes/report.
+    const events = await readSse('/api/meetings/discuss/stream', {
+      topic: '主管主持流程驗證', participantIds: [empId], rounds: 1,
+    });
+    const done = events[events.length - 1];
+    assert.equal(done.type, 'done');
+    const m = done.meeting;
+    assert.equal(m.status, 'discussing', 'meeting waits for the manager');
+    assert.equal(m.report, '', 'no report until the manager concludes');
+    assert.equal(m.transcript.length, 1);
+
+    // 2) Manager interjects (stored — no live segment running).
+    const inj = await api('POST', '/api/meetings/interject', { meetingId: m.id, text: '先聚焦成本，暫緩討論新功能。' });
+    assert.equal(inj.status, 200);
+    assert.equal(inj.json.delivery, 'stored');
+
+    // 3) Continue one more round — transcript carries over, manager turn included.
+    const contEvents = await readSse(`/api/meetings/${m.id}/continue/stream`, { rounds: 1 });
+    const cont = contEvents[contEvents.length - 1].meeting;
+    assert.equal(cont.status, 'discussing');
+    assert.ok(cont.transcript.some((t) => t.isManager && t.text.includes('先聚焦成本')), 'manager turn is in the record');
+    assert.ok(cont.transcript.filter((t) => !t.isManager).length >= 2, 'a new employee round ran');
+    assert.equal(cont.transcript.filter((t) => !t.isManager).slice(-1)[0].round, 2, 'round numbering continues');
+
+    // 4) Concluding is refused twice / produces artifacts once.
+    const concEvents = await readSse(`/api/meetings/${m.id}/conclude/stream`, {});
+    const concluded = concEvents[concEvents.length - 1].meeting;
+    assert.equal(concluded.status, 'concluded');
+    assert.ok(concluded.report.length > 0, 'report exists only after the manager concluded');
+    assert.ok(concluded.minutes.attendees, 'minutes synthesized');
+
+    const again = await readSse(`/api/meetings/${m.id}/conclude/stream`, {});
+    assert.equal(again[again.length - 1].type, 'error', 'double conclusion is refused');
+
+    // 5) Interjecting a concluded meeting is refused.
+    const lateInj = await api('POST', '/api/meetings/interject', { meetingId: m.id, text: 'x' });
+    assert.equal(lateInj.status, 400);
+
+    await api('DELETE', `/api/meetings/${m.id}`);
+  });
+
   await step('cross-meeting memory: a finished meeting writes each participant a memory document', async () => {
     delete process.env.MEETING_MEMORY_DISABLE; // feature on for this step only
     try {
