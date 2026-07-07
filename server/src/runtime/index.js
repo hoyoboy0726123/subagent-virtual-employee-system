@@ -1,26 +1,18 @@
 // Runtime adapter registry + factory.
 //
-// The active runtime mode is a persisted setting (see settings.service). This
-// module maps a mode string → a singleton adapter instance so services can do
-// `getRuntime()` without knowing which implementation is active.
-//
-//   • standalone (DEFAULT) — the built-in multi-agent orchestration. No external
-//     runtime required; drives each employee as an in-app agent via Google Gen AI
-//     with a deterministic offline fallback.
-//   • openclaw  (OPTIONAL) — an external adapter that instead runs each employee
-//     as a real OpenClaw subagent/session via the `openclaw` CLI → Gateway. This
-//     is a bolt-on integration, not a dependency of the product.
+// The product runs on ONE runtime: the built-in standalone multi-agent
+// orchestration (no external services). The adapter seam is kept so another
+// execution backend could be slotted in later, but the OpenClaw integration
+// has been removed (Phase 17) — legacy DB settings that still say 'openclaw'
+// or 'simulated' normalize back to 'standalone'.
 import { StandaloneRuntimeAdapter } from './StandaloneRuntimeAdapter.js';
-import { OpenClawRuntimeAdapter } from './OpenClawRuntimeAdapter.js';
 
 const ADAPTERS = {
   standalone: new StandaloneRuntimeAdapter(),
-  openclaw: new OpenClawRuntimeAdapter(),
 };
 
-// Legacy mode names → current ones (keeps existing DB settings working after the
-// Phase 5 standalone refactor: the old default 'simulated' becomes 'standalone').
-const ALIASES = { simulated: 'standalone' };
+// Legacy mode names → current ones (keeps existing DB settings working).
+const ALIASES = { simulated: 'standalone', openclaw: 'standalone' };
 
 export const RUNTIME_MODES = Object.keys(ADAPTERS);
 export const DEFAULT_RUNTIME_MODE = 'standalone';

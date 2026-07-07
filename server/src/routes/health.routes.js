@@ -16,32 +16,21 @@ export const healthRouter = Router();
 healthRouter.get('/health', asyncHandler(async (_req, res) => {
   const kb = retrievalStats();
   const settings = getSettings();
-  // The default standalone runtime is always ready; report whether its agent
-  // turns run on the live model (Gemma) or the offline deterministic engine.
+  // The standalone runtime is always ready; report whether its agent turns run
+  // on the live model or the offline deterministic engine.
   const standalone = await getRuntimeAdapter('standalone').health();
-  // Live probe of the OPTIONAL OpenClaw integration so callers can show whether
-  // real subagent execution is available right now (independent of which mode is
-  // selected).
-  const openclaw = await getRuntimeAdapter('openclaw').health();
   // Document-ingestion capability (Phase 7): whether MarkItDown is reachable and
   // which upload types are supported (text-like types always work via fallback).
   const ingest = await ingestCapability();
   res.json({
     ok: true,
     llm: llmEnabled(),
-    runtime: settings.runtimeMode,
+    runtime: 'standalone',
     runtimeLabel: settings.runtimeLabel,
     standalone: {
       live: standalone.live,
       engine: standalone.engine,
       model: standalone.model,
-    },
-    openclaw: {
-      live: openclaw.live,
-      engine: openclaw.engine,
-      gateway: openclaw.gateway,
-      version: openclaw.version,
-      disabled: openclaw.disabled,
     },
     ingest,
     // Agentic tool use (Phase 13/14): search_knowledge is always available to

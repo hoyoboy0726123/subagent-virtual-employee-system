@@ -19,7 +19,6 @@
     "test:tools": "node server/test/smoke.tools.mjs",
     "test:live": "node server/test/live.agentic.mjs",
     "test:live:research": "node server/test/live.research.mjs",
-    "test:openclaw": "node server/test/smoke.openclaw.mjs",
     "test:markitdown": "node server/test/smoke.markitdown.mjs"
   },
   "engines": {

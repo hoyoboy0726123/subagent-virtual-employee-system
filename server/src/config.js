@@ -17,12 +17,10 @@ export const config = {
           : path.resolve(process.env.DB_FILE))
       : path.join(__dirname, '..', 'data', 'app.db'),
 
-  // Default agent-execution runtime. 'standalone' is the built-in multi-agent
-  // orchestration and requires no external services; 'openclaw' is the optional
-  // external-subagent adapter. This is only the default — it can be changed at
-  // runtime via the settings API and is persisted in the DB. (The legacy value
-  // 'simulated' is transparently normalized to 'standalone'.)
-  defaultRuntime: process.env.RUNTIME_MODE || 'standalone',
+  // Agent-execution runtime. The built-in standalone multi-agent orchestration
+  // is the only runtime (the optional OpenClaw integration was removed in
+  // Phase 17); legacy stored values normalize back to 'standalone'.
+  defaultRuntime: 'standalone',
 
   // Retrieval defaults.
   retrieval: {
@@ -96,35 +94,6 @@ export const config = {
     thinkingLevel: process.env.LLM_THINKING_LEVEL ?? 'MINIMAL',
   },
 
-  // Real OpenClaw runtime wiring. Employees are executed as real OpenClaw
-  // subagents/sessions driven through the `openclaw` CLI, which talks to the
-  // local OpenClaw Gateway. Nothing here needs to be set for it to work as long
-  // as the `openclaw` binary is on PATH and a Gateway is running — the defaults
-  // are sensible. Every value is env-overridable for deployment/testing.
-  openclaw: {
-    // CLI binary used to drive subagent turns (`openclaw agent ... --json`).
-    cli: process.env.OPENCLAW_CLI || 'openclaw',
-    // Optional explicit agent id to route turns to (`--agent`). Empty → the
-    // Gateway's default agent/routing. Employees are still isolated per-session.
-    agentId: process.env.OPENCLAW_AGENT || '',
-    // Agent id used for the manager synthesis pass. Falls back to `agentId`.
-    managerAgentId: process.env.OPENCLAW_MANAGER_AGENT || process.env.OPENCLAW_AGENT || '',
-    // Per-turn timeout (seconds) passed to the CLI and enforced locally.
-    timeoutSec: Number(process.env.OPENCLAW_TIMEOUT_SEC) || 300,
-    // Thinking level for subagent turns: off|minimal|low|medium|high.
-    thinking: process.env.OPENCLAW_THINKING || 'low',
-    // Namespacing prefix for the session ids we create (keeps them scannable in
-    // the Gateway session store, e.g. veemp-emp-…, veemp-mgr-…).
-    sessionPrefix: process.env.OPENCLAW_SESSION_PREFIX || 'veemp',
-    // Hard kill-switch: set OPENCLAW_DISABLE=1 to force the OpenClaw adapter into
-    // simulated-fallback even when the CLI is present (used by the hermetic
-    // smoke test so it never spends real subagent turns).
-    disabled: /^(1|true|yes|on)$/i.test(process.env.OPENCLAW_DISABLE || ''),
-    // Legacy HTTP wiring, retained for reference/compatibility. Not required by
-    // the CLI path and no longer what gates "configured".
-    endpoint: process.env.OPENCLAW_ENDPOINT || '',
-    apiKey: process.env.OPENCLAW_API_KEY || '',
-  },
 };
 
 export function llmEnabled() {

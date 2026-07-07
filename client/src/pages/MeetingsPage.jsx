@@ -169,13 +169,6 @@ export default function MeetingsPage({ refreshKey, onChange }) {
               {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </label>
-          <label>執行模式
-            <select value={filters.runtime} onChange={(e) => patchFilters({ runtime: e.target.value })}>
-              <option value="">全部</option>
-              <option value="standalone">內建多代理</option>
-              <option value="openclaw">OpenClaw</option>
-            </select>
-          </label>
           <label>是否即時
             <select value={filters.live} onChange={(e) => patchFilters({ live: e.target.value })}>
               <option value="">全部</option>

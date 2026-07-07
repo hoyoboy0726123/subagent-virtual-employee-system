@@ -8,10 +8,6 @@ import assert from 'node:assert/strict';
 // Use an isolated in-memory database BEFORE importing the app so the smoke test
 // never touches seeded/real data.
 process.env.DB_FILE = ':memory:';
-// Keep this test hermetic and fast: force the OpenClaw runtime into its
-// simulated fallback so we never spend real subagent turns here. The REAL
-// OpenClaw path is exercised by the opt-in test/smoke.openclaw.mjs.
-process.env.OPENCLAW_DISABLE = '1';
 // Force the document-ingestion pipeline onto its built-in JS fallback so this
 // test is hermetic regardless of whether MarkItDown (Python) is installed on the
 // machine. The REAL MarkItDown path is exercised by the opt-in
@@ -322,39 +318,23 @@ try {
     assert.equal(status, 404);
   });
 
-  await step('health reports OpenClaw runtime liveness (disabled here)', async () => {
+  await step('runtime is standalone-only (OpenClaw removed in Phase 17)', async () => {
     const { json } = await api('GET', '/api/health');
-    assert.ok(json.openclaw, 'health exposes openclaw block');
-    assert.equal(json.openclaw.live, false, 'OPENCLAW_DISABLE → not live in this test');
-    assert.equal(json.openclaw.disabled, true);
-  });
-
-  await step('switch runtime to openclaw (flagged offline fallback)', async () => {
-    const { status, json } = await api('PUT', '/api/settings', { runtimeMode: 'openclaw' });
-    assert.equal(status, 200);
-    assert.equal(json.runtimeMode, 'openclaw');
+    assert.equal(json.runtime, 'standalone');
+    assert.equal(json.openclaw, undefined, 'no openclaw block anymore');
 
     const { json: mtg } = await api('POST', '/api/meetings', {
-      topic: 'Runtime switch check', participantIds: [empId], rounds: 1,
+      topic: 'Runtime sanity check', participantIds: [empId], rounds: 1,
     });
-    assert.equal(mtg.runtime.mode, 'openclaw');
-    assert.equal(mtg.runtime.fallback, true, 'openclaw disabled → falls back but is labeled');
-    assert.equal(mtg.runtime.engine, 'deterministic', 'fallback is honestly labeled as the offline engine');
-    assert.equal(mtg.runtime.live, false);
-    // Restore default so ordering never matters.
-    await api('PUT', '/api/settings', { runtimeMode: 'standalone' });
-  });
+    assert.equal(mtg.runtime.mode, 'standalone');
+    assert.equal(mtg.runtime.engine, 'deterministic', 'no key → honest offline engine');
+    await api('DELETE', `/api/meetings/${mtg.id}`);
 
-  await step('legacy "simulated" mode is normalized to standalone', async () => {
-    const { status, json } = await api('PUT', '/api/settings', { runtimeMode: 'simulated' });
+    // Settings PUT ignores retired keys and keeps working for live ones.
+    const { status, json: s } = await api('PUT', '/api/settings', { runtimeMode: 'openclaw' });
     assert.equal(status, 200);
-    assert.equal(json.runtimeMode, 'standalone', 'legacy alias maps forward');
-    await api('PUT', '/api/settings', { runtimeMode: 'standalone' });
-  });
-
-  await step('reject unknown runtime mode', async () => {
-    const { status } = await api('PUT', '/api/settings', { runtimeMode: 'nonsense' });
-    assert.equal(status, 400);
+    assert.equal(s.runtimeMode, undefined, 'runtime switching is gone from the settings API');
+    assert.ok(s.webSearch, 'web-search settings still reported');
   });
 
   await step('per-agent config: persisted, sanitized, and editable', async () => {

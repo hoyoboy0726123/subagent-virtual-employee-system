@@ -10,31 +10,27 @@ const TABS = [
   { key: 'goals', label: '🎯 目標' },
 ];
 
-const RUNTIME_LABELS = {
-  standalone: '內建多代理',
-  openclaw: 'OpenClaw（外部整合）',
-};
-
 export default function App() {
   const [tab, setTab] = useState('employees');
   const [health, setHealth] = useState(null);
   const [settings, setSettings] = useState(null);
   const [dashboard, setDashboard] = useState(null);
+  // Theme: dark is the product default; light is opt-in and remembered.
+  const [theme, setTheme] = useState(() => localStorage.getItem('veemp-theme') || 'dark');
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('veemp-theme', theme);
+  }, [theme]);
 
   useEffect(() => {
     api.get('/health').then(setHealth).catch(() => setHealth({ ok: false }));
     api.get('/settings').then(setSettings).catch(() => setSettings(null));
     api.get('/dashboard').then(setDashboard).catch(() => setDashboard(null));
   }, [refreshKey]);
-
-  const switchRuntime = async (mode) => {
-    const next = await api.put('/settings', { runtimeMode: mode });
-    setSettings((s) => ({ ...s, ...next }));
-    refresh();
-  };
 
   const toggleWebSearch = async () => {
     try {
@@ -74,16 +70,6 @@ export default function App() {
               </span>
             </label>
           )}
-          {settings && (
-            <label className="runtime-switch" title="由哪個執行環境驅動你的子代理">
-              <span className="runtime-label">執行環境</span>
-              <select value={settings.runtimeMode} onChange={(e) => switchRuntime(e.target.value)}>
-                {(settings.availableModes || ['simulated']).map((m) => (
-                  <option key={m} value={m}>{RUNTIME_LABELS[m] || m}</option>
-                ))}
-              </select>
-            </label>
-          )}
           {health && (
             <span
               className={`pill ${health.standalone?.live ? 'pill-live' : 'pill-sim'}`}
@@ -94,14 +80,14 @@ export default function App() {
               {health.standalone?.live ? `內建多代理：即時（${health.standalone.model || 'Gemma'}）` : '內建多代理：離線推理'}
             </span>
           )}
-          {health?.openclaw?.live && (
-            <span
-              className="pill pill-live"
-              title={`可選的 OpenClaw 整合可用：Gateway ${health.openclaw.gateway}${health.openclaw.version ? ` · ${health.openclaw.version}` : ''}`}
-            >
-              OpenClaw：可用（可選）
-            </span>
-          )}
+          <button
+            className="icon-btn theme-toggle"
+            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+            title={theme === 'dark' ? '切換為明亮模式' : '切換為深色模式'}
+            aria-label="切換主題"
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
         </div>
       </header>
 
@@ -126,7 +112,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        獨立運作 · 內建多代理編排 · SQLite 儲存 · 無需外部服務 · 執行環境：{settings ? (RUNTIME_LABELS[settings.runtimeMode] || settings.runtimeMode) : '—'}
+        獨立運作 · 內建多代理編排 · SQLite 儲存 · 無需外部服務{settings?.runtimeLabel ? ` · ${settings.runtimeLabel}` : ''}
       </footer>
     </div>
   );
