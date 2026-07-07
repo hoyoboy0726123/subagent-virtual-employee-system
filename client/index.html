@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>虛擬員工系統</title>
+    <script>
+      // Apply the saved theme before first paint (light is the default) so the
+      // page never flashes the wrong palette while React boots.
+      document.documentElement.dataset.theme = localStorage.getItem('veemp-theme') || 'light';
+    </script>
   </head>
   <body>
     <div id="root"></div>

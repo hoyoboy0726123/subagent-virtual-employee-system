@@ -15,8 +15,9 @@ export default function App() {
   const [health, setHealth] = useState(null);
   const [settings, setSettings] = useState(null);
   const [dashboard, setDashboard] = useState(null);
-  // Theme: dark is the product default; light is opt-in and remembered.
-  const [theme, setTheme] = useState(() => localStorage.getItem('veemp-theme') || 'dark');
+  // Theme: the Claude-style light palette is the product default; dark is
+  // opt-in and remembered.
+  const [theme, setTheme] = useState(() => localStorage.getItem('veemp-theme') || 'light');
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
