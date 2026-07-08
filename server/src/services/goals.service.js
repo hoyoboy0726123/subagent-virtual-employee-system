@@ -3,7 +3,13 @@
 import * as repo from '../storage/goals.repo.js';
 import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
+import { taskDeliverableTurn } from '../orchestration/EmployeeAgentExecutor.js';
+import { normalizeTraditional } from '../orchestration/output.js';
+import { llmEnabled } from '../reasoning/llm.js';
 import { badRequest, notFound } from '../util/http.js';
+import { withLock } from '../util/locks.js';
+
+const gkey = (id) => `goal:${id}`;
 
 export function list(filters = {}) {
   return repo.listGoals(filters);
@@ -80,4 +86,44 @@ export async function rerun(id, { instruction } = {}, onEvent) {
 export function remove(id) {
   if (!repo.deleteGoal(id)) throw notFound('找不到該目標');
   return { ok: true };
+}
+
+/**
+ * EXECUTE one task of a goal into a real deliverable (Phase 20). The planning
+ * run only produced each assignee's subtask + approach — this makes the
+ * assignee actually DO the work (research-grade tool budget, honest citations)
+ * and stores the artifact on the task, flipping it to 'done'. Live-brain only:
+ * a fabricated offline "deliverable" would be worse than an honest refusal.
+ * Serialized per goal so two executions can't clobber each other's task array.
+ */
+export async function executeTask(goalId, order) {
+  return withLock(gkey(goalId), async () => {
+    const goal = get(goalId);
+    const idx = (goal.tasks || []).findIndex((t) => Number(t.order) === Number(order));
+    if (idx < 0) throw notFound('找不到該任務');
+    if (!llmEnabled()) {
+      throw badRequest('執行交付需要即時大腦——請點頂欄 🔑 設定 Gemini 金鑰，或切換到已登入的 Claude／Codex 訂閱。');
+    }
+    const task = goal.tasks[idx];
+    const [employee] = getEmployees([task.assigneeId]);
+    if (!employee) throw badRequest('該任務的負責人已不存在');
+
+    const others = (goal.tasks || [])
+      .filter((t) => Number(t.order) !== Number(order))
+      .map((t) => `- ${t.assignee}（${t.role}）：${t.subtask}`)
+      .join('\n');
+
+    const turn = await taskDeliverableTurn({ employee, goal, task, others });
+    if (!turn) throw badRequest('模型這次沒有產出交付物，請再試一次。');
+
+    const tasks = goal.tasks.map((t, i) => (i === idx ? {
+      ...t,
+      deliverable: normalizeTraditional(turn.text),
+      deliverableCitations: turn.citations || [],
+      deliveredAt: new Date().toISOString(),
+      deliverableToolCalls: turn.toolCalls || 0,
+      status: 'done',
+    } : t));
+    return update(goalId, { tasks });
+  });
 }

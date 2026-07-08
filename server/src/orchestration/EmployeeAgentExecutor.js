@@ -221,6 +221,57 @@ export async function goalTurn({ employee, grounding, context }) {
 }
 
 /**
+ * EXECUTE one goal task into a real deliverable (Phase 20). Planning turns
+ * promise work; this turn DOES it — the assignee produces the artifact itself,
+ * with the research-grade tool budget so external facts get verified (and
+ * cited) instead of promised. Live-only by design: a deterministic fallback
+ * would fabricate a "deliverable", which is worse than an honest refusal —
+ * callers guard with llmEnabled().
+ * @returns {Promise<{text, live, toolCalls, citations}|null>}
+ */
+export async function taskDeliverableTurn({ employee, goal, task, others, grounding = [] }) {
+  const expertise = asList(employee.expertise);
+  const system = [
+    `你是 ${employee.name}（${employee.roleTitle}），正在執行團隊目標中屬於你的任務，並產出最終交付物。`,
+    employee.personality ? `你的個性：${employee.personality}。` : '',
+    `你的專長：${expertise.join('、') || '一般問題解決'}。`,
+    '',
+    '【交付守則】',
+    '- 你要交付的是「成品本身」——不是計畫、不是承諾、不是待辦清單。',
+    '- 需要外部事實（新聞、市場、法規、技術現況）時，先用 web_search 查證再寫；引用一律附來源名稱與 URL。',
+    '- 查不到就誠實說查不到、據實交付查得到的部分，絕不可杜撰來源或數據。',
+    '- 以繁體中文輸出 Markdown 交付物全文，只輸出交付物本身，不要前言或旁白。',
+  ].filter(Boolean).join('\n');
+
+  const user = [
+    `團隊目標：「${goal.title}」`,
+    goal.description ? `目標說明：${goal.description}` : '',
+    '',
+    `【你的子任務】${task.subtask}`,
+    task.approach ? `【你先前承諾的做法】\n${task.approach}` : '',
+    others ? `【其他負責人的分工（避免重複、注意交接）】\n${others}` : '',
+    '',
+    '請現在完成這個子任務，輸出完整交付物。',
+  ].filter(Boolean).join('\n');
+
+  const toolbox = buildToolbox({ employee, research: true });
+  const res = await generateAgentic({
+    system,
+    user,
+    toolbox,
+    maxTokens: config.llm.output.document,
+    temperature: 0.5,
+    maxSteps: config.tools.researchMaxCalls,
+  });
+  const text = res?.text?.trim();
+  if (!text) return null;
+  return withCitations(
+    { text, live: true, toolCalls: res.toolCalls, toolHits: toolbox.knowledgeHits(), webSources: toolbox.webSources() },
+    grounding,
+  );
+}
+
+/**
  * Run one employee's 1-ON-1 turn (Phase 19): a private conversation with the
  * MANAGER (the human). Unlimited turns — history is re-injected each call —
  * and the full toolbox is live, so「幫我查一下」actually triggers web/knowledge

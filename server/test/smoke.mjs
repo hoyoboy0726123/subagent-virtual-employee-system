@@ -749,6 +749,15 @@ try {
     const { json: fresh } = await api('GET', `/api/goals/${goal.id}`);
     assert.equal(fresh.status, 'in-progress', 'replacement persisted');
 
+    // Phase 20 — task EXECUTION (交付). A real deliverable needs the live brain
+    // (a fabricated offline "deliverable" would be dishonest), so the hermetic
+    // run asserts the refusal is clear and actionable; a missing task is a 404.
+    const refused = await api('POST', `/api/goals/${goal.id}/tasks/1/execute`);
+    assert.equal(refused.status, 400, 'offline → execution refused, not faked');
+    assert.ok(/即時大腦|金鑰|訂閱/.test(refused.json.error), 'error says exactly what to configure');
+    const missing = await api('POST', `/api/goals/${goal.id}/tasks/99/execute`);
+    assert.equal(missing.status, 404);
+
     await api('DELETE', `/api/goals/${goal.id}`);
   });
 

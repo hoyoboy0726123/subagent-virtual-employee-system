@@ -18,9 +18,10 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   const [progress, setProgress] = useState(null); // Phase 15 live progress: { doneTasks, total, phase }
   const [rerunNote, setRerunNote] = useState('');
   const [rerunning, setRerunning] = useState(false);
+  const [executing, setExecuting] = useState(null); // task order being executed
   // Tell the shell a goal run is streaming — dot on the tab; page stays mounted
   // across tab switches so the run isn't dropped.
-  useEffect(() => { onActivity?.(busy || rerunning); }, [busy, rerunning, onActivity]);
+  useEffect(() => { onActivity?.(busy || rerunning || executing !== null); }, [busy, rerunning, executing, onActivity]);
 
   const reload = async (next = filters) => {
     const [employeeList, goals] = await Promise.all([
@@ -105,6 +106,19 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
       onChange?.();
       setOpen(goal);
     } catch (e) { setErr(e.message); } finally { setRerunning(false); setProgress(null); }
+  };
+
+  // EXECUTE one task (Phase 20): the assignee actually does the work — web
+  // research + citations — and the deliverable lands on the task card.
+  const executeTask = async (task) => {
+    if (!open || executing !== null) return;
+    setErr('');
+    setExecuting(task.order);
+    try {
+      const updated = await api.post(`/goals/${open.id}/tasks/${task.order}/execute`);
+      setOpen(updated);
+      onChange?.();
+    } catch (e) { setErr(e.message); } finally { setExecuting(null); }
   };
 
   const del = async (id) => { await api.del(`/goals/${id}`); onChange?.(); };
@@ -261,6 +275,38 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
                   <div className="turn-who">{t.assignee} <span className="muted">· {t.role}</span></div>
                   <div><strong>{t.subtask}</strong></div>
                   <div className="muted">{t.approach}</div>
+
+                  {t.deliverable ? (
+                    <div className="task-deliverable">
+                      <div className="turn-who">
+                        📦 交付物
+                        {t.deliverableToolCalls > 0 && <span className="tag" title="產出前自主查證的次數">🛠 {t.deliverableToolCalls} 次查證</span>}
+                        {t.deliveredAt && <span className="muted sm"> · {new Date(t.deliveredAt).toLocaleString('zh-Hant')}</span>}
+                      </div>
+                      <Markdown text={t.deliverable} />
+                      {(t.deliverableCitations || []).length > 0 && (
+                        <div className="citations">
+                          {t.deliverableCitations.map((c, ci) => (
+                            <span key={ci} className="cite" title={c.snippet}>{c.web ? '🌐' : '📎'} {c.documentTitle}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="row end">
+                        <button className="btn-ghost sm" onClick={() => executeTask(t)} disabled={executing !== null}>
+                          {executing === t.order ? '⏳ 重新執行中…' : '🔁 重新執行交付'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <button className="btn sm" onClick={() => executeTask(t)} disabled={executing !== null}>
+                        {executing === t.order ? '⏳ 執行中（查證需要時間）…' : '▶ 執行交付'}
+                      </button>
+                      {executing !== t.order && (
+                        <span className="muted sm">讓 {t.assignee} 真的完成這項任務——上網查證並交出成品</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <span className={`status status-${t.status}`}>{STATUS_LABELS[t.status] || t.status}</span>
               </div>

@@ -32,6 +32,12 @@ goalsRouter.post('/goals/stream', asyncHandler(async (req, res) => {
   await streamRun(req, res, (send) => goals.create(req.body || {}, send), 'goal');
 }));
 
+// EXECUTE one task into a real deliverable (Phase 20): the assignee does the
+// work (web research + citations) and the artifact lands on the task.
+goalsRouter.post('/goals/:id/tasks/:order/execute', asyncHandler(async (req, res) => {
+  res.json(await goals.executeTask(req.params.id, req.params.order));
+}));
+
 // Re-run the collaboration with the previous plan + an optional manager
 // instruction as context; the fresh result REPLACES tasks/output.
 goalsRouter.post('/goals/:id/rerun', asyncHandler(async (req, res) => {
