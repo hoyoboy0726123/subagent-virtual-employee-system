@@ -53,13 +53,21 @@ export async function seed() {
     objectives: '打造兼具品牌識別、觸感與可製造性的設計，讓人一眼想擁有、長期愛用。',
     communicationStyle: '以草圖、材質與使用者故事溝通',
   });
-  const hw = make({
+  const ee = make({
     name: '王志豪',
-    roleTitle: '硬體工程師',
-    personality: '務實、以物理與熱力學極限為底線，不接受行銷式承諾',
-    expertise: ['散熱設計', '機構與 PCB', '電源與電池', '運算平台選型', '可靠度'],
-    objectives: '在薄度、散熱、電池與效能的物理極限之間，找到穩定可量產的最佳平衡。',
-    communicationStyle: '精確、以數字、瓦數與溫度說話',
+    roleTitle: '電子工程師',
+    personality: '務實、以電性與物理極限為底線，不接受行銷式承諾',
+    expertise: ['電路設計', 'PCB 佈局', '電源管理（PMIC）', '訊號完整性', '運算平台選型', '電池管理（BMS）'],
+    objectives: '把平台選型變成穩定、通過電性驗證、電源與熱預算合理的電路板。',
+    communicationStyle: '精確、以電壓、瓦數與時序說話',
+  });
+  const me = make({
+    name: '張博翔',
+    roleTitle: '機構工程師',
+    personality: '重結構與量產可行性，對公差、散熱與可靠度一絲不苟',
+    expertise: ['機構設計', '散熱結構（熱管／均熱板）', '機構強度與公差', '電池整合', 'DFM 可製造性', '原型製作'],
+    objectives: '把工業設計的外觀變成結構穩固、散熱可行、可量產的真實機構。',
+    communicationStyle: '以結構、公差與熱流說話',
   });
   const fw = make({
     name: '黃思翰',
@@ -94,7 +102,7 @@ export async function seed() {
     communicationStyle: '直接、以測試數據與不合格點說話',
   });
 
-  const employees = [pm, id, hw, fw, sc, mkt, qa];
+  const employees = [pm, id, ee, me, fw, sc, mkt, qa];
 
   // ── Professional background knowledge — grounded in 2025–2026 web research,
   //    each doc carries its sources so agents can cite them. [emp, title, body, tags]
@@ -116,12 +124,18 @@ export async function seed() {
       '歐盟維修權指令（2024/7 生效、2026/7/31 起各國適用）結合 2025 生態設計永續產品法規（ESPR），要求備件於數個工作日內供應、產品停售後仍供零件多年，電池須耐約 ≥800 次循環仍保 ≥80% 容量。設計須內建可拆解性與維修分數；Framework 以 iFixit 可維修性 9.6/10 樹立標竿（對比 MacBook Pro 16 的 3.8/10）。這對華碩一體式輕薄設計形成張力：如何在維持觸感與薄度的同時，提升可維修性與再生料比例。\n來源：歐盟執委會（維修指令／ESPR）、Framework、iFixit。',
       ['永續', '法規']],
 
-    [hw, '運算平台與散熱設計（2025–2026）',
-      '散熱是筆電系統工程核心。傳統熱導管（heat pipe）逐漸被均熱板（vapor chamber）取代，相變散熱效率為熱導管數倍；高階電競搭配液態金屬導熱介面，風扇曲線由 AI 動態調校。2025–2026 運算平台：Intel Panther Lake（Core Ultra 300、NPU5、約 50 TOPS，2026/1 取代 Lunar Lake 的約 48 TOPS）、AMD Ryzen AI 400（XDNA 2，約 55 TOPS）、Qualcomm Snapdragon X2 Elite（ARM 架構，NPU 達 80 TOPS）、獨顯 NVIDIA RTX 50 Blackwell（RTX 5090 Laptop：24GB GDDR7、TGP 95–150W）。設計時 NPU／CPU／GPU 的合計 TOPS 與散熱、噪音、續航必須一起算。\n來源：PCWorld CES 2026、Tom’s Hardware RTX 50、ROG。',
-      ['散熱', '平台']],
-    [hw, '電池、面板與可靠度基準',
-      '電競與高效能機主流採 99Wh 鋰電池（民航手提上限），USB-C PD 供電已成趨勢。面板：OLED 對比與色域最佳，對比 IPS／Mini-LED，並走向高更新率（120Hz 起，最高 240Hz）。積極的裝置端 AI 運算會顯著降低續航——這是與行銷「全天候續航」訴求的直接張力，工程端須誠實揭露 AI＋GPU 重載下的實測數字。可靠度認證以 MIL-STD-810H 為基準，涵蓋約 28 項極端溫度、濕度、震動與落摔測試。\n來源：LaptopMedia（MIL-STD-810）、業界面板／電池規範。',
-      ['電池', '可靠度']],
+    [ee, '運算平台選型（CPU／NPU／GPU）',
+      '2025–2026 運算平台是設計主戰場：Intel Panther Lake（Core Ultra 300、NPU5、Intel 18A、約 50 TOPS，2026/1 取代 Lunar Lake 的約 48 TOPS）、AMD Ryzen AI 400（XDNA 2，約 55 TOPS）、Qualcomm Snapdragon X2 Elite（ARM 架構，NPU 達 80 TOPS）；獨顯採 NVIDIA RTX 50「Blackwell」（RTX 5090 Laptop：24GB GDDR7、TGP 95–150W）。選型時要一起算 NPU／CPU／GPU 的合計 TOPS、封裝、記憶體型態（LPDDR5X vs DDR5）與電源／熱預算。電性設計核心：schematic、PCB 佈局與層堆疊、電源管理（PMIC）、訊號完整性與 EMI/EMC。\n來源：PCWorld CES 2026、Tom’s Hardware RTX 50。',
+      ['平台', '電子']],
+    [ee, '電源、電池電性與電性驗證',
+      '電源設計涵蓋 PMIC 電源分配、電池管理系統（BMS）與 USB-C PD 供電（趨勢明確）。電競與高效能機主流採 99Wh 鋰電池（民航手提上限）。電性驗證（EVT）針對原型做詳細電性測試：上電時序、電壓軌穩定度、EMI/EMC 電磁相容與充放電安全。關鍵取捨：積極的裝置端 AI 運算會拉高瞬時功耗與發熱，電源與熱預算必須與機構的散熱容量對齊，否則觸發降頻；並與韌體（EC/BIOS）協調功耗上限與效能設定檔。\n來源：JLCPCB PCB 工程師角色、業界電源／電池規範。',
+      ['電源', '電池']],
+    [me, '機構與散熱結構設計',
+      '機構工程把工業設計的外觀變成結構穩固、可量產的真實機構：機殼／底殼、轉軸機構、板件擺放、連接埠位置，並整合電池。散熱是核心：傳統熱導管（heat pipe）逐漸被均熱板（vapor chamber）取代，相變散熱效率為熱導管數倍，能吸收瞬間功耗峰值、把溫度曲線拉平；高階電競搭配液態金屬導熱介面。核心工程取捨是「薄度 vs 散熱 vs 電池」三角——例如 Framework Laptop 16 本體 <18mm，加裝獨顯散熱模組後後段增至近 21mm 以換取散熱容量。可靠度以 MIL-STD-810H 為基準。\n來源：Tom’s Hardware、Framework Laptop 16 機構解析、LaptopMedia（MIL-STD）。',
+      ['機構', '散熱']],
+    [me, '機構強度、公差與 DFM 量產',
+      '機構設計必須同時滿足結構強度、公差與可製造性（DFM）。材料主流為鋁合金、鎂合金（強度重量比佳，超薄與電競輕量化關鍵，常用 thixomolding 半液態射出）與再生材料。設計要與 ID 的曲面、電子工程師的板件尺寸對齊，並把 DFM-ready 的 CAD 與治具規格交給供應鏈／工廠。跑機構原型與公差、落摔驗證，再把單位交給品保做 DVT。品保最擔心的熱疲勞焊點失效，正是靠均熱板拉平溫度曲線、降低熱循環劇烈程度來緩解。\n來源：HWE.design（機構團隊角色）、業界 DFM／材料實務。',
+      ['機構', 'DFM']],
 
     [fw, '系統軟體堆疊與 AI 功能整合',
       '職責涵蓋 BIOS/UEFI、嵌入式控制器（EC）韌體、驅動程式，以及華碩軟體層：MyASUS（主流）與 Armoury Crate（ROG／電競），加上日益重要的 AI 功能（NPU／Copilot+ 體驗、AI 降噪、效能模式）。決定風扇曲線／熱節流邏輯與電源效能設定檔。最大風險是跨界一致性：BIOS 更新後若 EC↔BIOS↔驅動版本不匹配，會造成散熱失控或裝置異常——這是本職經典失效模式，更新機制與版本相依必須嚴格管控。AI 功能要挑買家真正會用的（離線轉錄、即時字幕、本地影像編修），而非湊 TOPS 數字。\n來源：ROG（Armoury Crate vs MyASUS）、WindowsReport（BIOS 更新流程）。',
@@ -153,7 +167,7 @@ export async function seed() {
   // brain configured yet (keys are restored AFTER this), it runs on the offline
   // deterministic engine — fast, free, and always available.
   const runtime = getRuntimeAdapter('standalone');
-  const participants = [pm, id, hw, sc, mkt];
+  const participants = [pm, id, ee, me, sc];
   const topic = '2026 下半年 Zenbook 旗艦的 AI PC 定位與規格取捨';
   const result = await runtime.runMeeting({ topic, participants, rounds: 3 });
   insertMeeting({
