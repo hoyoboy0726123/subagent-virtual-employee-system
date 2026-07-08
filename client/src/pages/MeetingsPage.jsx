@@ -448,7 +448,19 @@ function MeetingView({ meeting, onClose, onReopen, onChange }) {
             🔄 重啟討論
           </button>
         )}
+        {assignable.length > 0 && (
+          <button
+            className="btn sm"
+            onClick={spinOffGoal}
+            disabled={spin.busy}
+            title="把會議的行動項目變成可執行的目標——每項指派給負責人，之後在「目標」分頁按「執行交付」讓他們實際完成"
+          >
+            {spin.busy ? '建立中…' : `🎯 派成目標（${assignable.length}）`}
+          </button>
+        )}
       </div>
+      {spin.err && <div className="banner-err sm">{spin.err}</div>}
+      {spin.msg && <div className="banner-ok sm">{spin.msg}</div>}
       <div className="subtabs">
         {['transcript', 'minutes', 'report', 'knowledge'].map((v) => (
           <button key={v} className={view === v ? 'subtab on' : 'subtab'} onClick={() => setView(v)}>
@@ -483,20 +495,8 @@ function MeetingView({ meeting, onClose, onReopen, onChange }) {
           <ul>{meeting.minutes.decisions.map((a, i) => <li key={i}>{a.replace(/^- /, '')}</li>)}</ul>
           <h4>行動項目</h4>
           <ul>{meeting.minutes.actionItems.map((a, i) => <li key={i}><strong>{a.owner}</strong> — {a.action} <span className="muted">（期限：{a.due}）</span></li>)}</ul>
-
           {assignable.length > 0 && (
-            <div className="upload-box">
-              <div className="upload-row">
-                <button className="btn sm" onClick={spinOffGoal} disabled={spin.busy}>
-                  {spin.busy ? '建立中…' : `🎯 把行動項目派成目標（${assignable.length} 項）`}
-                </button>
-                <span className="muted upload-hint">
-                  每個行動項目變成一項指派給負責人的任務；到「目標」分頁按「▶ 執行交付」讓他們實際完成並產出成品。
-                </span>
-              </div>
-              {spin.err && <div className="banner-err sm">{spin.err}</div>}
-              {spin.msg && <div className="banner-ok sm">{spin.msg}</div>}
-            </div>
+            <p className="muted sm">💡 上方「🎯 派成目標」會把這些行動項目變成可執行的任務。</p>
           )}
         </div>
       )}
