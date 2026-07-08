@@ -16,6 +16,7 @@
 // MEETING_MEMORY_DISABLE=1 turns the whole feature off.
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import { insertDocument, findMemoryDocument } from '../storage/knowledge.repo.js';
+import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { normalizeTraditional } from './output.js';
 
 const disabled = () => /^(1|true|yes|on)$/i.test(process.env.MEETING_MEMORY_DISABLE || '');
@@ -99,5 +100,6 @@ export async function distillMeetingMemories({ meetingId, topic, participants, t
     });
     results.push({ employeeId: p.id, documentId: doc.id, live });
   }
+  if (results.length) scheduleEmbedding(); // fire-and-forget; no-op unless enabled
   return results;
 }

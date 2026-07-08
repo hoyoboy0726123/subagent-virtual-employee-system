@@ -9,7 +9,7 @@ export const knowledgeRouter = Router();
 knowledgeRouter.get('/knowledge/search', asyncHandler(async (req, res) => {
   const { q, query, employeeIds, limit } = req.query;
   res.json({
-    results: knowledge.search({ query: query || q, employeeIds, limit }),
+    results: await knowledge.search({ query: query || q, employeeIds, limit }),
   });
 }));
 

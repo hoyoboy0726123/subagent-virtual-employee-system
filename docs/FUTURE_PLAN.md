@@ -70,12 +70,29 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 - [ ] **Anthropic Contextual Retrieval**:入庫時用一次便宜 LLM 呼叫,給每個 chunk 補
       一句脈絡再索引——實測可把 top-20 檢索失敗率降低最多 67%。
 
-### D2【主升級】混合檢索:BM25 + 向量,Reciprocal Rank Fusion
-- [ ] **`sqlite-vec`**:純 SQLite 向量擴充,向量與 FTS 共存於同一個 `.db` 檔,符合
-      standalone-first。嵌入可用本地模型或使用者已設定的 provider。
-- [ ] **RRF 融合**:BM25(精確)與向量(近義)各出排名,用 Reciprocal Rank Fusion
-      合併。`retrieval.js` 的 `search()` 介面不變,只換內部實作。
-- [ ] **保留 BM25 為保底**:無嵌入模型/離線時退回純 FTS。
+### D2 ✅【主升級】混合檢索:BM25 + 向量,Reciprocal Rank Fusion（已完成)
+- [x] **本地嵌入(transformers.js)**:`reasoning/embeddings.js` 以
+      `@huggingface/transformers` 在本機跑 `Xenova/multilingual-e5-small`(多語、
+      繁中友善)。該套件**不列為預設依賴**,而是由 `npm run setup:embeddings` 按需
+      安裝(與 MarkItDown 同模式),讓 `npm install` 維持精簡、CI 不必下載上百 MB 的
+      ML runtime。缺套件/模型載入失敗 → 回報 unavailable,檢索自動退回純 BM25
+      (standalone-first)。全程可注入假嵌入器(`__setEmbedderForTest`)做 hermetic
+      測試,不需下載模型。
+- [x] **向量儲存 + 純 JS cosine**:migration v7 新增 `chunk_embeddings`(L2 正規化
+      Float32 BLOB,employee_id 反正規化便於 scoped 掃描,FK ON DELETE CASCADE 隨 chunk
+      刪除)。`storage/vector.js` 做純 JS 內積排名 —— 任何 Node 環境(arm64、standalone)
+      都能跑;規模再大時的升級路徑是同介面換上 `sqlite-vec`(已註明)。
+- [x] **RRF 融合**:`retrieval.search()` 恆跑 BM25;啟用且該範圍有向量時再跑 cosine,
+      兩份排名用 Reciprocal Rank Fusion(1/(k+rank))合併。`score` 維持「越小越好」語意,
+      呼叫端排序不變。`search()`/`groundingFor()` 改為 async(查詢嵌入本質非同步);
+      groundingFor 只嵌入共用 query 一次再穿透各 scoped 查詢。
+- [x] **保留 BM25 為保底**:嵌入關閉、模型載入失敗、或該範圍尚無向量時,結果與今日
+      純 FTS 完全一致。
+- [x] **索引維護**:`reasoning/indexer.js` 的 `embedPendingChunks`(批次回填)+
+      `scheduleEmbedding`(知識寫入後的單飛背景增量索引,關閉時為 no-op)。
+      `scripts/setup-embeddings.mjs` 一鍵安裝依賴 + 回填;`/health` 回報
+      `retrieval.mode`(bm25 / hybrid)。hermetic 測試見 `smoke.embeddings.mjs`
+      (證明近義查詢能被向量召回、精確詞仍排第一、無向量時退回純 BM25)。
 
 ### D3【記憶專屬】組織記憶的「整併」而非「無限堆積」
 > 這是本系統獨有、比通用 RAG 更重要的一塊。會議記憶/研究報告/1on1 紀錄會無限累積。
@@ -132,6 +149,7 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 2. **C1–C5(效能與規模化)** ✅ 已完成——日常體感與部署穩定性。
 3. **D1(檢索便宜升級:CJK bigram)** ✅ 已完成——召回率立即改善。
 4. **E 的次要 bug** ✅ 已完成——六項全修,附 hermetic 測試。
-5. **D2(sqlite-vec 混合檢索)+ D3(記憶整併)** → 這是**差異化護城河**:一個會累積、
-   會整併組織知識的多代理系統,在開源界比「又一個 RAG chatbot」稀缺得多。
-6. **里程碑 B(公網硬化)** → 視社群自架需求推進。
+5. **D2(混合檢索)** ✅ 已完成——BM25 + 本地向量 RRF,預設關閉、純 BM25 保底。
+6. **D3(記憶整併)** → 與 D2 併為**差異化護城河**:一個會累積、會整併組織知識的
+   多代理系統,在開源界比「又一個 RAG chatbot」稀缺得多。(下一步)
+7. **里程碑 B(公網硬化)** → 視社群自架需求推進。

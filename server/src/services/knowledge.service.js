@@ -5,6 +5,7 @@ import path from 'node:path';
 import * as docs from '../storage/knowledge.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
 import { search as retrievalSearch } from '../storage/retrieval.js';
+import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { badRequest, notFound, HttpError } from '../util/http.js';
 import { id } from '../util/ids.js';
 import { config } from '../config.js';
@@ -24,7 +25,9 @@ export function listForEmployee(employeeId) {
 export function addDocument(employeeId, data = {}) {
   if (!getEmployee(employeeId)) throw notFound('找不到該員工');
   if (!data.content) throw badRequest('內容為必填');
-  return docs.insertDocument(employeeId, data);
+  const doc = docs.insertDocument(employeeId, data);
+  scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
+  return doc;
 }
 
 export function removeDocument(documentId) {
@@ -102,7 +105,7 @@ export async function ingestUpload(employeeId, file) {
 
     // Canonical Markdown becomes the document content and is chunked
     // section-aware; tag with the source type for scannability.
-    return docs.insertDocument(employeeId, {
+    const doc = docs.insertDocument(employeeId, {
       title,
       content: parsed.markdown,
       source: 'file',
@@ -110,6 +113,8 @@ export async function ingestUpload(employeeId, file) {
       tags: [sourceType],
       metadata,
     });
+    scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
+    return doc;
   } finally {
     await fs.unlink(tmpPath).catch(() => {});
   }
@@ -134,7 +139,7 @@ export async function ingestCapability() {
  * Keyword/FTS search over the knowledge base, optionally scoped to one or more
  * employees. Powers the retrieval demo endpoint and (indirectly) the runtime.
  */
-export function search({ query, employeeIds, limit } = {}) {
+export async function search({ query, employeeIds, limit } = {}) {
   if (!query || !String(query).trim()) throw badRequest('查詢字串為必填');
   const ids = Array.isArray(employeeIds)
     ? employeeIds

@@ -20,7 +20,7 @@ import * as engine from '../reasoning/engine.js';
 export async function executeGoal({ title, description, assignees, onEvent }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   const query = `${title} ${description || ''}`.trim();
-  const { byEmployee, flat } = groundingFor({ query, employees: assignees });
+  const { byEmployee, flat } = await groundingFor({ query, employees: assignees });
 
   // Give each assignee the *profiles* of the others (name, role, expertise), not
   // just their names — so the model can carve a complementary slice and name real

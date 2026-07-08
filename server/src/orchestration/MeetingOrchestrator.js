@@ -100,7 +100,7 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
     interjectionQueues.set(runId, []);
     emit({ type: 'run', runId });
   }
-  const { byEmployee, flat } = groundingFor({ query: topic, employees: participants });
+  const { byEmployee, flat } = await groundingFor({ query: topic, employees: participants });
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
 
   const convo = new ConversationState({ topic, participants });

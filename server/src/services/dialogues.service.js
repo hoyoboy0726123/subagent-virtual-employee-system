@@ -9,6 +9,7 @@ import * as repo from '../storage/dialogues.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
 import { search as retrievalSearch } from '../storage/retrieval.js';
+import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { oneOnOneTurn } from '../orchestration/EmployeeAgentExecutor.js';
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import { badRequest, notFound } from '../util/http.js';
@@ -46,7 +47,7 @@ export async function say(dialogueId, text) {
   const emp = getEmployee(d.employeeId);
   if (!emp) throw notFound('與談員工已不存在');
 
-  const grounding = retrievalSearch({ query: message, employeeIds: [emp.id], limit: 3 });
+  const grounding = await retrievalSearch({ query: message, employeeIds: [emp.id], limit: 3 });
   const reply = await oneOnOneTurn({
     employee: emp,
     grounding,
@@ -116,6 +117,7 @@ async function closeLocked(dialogueId, { save } = {}) {
       metadata: { dialogueId: d.id, turns: d.transcript.length, closedAt: new Date().toISOString() },
     });
     savedDocId = doc.id;
+    scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
   }
 
   const updated = repo.updateDialogue(dialogueId, { status: 'closed', savedDocId });

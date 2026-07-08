@@ -119,6 +119,10 @@ brain's live availability (installed? logged in?).
   toolbox (`search_knowledge` / `web_search` / `remember`).
 - **Retrieval** (`server/src/storage/retrieval.js`) — BM25 over FTS5, scoped per
   employee, CJK character-segmented so Chinese substring queries match.
+  **Optional hybrid mode** fuses BM25 with local vector cosine (a multilingual
+  transformers.js model, no API) via Reciprocal Rank Fusion, so paraphrases and
+  near-synonyms surface too — run `npm run setup:embeddings` + set
+  `EMBEDDINGS_ENABLED=1`; off by default, falls back to pure BM25.
 - **Ingestion** (`server/src/ingest/`) — MarkItDown converts uploads to canonical
   Markdown (with a pure-JS fallback for text formats), then the same chunk + index
   path as pasted notes.

@@ -6,6 +6,17 @@ this file summarizes shipped milestones.
 
 ## Shipped
 
+- **Milestone D2 — Hybrid semantic retrieval (optional).** BM25/FTS fused with a
+  local vector model (transformers.js, multilingual, no API) via Reciprocal Rank
+  Fusion, so paraphrases and near-synonyms surface alongside exact-term hits. Off
+  by default (`npm run setup:embeddings` + `EMBEDDINGS_ENABLED=1`); falls back to
+  pure BM25 when disabled, unavailable, or unindexed. Pure-JS cosine backend runs
+  anywhere (sqlite-vec is the noted scale-up path).
+- **Milestone C/D1/E — Performance, retrieval quality, and hardening.** List SQL
+  pushdown, SSE heartbeat + abort-on-disconnect, batched meeting-chair ordering,
+  event-loop-safe large uploads, memoized transcript rendering (C1–C5); CJK bigram
+  recall (D1); and six review-bug fixes incl. a CLI process-tree/semaphore-leak
+  guard (E).
 - **Phase 19 — Manager 1-on-1 dialogues + TC hardening.** Unlimited-turn private
   chats with one employee (tools live); save the record into the knowledge base
   on the manager's call. Deterministic Traditional Chinese enforcement via OpenCC.

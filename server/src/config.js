@@ -32,6 +32,30 @@ export const config = {
     // (and every in-flight SSE meeting) for seconds. 2000 chunks ≈ ~1 MB of
     // indexed text — ample for a knowledge doc; excess is dropped and noted.
     maxChunksPerDoc: Number(process.env.MAX_CHUNKS_PER_DOC) || 2000,
+
+    // Hybrid semantic retrieval (D2). OFF by default → the app stays pure
+    // BM25/FTS with zero extra dependencies (standalone-first). Turn on with
+    // EMBEDDINGS_ENABLED=1 AND install the optional embedding model
+    // (`npm run setup:embeddings`). When on, retrieval fuses BM25 (exact terms)
+    // with local vector cosine (paraphrase/near-synonym) via Reciprocal Rank
+    // Fusion; if the model or its dependency can't load, or nothing is embedded
+    // yet, it silently falls back to pure BM25 — the same results as today.
+    embedding: {
+      enabled: /^(1|true|yes|on)$/i.test(process.env.EMBEDDINGS_ENABLED || ''),
+      // A small MULTILINGUAL model so Traditional Chinese embeds well; runs
+      // locally via transformers.js (@huggingface/transformers, optional dep).
+      model: process.env.EMBEDDINGS_MODEL || 'Xenova/multilingual-e5-small',
+      // e5 models are trained with these instruction prefixes; set empty via env
+      // for models that don't want them.
+      queryPrefix: process.env.EMBEDDINGS_QUERY_PREFIX ?? 'query: ',
+      passagePrefix: process.env.EMBEDDINGS_PASSAGE_PREFIX ?? 'passage: ',
+      // RRF constant. Larger = flatter fusion (a big rank gap matters less).
+      rrfK: Number(process.env.EMBEDDINGS_RRF_K) || 60,
+      // Candidates each retriever (BM25 / vector) contributes to the fusion pool.
+      candidates: Number(process.env.EMBEDDINGS_CANDIDATES) || 40,
+      // Texts embedded per model call during (back)indexing.
+      batchSize: Number(process.env.EMBEDDINGS_BATCH_SIZE) || 32,
+    },
   },
 
   // Document ingestion (Phase 7). Uploaded knowledge files are converted to

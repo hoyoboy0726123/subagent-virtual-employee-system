@@ -29,6 +29,7 @@
   ],
   "scripts": {
     "setup:markitdown": "node scripts/setup-markitdown.mjs",
+    "setup:embeddings": "node scripts/setup-embeddings.mjs",
     "seed": "node server/src/db/seed.js",
     "migrate": "node server/src/db/migrate.js",
     "dev": "concurrently -n api,web -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
@@ -38,8 +39,9 @@
     "start": "node server/src/index.js",
     "serve": "npm run build && npm run start",
     "lint": "eslint .",
-    "test": "node server/test/smoke.tools.mjs && node server/test/smoke.cliRunner.mjs && node server/test/smoke.providers.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
+    "test": "node server/test/smoke.tools.mjs && node server/test/smoke.cliRunner.mjs && node server/test/smoke.embeddings.mjs && node server/test/smoke.providers.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
     "test:cliRunner": "node server/test/smoke.cliRunner.mjs",
+    "test:embeddings": "node server/test/smoke.embeddings.mjs",
     "test:providers": "node server/test/smoke.providers.mjs",
     "test:orchestration": "node server/test/smoke.orchestration.mjs",
     "test:tools": "node server/test/smoke.tools.mjs",

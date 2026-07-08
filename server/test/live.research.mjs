@@ -68,7 +68,7 @@ try {
     assert.equal(approved.status, 'approved');
     assert.ok(document.chunkCount > 0, 'report was chunked for retrieval');
 
-    const hits = search({ query: 'AI agent 協作 趨勢', employeeIds: [emp.id], limit: 4 });
+    const hits = await search({ query: 'AI agent 協作 趨勢', employeeIds: [emp.id], limit: 4 });
     assert.ok(hits.some((h) => h.documentId === document.id),
       'the approved research is now real, retrievable knowledge for this employee');
   });

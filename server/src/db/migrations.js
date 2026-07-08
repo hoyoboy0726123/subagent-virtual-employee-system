@@ -180,6 +180,31 @@ const MIGRATIONS = [
       CREATE INDEX idx_dialogues_status ON dialogues(status);
     `);
   },
+
+  // v7 — chunk embeddings for hybrid semantic retrieval (D2). The table always
+  // exists but is only populated when embeddings are enabled AND the local model
+  // loads (standalone-first: zero rows here === today's pure-BM25 behaviour).
+  // Vectors are L2-normalized Float32 stored as a BLOB, so cosine similarity is a
+  // plain dot product. employee_id is denormalized for scoped cosine scans (same
+  // pattern as chunks). `model`+`dim` are recorded so a model change can be
+  // detected and re-indexed instead of silently mixing incompatible vectors.
+  // FK ON DELETE CASCADE off chunks means deleting a document/chunk clears its
+  // embedding automatically (unlike chunks_fts, which has no FK).
+  (db) => {
+    db.exec(`
+      CREATE TABLE chunk_embeddings (
+        chunk_id    TEXT PRIMARY KEY,
+        employee_id TEXT NOT NULL,
+        model       TEXT NOT NULL,
+        dim         INTEGER NOT NULL,
+        vector      BLOB NOT NULL,
+        created_at  TEXT NOT NULL,
+        FOREIGN KEY (chunk_id)    REFERENCES chunks(id)    ON DELETE CASCADE,
+        FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
+      );
+      CREATE INDEX idx_chunk_emb_employee ON chunk_embeddings(employee_id);
+    `);
+  },
 ];
 
 export function migrate(db) {

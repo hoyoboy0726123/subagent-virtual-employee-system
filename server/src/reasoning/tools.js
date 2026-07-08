@@ -24,6 +24,7 @@ import { Type } from '@google/genai';
 import { config } from '../config.js';
 import { search as searchKnowledgeBase } from '../storage/retrieval.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
+import { scheduleEmbedding } from './indexer.js';
 import { getSetting } from '../storage/settings.repo.js';
 import { normalizeTraditional } from '../orchestration/output.js';
 
@@ -211,11 +212,14 @@ export function buildToolbox({
     trace.push(entry);
     try {
       if (name === 'search_knowledge') {
-        const hits = searchKnowledge({
+        // retrieval.search is async (hybrid path embeds the query); awaiting a
+        // sync injected fake is harmless, so both real and test paths work.
+        const raw = await searchKnowledge({
           query: String(args.query || ''),
           employeeIds: [employee.id],
           limit: 4,
-        }).map((h) => ({ documentTitle: h.documentTitle, snippet: snippet(h.content) }));
+        });
+        const hits = raw.map((h) => ({ documentTitle: h.documentTitle, snippet: snippet(h.content) }));
         collectedHits.push(...hits);
         entry.ok = true;
         return { hits };
@@ -268,6 +272,7 @@ export function buildToolbox({
           tags: ['memory', 'self'],
           metadata: { rememberedBy: employee.name },
         });
+        scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
         entry.ok = true;
         return { saved: true, title: doc?.title || title };
       }

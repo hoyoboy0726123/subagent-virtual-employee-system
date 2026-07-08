@@ -13,6 +13,7 @@ import { buildToolbox, webSearchConfigured, webSearchEnabled } from '../reasonin
 import { normalizeTraditional } from '../orchestration/output.js';
 import * as repo from '../storage/research.repo.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
+import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { getEmployee } from '../storage/employees.repo.js';
 import { badRequest, notFound } from '../util/http.js';
 import { config } from '../config.js';
@@ -104,6 +105,7 @@ export function approveResearch(reportId) {
       approvedAt: new Date().toISOString(),
     },
   });
+  scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
   return { report: repo.reviewReport(reportId, 'approved', doc.id), document: doc };
 }
 
