@@ -176,6 +176,11 @@ export async function executeTask(goalId, order) {
       deliverableToolCalls: turn.toolCalls || 0,
       status: 'done',
     } : t));
-    return update(goalId, { tasks });
+    // When the LAST task is delivered, the goal itself is done — auto-complete
+    // it so the goal-level status matches reality (a task 已完成 while the goal
+    // still says 進行中 is confusing). The manager can still override via the
+    // status dropdown; a re-run resets it to 'in-progress'.
+    const allDelivered = tasks.every((t) => t.status === 'done');
+    return update(goalId, { tasks, ...(allDelivered ? { status: 'done' } : {}) });
   });
 }
