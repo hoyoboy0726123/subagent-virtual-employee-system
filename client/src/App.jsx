@@ -248,128 +248,133 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
     }
   };
 
+  // One consistent form language: a section card (title + optional description),
+  // toggle rows (checkbox · bold title · muted hint, all left-aligned), and a
+  // responsive field grid (label above control, hint below).
+  const Toggle = ({ checked, onChange, disabled, title, hint }) => (
+    <label className={`setting-toggle${disabled ? ' is-disabled' : ''}`}>
+      <input type="checkbox" checked={checked} onChange={onChange} disabled={disabled} />
+      <span>
+        <span className="t-title">{title}</span>
+        <span className="t-hint">{hint}</span>
+      </span>
+    </label>
+  );
+  const Field = ({ label, hint, children }) => (
+    <div className="setting-field">
+      <span className="f-label">{label}</span>
+      {children}
+      {hint && <span className="f-hint">{hint}</span>}
+    </div>
+  );
+
   return (
     <Modal title="⚙️ 系統設定" onClose={onClose} wide>
-      <div className="upload-box">
-        <strong>👔 會議主持（主管代理）</strong>
-        <p className="muted sm">
+      <section className="settings-section">
+        <h4>👔 會議主持（主管代理）</h4>
+        <p className="settings-desc">
           主管代理是內建的 AI 主持人：每輪安排發言順序、對發言者追問、會後統整報告。
           戰略永遠在你手上（插話／續會／作結），這裡調的是它的議事風格。
         </p>
-
-        <label className="runtime-switch" style={{ margin: '6px 0' }}>
-          <input
-            type="checkbox"
-            checked={cfg.dynamicOrder}
-            onChange={(e) => setCfg({ ...cfg, dynamicOrder: e.target.checked })}
-          />
-          <span>動態點名——依討論內容安排每輪發言順序（關閉＝固定輪流，不呼叫主持人模型）</span>
-        </label>
-
-        <label className="runtime-switch" style={{ margin: '6px 0' }}>
-          <input
-            type="checkbox"
-            checked={cfg.followUps}
-            onChange={(e) => setCfg({ ...cfg, followUps: e.target.checked })}
-            disabled={!cfg.dynamicOrder}
-          />
-          <span>追問——允許主持人對發言者附上尖銳但建設性的追問</span>
-        </label>
-
-        <label className="block" style={{ margin: '8px 0' }}>
-          主持風格
-          <select
-            value={cfg.style}
-            onChange={(e) => setCfg({ ...cfg, style: e.target.value })}
-            disabled={!cfg.dynamicOrder || !cfg.followUps}
-          >
-            <option value="gentle">溫和——開放式引導，不施壓</option>
-            <option value="standard">標準——尖銳但建設性</option>
-            <option value="strict">嚴厲——逼出數字、期限與承諾</option>
-          </select>
-        </label>
-
-        <label className="block" style={{ margin: '8px 0' }}>
-          主持人模型（僅影響點名與追問的呼叫；留空＝跟隨目前大腦）
-          <input
-            placeholder="例如 gemma-4-31b-it；留空使用預設"
-            value={cfg.model}
-            onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
-            disabled={!cfg.dynamicOrder}
-          />
-        </label>
-      </div>
-
-      <div className="upload-box">
-        <strong>🧠 記憶</strong>
-        <label className="runtime-switch" style={{ margin: '6px 0' }}>
-          <input
-            type="checkbox"
-            checked={Boolean(tun.memoryDistill)}
-            onChange={(e) => setTun({ ...tun, memoryDistill: e.target.checked })}
-          />
-          <span>會後記憶沉澱——每場會議作結後，為每位與會者寫下他該記住的結論</span>
-        </label>
-        <label className="runtime-switch" style={{ margin: '6px 0' }}>
-          <input
-            type="checkbox"
-            checked={Boolean(tun.memoryConsolidate)}
-            onChange={(e) => setTun({ ...tun, memoryConsolidate: e.target.checked })}
-          />
-          <span>記憶自動整併——累積達門檻時，把舊記憶合併成一則（原始記憶封存可還原）</span>
-        </label>
-        <label className="block" style={{ margin: '8px 0' }}>
-          整併門檻（累積幾則記憶後自動整併；2–200）
-          <input
-            type="number" min={2} max={200}
-            value={tun.consolidateThreshold ?? ''}
-            onChange={num('consolidateThreshold')}
-            disabled={!tun.memoryConsolidate}
-          />
-        </label>
-      </div>
-
-      <div className="upload-box">
-        <strong>✍️ 輸出長度上限（tokens）</strong>
-        <p className="muted sm">這是防護欄不是目標——模型寫完就停，調高只在真的寫更多時才多花 token。</p>
-        <div className="upload-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
-          <label className="block" style={{ flex: 1, minWidth: 140 }}>
-            會議／目標回合
-            <input type="number" min={256} max={32768} value={tun.turnTokens ?? ''} onChange={num('turnTokens')} />
-          </label>
-          <label className="block" style={{ flex: 1, minWidth: 140 }}>
-            文件級產出（報告、1on1）
-            <input type="number" min={1024} max={65536} value={tun.documentTokens ?? ''} onChange={num('documentTokens')} />
-          </label>
-          <label className="block" style={{ flex: 1, minWidth: 140 }}>
-            整理／蒸餾
-            <input type="number" min={512} max={32768} value={tun.summaryTokens ?? ''} onChange={num('summaryTokens')} />
-          </label>
-        </div>
-      </div>
-
-      <div className="upload-box">
-        <strong>🛠 代理工具</strong>
-        <div className="upload-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
-          <label className="block" style={{ flex: 1, minWidth: 140 }}>
-            每回合工具上限（1–10）
-            <input type="number" min={1} max={10} value={tun.maxToolCalls ?? ''} onChange={num('maxToolCalls')} />
-          </label>
-          <label className="block" style={{ flex: 1, minWidth: 140 }}>
-            自主研究工具上限（2–20）
-            <input type="number" min={2} max={20} value={tun.researchMaxCalls ?? ''} onChange={num('researchMaxCalls')} />
-          </label>
-          <label className="block" style={{ flex: 1, minWidth: 180 }}>
-            網路搜尋深度
-            <select value={tun.webSearchDepth || 'advanced'} onChange={(e) => setTun({ ...tun, webSearchDepth: e.target.value })}>
-              <option value="advanced">深度——每來源多段摘錄（2 credits／次）</option>
-              <option value="basic">基本——單段摘錄（1 credit／次）</option>
+        <Toggle
+          checked={cfg.dynamicOrder}
+          onChange={(e) => setCfg({ ...cfg, dynamicOrder: e.target.checked })}
+          title="動態點名"
+          hint="依討論內容安排每輪發言順序；關閉＝固定輪流，且完全不呼叫主持人模型"
+        />
+        <Toggle
+          checked={cfg.followUps}
+          onChange={(e) => setCfg({ ...cfg, followUps: e.target.checked })}
+          disabled={!cfg.dynamicOrder}
+          title="追問"
+          hint="允許主持人對發言者附上尖銳但建設性的追問"
+        />
+        <div className="setting-grid">
+          <Field label="主持風格">
+            <select
+              value={cfg.style}
+              onChange={(e) => setCfg({ ...cfg, style: e.target.value })}
+              disabled={!cfg.dynamicOrder || !cfg.followUps}
+            >
+              <option value="gentle">溫和——開放式引導，不施壓</option>
+              <option value="standard">標準——尖銳但建設性</option>
+              <option value="strict">嚴厲——逼出數字、期限與承諾</option>
             </select>
-          </label>
+          </Field>
+          <Field label="主持人模型" hint="僅影響點名與追問的呼叫；留空＝跟隨目前大腦">
+            <input
+              placeholder="例如 gemma-4-31b-it"
+              value={cfg.model}
+              onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
+              disabled={!cfg.dynamicOrder}
+            />
+          </Field>
         </div>
-      </div>
+      </section>
 
-      <div className="row end" style={{ gap: 8 }}>
+      <section className="settings-section">
+        <h4>🧠 記憶</h4>
+        <Toggle
+          checked={Boolean(tun.memoryDistill)}
+          onChange={(e) => setTun({ ...tun, memoryDistill: e.target.checked })}
+          title="會後記憶沉澱"
+          hint="每場會議作結後，為每位與會者寫下他該記住的結論"
+        />
+        <Toggle
+          checked={Boolean(tun.memoryConsolidate)}
+          onChange={(e) => setTun({ ...tun, memoryConsolidate: e.target.checked })}
+          title="記憶自動整併"
+          hint="累積達門檻時，把舊記憶合併成一則精簡版（原始記憶封存、可還原）"
+        />
+        <div className="setting-grid">
+          <Field label="整併門檻" hint="累積幾則記憶後自動整併（2–200）">
+            <input
+              type="number" min={2} max={200}
+              value={tun.consolidateThreshold ?? ''}
+              onChange={num('consolidateThreshold')}
+              disabled={!tun.memoryConsolidate}
+            />
+          </Field>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h4>✍️ 輸出長度上限（tokens）</h4>
+        <p className="settings-desc">這是防護欄不是目標——模型寫完就停，調高只在真的寫更多時才多花 token。</p>
+        <div className="setting-grid">
+          <Field label="會議／目標回合" hint="256–32768">
+            <input type="number" min={256} max={32768} value={tun.turnTokens ?? ''} onChange={num('turnTokens')} />
+          </Field>
+          <Field label="文件級產出" hint="報告、研究、1on1（1024–65536）">
+            <input type="number" min={1024} max={65536} value={tun.documentTokens ?? ''} onChange={num('documentTokens')} />
+          </Field>
+          <Field label="整理／蒸餾" hint="記憶、1on1 紀錄（512–32768）">
+            <input type="number" min={512} max={32768} value={tun.summaryTokens ?? ''} onChange={num('summaryTokens')} />
+          </Field>
+        </div>
+      </section>
+
+      <section className="settings-section">
+        <h4>🛠 代理工具</h4>
+        <div className="setting-grid">
+          <Field label="每回合工具上限" hint="會議／1on1 每回合可查詢次數（1–10）">
+            <input type="number" min={1} max={10} value={tun.maxToolCalls ?? ''} onChange={num('maxToolCalls')} />
+          </Field>
+          <Field label="自主研究工具上限" hint="每次研究任務的查詢預算（2–20）">
+            <input type="number" min={2} max={20} value={tun.researchMaxCalls ?? ''} onChange={num('researchMaxCalls')} />
+          </Field>
+          <Field label="網路搜尋深度" hint="深度＝每來源多段摘錄，2 credits／次">
+            <select value={tun.webSearchDepth || 'advanced'} onChange={(e) => setTun({ ...tun, webSearchDepth: e.target.value })}>
+              <option value="advanced">深度（2 credits／次）</option>
+              <option value="basic">基本（1 credit／次）</option>
+            </select>
+          </Field>
+        </div>
+      </section>
+
+      <div className="settings-footer">
+        {state.err && <span className="banner-err sm">{state.err}</span>}
+        {state.msg && <span className="banner-ok sm">{state.msg}</span>}
         <button className="btn-ghost sm" onClick={resetDefaults} disabled={state.busy} title="清除所有覆寫，回到啟動時的環境變數／內建值">
           恢復預設
         </button>
@@ -377,8 +382,6 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
           {state.busy ? '儲存中…' : '儲存'}
         </button>
       </div>
-      {state.err && <div className="banner-err sm">{state.err}</div>}
-      {state.msg && <div className="banner-ok sm">{state.msg}</div>}
     </Modal>
   );
 }

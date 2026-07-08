@@ -226,6 +226,40 @@ textarea { resize: vertical; }
 .tab-hidden { display: none; }
 .tab-dot { margin-left: 6px; font-size: 9px; vertical-align: 2px; }
 
+/* ⚙️ settings modal — one consistent form language: section cards, toggle
+   rows (checkbox · title · hint, all LEFT-aligned), responsive field grid. */
+.settings-section {
+  border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2);
+  padding: 14px 16px 16px; margin-bottom: 12px;
+}
+.settings-section h4 { margin: 0; font-size: 14px; }
+.settings-desc { margin: 6px 0 10px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
+.settings-section h4 + .setting-toggle { margin-top: 8px; }
+
+.setting-toggle {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 7px 0; cursor: pointer; text-align: left;
+}
+.setting-toggle input[type='checkbox'] { width: auto; margin: 3px 0 0; flex: none; accent-color: var(--brand); }
+.setting-toggle .t-title { display: block; font-weight: 700; font-size: 13.5px; color: var(--text); }
+.setting-toggle .t-hint { display: block; font-weight: 400; font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 2px; }
+.setting-toggle.is-disabled { opacity: 0.45; cursor: not-allowed; }
+
+.setting-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px 14px; margin-top: 10px;
+}
+.setting-field { display: flex; flex-direction: column; min-width: 0; }
+.setting-field .f-label { font-size: 12px; font-weight: 700; color: var(--text); }
+.setting-field input, .setting-field select { width: 100%; box-sizing: border-box; margin-top: 6px; }
+.setting-field .f-hint { font-size: 11.5px; color: var(--muted); margin-top: 4px; line-height: 1.45; }
+.setting-field input:disabled, .setting-field select:disabled { opacity: 0.45; }
+
+.settings-footer {
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-top: 2px;
+}
+.settings-footer .banner-ok, .settings-footer .banner-err { margin-right: auto; }
+
 .footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
 .footer code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
 
