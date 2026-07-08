@@ -189,6 +189,7 @@ export default function App() {
       {showSettings && (
         <SettingsModal
           chair={settings?.chair}
+          tunables={settings?.tunables}
           onClose={() => setShowSettings(false)}
           onSaved={(next) => setSettings((s) => ({ ...s, ...next }))}
         />
@@ -197,32 +198,58 @@ export default function App() {
   );
 }
 
-// ⚙️ System settings. First section: the meeting chair (主管代理) — the AI
-// stand-in that orders each round, presses speakers with follow-ups, and
-// synthesizes reports. Everything here is stored server-side (SQLite settings)
-// and takes effect from the NEXT round — no restart needed.
-function SettingsModal({ chair, onClose, onSaved }) {
+// ⚙️ System settings — the meeting chair (主管代理), memory behaviour, output
+// budgets, and agent-tool limits. Everything is stored server-side (SQLite
+// settings), applies immediately (no restart), and「恢復預設」reverts to what
+// the server booted with (env vars keep their meaning). A tunable saved at its
+// default value clears its override instead of pinning it.
+function SettingsModal({ chair, tunables, onClose, onSaved }) {
   const [cfg, setCfg] = useState({
     dynamicOrder: chair?.dynamicOrder !== false,
     followUps: chair?.followUps !== false,
     style: chair?.style || 'standard',
     model: chair?.model || '',
   });
+  const defaults = tunables?.defaults || {};
+  const [tun, setTun] = useState({ ...(tunables?.values || {}) });
   const [state, setState] = useState({ busy: false, msg: '', err: '' });
+
+  const num = (id) => (e) => setTun({ ...tun, [id]: e.target.value });
 
   const save = async () => {
     setState({ busy: true, msg: '', err: '' });
     try {
-      const next = await api.put('/settings', { chairConfig: cfg });
+      // Send a value only where it differs from the boot default; equal values
+      // are sent as null so the override is CLEARED, not pinned forever.
+      const patch = {};
+      for (const [id, v] of Object.entries(tun)) {
+        const parsed = typeof defaults[id] === 'number' ? Math.round(Number(v)) : v;
+        patch[id] = parsed === defaults[id] ? null : parsed;
+      }
+      const next = await api.put('/settings', { chairConfig: cfg, tunables: patch });
       onSaved(next);
-      setState({ busy: false, msg: '已儲存——下一輪討論即刻生效', err: '' });
+      setTun({ ...(next.tunables?.values || {}) });
+      setState({ busy: false, msg: '已儲存——立即生效，無需重啟', err: '' });
+    } catch (e) {
+      setState({ busy: false, msg: '', err: e.message });
+    }
+  };
+
+  const resetDefaults = async () => {
+    setState({ busy: true, msg: '', err: '' });
+    try {
+      const patch = Object.fromEntries(Object.keys(defaults).map((id) => [id, null]));
+      const next = await api.put('/settings', { tunables: patch });
+      onSaved(next);
+      setTun({ ...(next.tunables?.values || {}) });
+      setState({ busy: false, msg: '已恢復啟動預設（環境變數或內建值）', err: '' });
     } catch (e) {
       setState({ busy: false, msg: '', err: e.message });
     }
   };
 
   return (
-    <Modal title="⚙️ 系統設定" onClose={onClose}>
+    <Modal title="⚙️ 系統設定" onClose={onClose} wide>
       <div className="upload-box">
         <strong>👔 會議主持（主管代理）</strong>
         <p className="muted sm">
@@ -271,15 +298,87 @@ function SettingsModal({ chair, onClose, onSaved }) {
             disabled={!cfg.dynamicOrder}
           />
         </label>
-
-        <div className="row end">
-          <button className="btn sm" onClick={save} disabled={state.busy}>
-            {state.busy ? '儲存中…' : '儲存'}
-          </button>
-        </div>
-        {state.err && <div className="banner-err sm">{state.err}</div>}
-        {state.msg && <div className="banner-ok sm">{state.msg}</div>}
       </div>
+
+      <div className="upload-box">
+        <strong>🧠 記憶</strong>
+        <label className="runtime-switch" style={{ margin: '6px 0' }}>
+          <input
+            type="checkbox"
+            checked={Boolean(tun.memoryDistill)}
+            onChange={(e) => setTun({ ...tun, memoryDistill: e.target.checked })}
+          />
+          <span>會後記憶沉澱——每場會議作結後，為每位與會者寫下他該記住的結論</span>
+        </label>
+        <label className="runtime-switch" style={{ margin: '6px 0' }}>
+          <input
+            type="checkbox"
+            checked={Boolean(tun.memoryConsolidate)}
+            onChange={(e) => setTun({ ...tun, memoryConsolidate: e.target.checked })}
+          />
+          <span>記憶自動整併——累積達門檻時，把舊記憶合併成一則（原始記憶封存可還原）</span>
+        </label>
+        <label className="block" style={{ margin: '8px 0' }}>
+          整併門檻（累積幾則記憶後自動整併；2–200）
+          <input
+            type="number" min={2} max={200}
+            value={tun.consolidateThreshold ?? ''}
+            onChange={num('consolidateThreshold')}
+            disabled={!tun.memoryConsolidate}
+          />
+        </label>
+      </div>
+
+      <div className="upload-box">
+        <strong>✍️ 輸出長度上限（tokens）</strong>
+        <p className="muted sm">這是防護欄不是目標——模型寫完就停，調高只在真的寫更多時才多花 token。</p>
+        <div className="upload-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+          <label className="block" style={{ flex: 1, minWidth: 140 }}>
+            會議／目標回合
+            <input type="number" min={256} max={32768} value={tun.turnTokens ?? ''} onChange={num('turnTokens')} />
+          </label>
+          <label className="block" style={{ flex: 1, minWidth: 140 }}>
+            文件級產出（報告、1on1）
+            <input type="number" min={1024} max={65536} value={tun.documentTokens ?? ''} onChange={num('documentTokens')} />
+          </label>
+          <label className="block" style={{ flex: 1, minWidth: 140 }}>
+            整理／蒸餾
+            <input type="number" min={512} max={32768} value={tun.summaryTokens ?? ''} onChange={num('summaryTokens')} />
+          </label>
+        </div>
+      </div>
+
+      <div className="upload-box">
+        <strong>🛠 代理工具</strong>
+        <div className="upload-row" style={{ alignItems: 'flex-end', flexWrap: 'wrap', gap: 12 }}>
+          <label className="block" style={{ flex: 1, minWidth: 140 }}>
+            每回合工具上限（1–10）
+            <input type="number" min={1} max={10} value={tun.maxToolCalls ?? ''} onChange={num('maxToolCalls')} />
+          </label>
+          <label className="block" style={{ flex: 1, minWidth: 140 }}>
+            自主研究工具上限（2–20）
+            <input type="number" min={2} max={20} value={tun.researchMaxCalls ?? ''} onChange={num('researchMaxCalls')} />
+          </label>
+          <label className="block" style={{ flex: 1, minWidth: 180 }}>
+            網路搜尋深度
+            <select value={tun.webSearchDepth || 'advanced'} onChange={(e) => setTun({ ...tun, webSearchDepth: e.target.value })}>
+              <option value="advanced">深度——每來源多段摘錄（2 credits／次）</option>
+              <option value="basic">基本——單段摘錄（1 credit／次）</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div className="row end" style={{ gap: 8 }}>
+        <button className="btn-ghost sm" onClick={resetDefaults} disabled={state.busy} title="清除所有覆寫，回到啟動時的環境變數／內建值">
+          恢復預設
+        </button>
+        <button className="btn sm" onClick={save} disabled={state.busy}>
+          {state.busy ? '儲存中…' : '儲存'}
+        </button>
+      </div>
+      {state.err && <div className="banner-err sm">{state.err}</div>}
+      {state.msg && <div className="banner-ok sm">{state.msg}</div>}
     </Modal>
   );
 }

@@ -10,6 +10,7 @@ import { LLM_PROVIDER_SETTING_KEY, PROVIDER_IDS, listProviders, currentProviderN
 import { activeModelInfo, llmEnabled } from '../reasoning/llm.js';
 import { keyStatus, saveKeys, testGeminiKey, testTavilyKey } from '../reasoning/apiKeys.js';
 import { CHAIR_SETTING_KEY, sanitizeChairConfig, getChairConfig } from '../orchestration/MeetingChair.js';
+import { getTunables, setTunables as applyTunables } from './tunables.service.js';
 
 export function getActiveRuntime() {
   return getRuntimeAdapter(DEFAULT_RUNTIME_MODE);
@@ -68,6 +69,12 @@ export function setChairConfig(patch = {}) {
   return getSettings();
 }
 
+/** Update runtime tunables (記憶/輸出長度/工具) — merge-patch, null clears. */
+export function setTunables(patch = {}) {
+  applyTunables(patch);
+  return getSettings();
+}
+
 export function getSettings() {
   return {
     runtimeLabel: getActiveRuntime().label,
@@ -75,6 +82,8 @@ export function getSettings() {
     apiKeys: keyStatus(),
     // Meeting-chair (主管代理) behaviour — tunable in ⚙️ 設定.
     chair: getChairConfig(),
+    // Runtime tunables (記憶/輸出長度/工具) — {values, defaults} per knob.
+    tunables: getTunables(),
     webSearch: {
       keyConfigured: webSearchConfigured(),
       enabled: webSearchEnabled(),

@@ -727,6 +727,38 @@ try {
     assert.equal(restored.chair.dynamicOrder, true);
   });
 
+  await step('runtime tunables (⚙️ 設定): live values, clamped writes, null restores boot', async () => {
+    const { json: s0 } = await api('GET', '/api/settings');
+    const t0 = s0.tunables;
+    assert.ok(t0.values && t0.defaults, 'values + boot defaults exposed');
+    assert.equal(t0.values.turnTokens, t0.defaults.turnTokens, 'no overrides initially');
+    assert.equal(t0.values.memoryDistill, false, 'boot default reflects this suite\'s env (distiller off)');
+
+    // Write: valid values apply immediately; out-of-range ints are clamped.
+    const { json: s1 } = await api('PUT', '/api/settings', {
+      tunables: { turnTokens: 4096, maxToolCalls: 99, webSearchDepth: 'basic' },
+    });
+    assert.equal(s1.tunables.values.turnTokens, 4096);
+    assert.equal(s1.tunables.values.maxToolCalls, 10, 'clamped to the max');
+    assert.equal(s1.tunables.values.webSearchDepth, 'basic');
+
+    // Nonsense is refused with a clear 400.
+    const badEnum = await api('PUT', '/api/settings', { tunables: { webSearchDepth: 'ultra' } });
+    assert.equal(badEnum.status, 400);
+    const badKey = await api('PUT', '/api/settings', { tunables: { hackThePlanet: 1 } });
+    assert.equal(badKey.status, 400);
+    const badNum = await api('PUT', '/api/settings', { tunables: { turnTokens: 'abc' } });
+    assert.equal(badNum.status, 400);
+
+    // null clears each override back to the BOOT value (env keeps its meaning).
+    const { json: s2 } = await api('PUT', '/api/settings', {
+      tunables: { turnTokens: null, maxToolCalls: null, webSearchDepth: null },
+    });
+    assert.equal(s2.tunables.values.turnTokens, t0.defaults.turnTokens);
+    assert.equal(s2.tunables.values.maxToolCalls, t0.defaults.maxToolCalls);
+    assert.equal(s2.tunables.values.webSearchDepth, t0.defaults.webSearchDepth);
+  });
+
   await step('in-app API keys: save → masked status, unlocks features; clear → reverts', async () => {
     // Hermetic run starts with nothing configured (no env keys, empty DB).
     const { json: before } = await api('GET', '/api/settings');
