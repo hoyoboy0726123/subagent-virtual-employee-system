@@ -5,6 +5,7 @@
 //   GET    /api/dialogues/:id                 → one dialogue
 //   POST   /api/dialogues/:id/messages {text} → manager speaks; employee replies
 //   POST   /api/dialogues/:id/close {save}    → end it; optionally save record to knowledge base
+//   POST   /api/dialogues/:id/reopen          → continue a CLOSED dialogue where it left off
 //   DELETE /api/dialogues/:id
 import { Router } from 'express';
 import { asyncHandler } from '../util/http.js';
@@ -30,6 +31,12 @@ dialoguesRouter.post('/dialogues/:id/messages', asyncHandler(async (req, res) =>
 
 dialoguesRouter.post('/dialogues/:id/close', asyncHandler(async (req, res) => {
   res.json(await dialogues.close(req.params.id, req.body || {}));
+}));
+
+// Reopen a closed dialogue — the manager continues the SAME conversation
+// (refused while the employee has another open dialogue).
+dialoguesRouter.post('/dialogues/:id/reopen', asyncHandler(async (req, res) => {
+  res.json(dialogues.reopen(req.params.id));
 }));
 
 dialoguesRouter.delete('/dialogues/:id', asyncHandler(async (req, res) => {

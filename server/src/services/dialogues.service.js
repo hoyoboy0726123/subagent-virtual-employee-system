@@ -7,7 +7,7 @@
 // employee's knowledge base.
 import * as repo from '../storage/dialogues.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
-import { insertDocument } from '../storage/knowledge.repo.js';
+import { insertDocument, deleteDocument } from '../storage/knowledge.repo.js';
 import { search as retrievalSearch } from '../storage/retrieval.js';
 import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { oneOnOneTurn } from '../orchestration/EmployeeAgentExecutor.js';
@@ -36,6 +36,22 @@ export function get(dialogueId) {
 export function listForEmployee(employeeId) {
   if (!getEmployee(employeeId)) throw notFound('找不到該員工');
   return repo.listDialogues(employeeId);
+}
+
+/**
+ * Reopen a CLOSED dialogue so the manager can continue the same conversation
+ * instead of starting over. Idempotent on an already-open dialogue. Refused
+ * while the employee has another open dialogue — the one-open-per-employee
+ * invariant is what makes「重新打開就接續」deterministic.
+ */
+export function reopen(dialogueId) {
+  const d = get(dialogueId);
+  if (d.status === 'open') return d;
+  if (!getEmployee(d.employeeId)) throw notFound('與談員工已不存在');
+  if (repo.getOpenDialogue(d.employeeId)) {
+    throw badRequest('這位員工已有一場進行中的面談——請先結束該場，再回來繼續這一場。');
+  }
+  return repo.updateDialogue(dialogueId, { status: 'open' });
 }
 
 /** Manager says something; the employee agent replies (tools live). */
@@ -97,6 +113,13 @@ async function closeLocked(dialogueId, { save } = {}) {
   if (d.status !== 'open') throw badRequest('這場面談已經結束。');
   const emp = getEmployee(d.employeeId);
 
+  // An empty dialogue holds nothing worth keeping — delete instead of close so
+  // "peeked at the modal then left" doesn't litter the history list.
+  if (!d.transcript.length) {
+    repo.deleteDialogue(dialogueId);
+    return { ...d, status: 'closed', saved: false, discarded: true };
+  }
+
   let savedDocId = null;
   if (save && d.transcript.length) {
     let content = null;
@@ -106,6 +129,12 @@ async function closeLocked(dialogueId, { save } = {}) {
       content = res?.text?.trim() || null;
     }
     if (!content) content = fallbackRecord(emp, d.transcript);
+
+    // A reopened dialogue may have been saved before — replace the previous
+    // record so the knowledge base keeps exactly ONE document per dialogue
+    // (the fresh distillation covers the WHOLE conversation including the new
+    // turns; keeping the old one would duplicate every earlier conclusion).
+    if (d.savedDocId) deleteDocument(d.savedDocId);
 
     const firstMsg = d.transcript.find((t) => t.who === 'manager')?.text || '面談';
     const doc = insertDocument(emp.id, {
@@ -120,7 +149,10 @@ async function closeLocked(dialogueId, { save } = {}) {
     scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
   }
 
-  const updated = repo.updateDialogue(dialogueId, { status: 'closed', savedDocId });
+  // Keep the previous saved-doc pointer when this close didn't save — a
+  // reopened dialogue closed with「不儲存」must not orphan its earlier record
+  // (the pointer is what lets the NEXT save replace instead of duplicate).
+  const updated = repo.updateDialogue(dialogueId, { status: 'closed', savedDocId: savedDocId || d.savedDocId || null });
   return { ...updated, saved: Boolean(savedDocId) };
 }
 

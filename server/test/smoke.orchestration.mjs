@@ -3,6 +3,11 @@
 // qualities Phase 8 is about: persona differentiation, agent-aware conversation
 // context, de-boilerplated turns, and richer synthesis structure. Run: part of
 // `npm test`, or standalone `node server/test/smoke.orchestration.mjs`.
+// MUST be first: static imports evaluate in order, and the hermetic preamble
+// has to set DB_FILE/provider env before any config-backed module loads —
+// otherwise the suite reads the REAL dev database's brain selection and
+// "offline" checks go live against a real CLI (a real, observed failure).
+import './_hermetic.mjs';
 import assert from 'node:assert/strict';
 import { ConversationState } from '../src/orchestration/ConversationState.js';
 import { polishArtifact, polishUtterance } from '../src/orchestration/output.js';

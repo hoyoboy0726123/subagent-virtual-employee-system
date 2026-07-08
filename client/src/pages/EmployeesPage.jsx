@@ -466,16 +466,34 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
 // is distilled into this employee's knowledge base.
 function OneOnOneModal({ employee, onClose, onSaved }) {
   const [dialogue, setDialogue] = useState(null);
+  const [history, setHistory] = useState(null); // null = loading; [] = none
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [closing, setClosing] = useState(false); // showing the save/discard choice
   const [err, setErr] = useState('');
   const endRef = useRef(null);
 
+  // Entry: DON'T auto-create a dialogue (that littered empty records). Resume
+  // the open one when it exists; otherwise show the start screen — new dialogue
+  // or CONTINUE a past (closed) one right where it left off.
   useEffect(() => {
-    api.post(`/employees/${employee.id}/dialogue`).then(setDialogue).catch((e) => setErr(e.message));
+    api.get(`/employees/${employee.id}/dialogues`)
+      .then((list) => {
+        setHistory(list.filter((d) => d.status === 'closed'));
+        const open = list.find((d) => d.status === 'open');
+        if (open) setDialogue(open);
+      })
+      .catch((e) => setErr(e.message));
   }, [employee.id]);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [dialogue?.transcript?.length, busy]);
+
+  const startNew = async () => {
+    try { setDialogue(await api.post(`/employees/${employee.id}/dialogue`)); } catch (e) { setErr(e.message); }
+  };
+  const continueOld = async (id) => {
+    setErr('');
+    try { setDialogue(await api.post(`/dialogues/${id}/reopen`)); } catch (e) { setErr(e.message); }
+  };
 
   const send = async () => {
     const text = draft.trim();
@@ -520,8 +538,40 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
       </p>
       {err && <div className="banner-err sm">{err}</div>}
 
+      {!dialogue && (
+        <div className="chat-box">
+          {history === null && !err && <p className="muted">載入面談紀錄中…</p>}
+          {history?.length > 0 && (
+            <>
+              <p className="muted sm">📜 過往面談——點「▶ 繼續」就接回同一場對話，不用重新開始：</p>
+              <ul className="notes">
+                {history.map((d) => {
+                  const first = d.transcript.find((t) => t.who === 'manager')?.text || '（沒有內容）';
+                  return (
+                    <li key={d.id} className="note">
+                      <div className="note-open">
+                        <strong>{first.slice(0, 36)}{first.length > 36 ? '…' : ''}</strong>
+                        {d.savedDocId && <span className="tag" title="結束時已整理存入知識庫；續談後再儲存會更新同一份紀錄">💾 已入庫</span>}
+                        <span className="muted sm"> {new Date(d.createdAt).toLocaleDateString('zh-Hant')} · {d.transcript.length} 則訊息</span>
+                      </div>
+                      <button className="btn-ghost sm" onClick={() => continueOld(d.id)}>▶ 繼續</button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {history !== null && (
+            <div className="row end">
+              <button className="btn sm" onClick={startNew}>🆕 開始新的面談</button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {dialogue && (
       <div className="chat-box">
-        {(!dialogue || dialogue.transcript.length === 0) && (
+        {dialogue.transcript.length === 0 && (
           <p className="muted">（面談開始——說點什麼吧。）</p>
         )}
         {(dialogue?.transcript || []).map((t, i) => (
@@ -549,8 +599,9 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
         {busy && <p className="muted">💭 {employee.name} 思考中（需要查資料時會久一點）…</p>}
         <div ref={endRef} />
       </div>
+      )}
 
-      {!closing ? (
+      {dialogue && (!closing ? (
         <div className="chat-controls">
           <div className="interject-row">
             <input
@@ -587,7 +638,7 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
             </button>
           </div>
         </div>
-      )}
+      ))}
     </Modal>
   );
 }

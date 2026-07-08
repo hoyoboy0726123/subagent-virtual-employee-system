@@ -6,8 +6,15 @@
 import assert from 'node:assert/strict';
 
 // Use an isolated in-memory database BEFORE importing the app so the smoke test
-// never touches seeded/real data.
+// never touches seeded/real data. Also pin the provider and strip any API keys
+// from the developer's shell — assertions here rely on a keyless baseline
+// (see _hermetic.mjs for the fuller story).
 process.env.DB_FILE = ':memory:';
+process.env.LLM_PROVIDER = 'google';
+delete process.env.GEMINI_API_KEY;
+delete process.env.GOOGLE_API_KEY;
+delete process.env.TAVILY_API_KEY;
+delete process.env.WEB_SEARCH_API_KEY;
 // Force the document-ingestion pipeline onto its built-in JS fallback so this
 // test is hermetic regardless of whether MarkItDown (Python) is installed on the
 // machine. The REAL MarkItDown path is exercised by the opt-in
@@ -573,6 +580,54 @@ try {
     assert.equal(discarded.json.savedDocId, null);
 
     await api('DELETE', `/api/knowledge/${closed.json.savedDocId}`);
+  });
+
+  await step('1-on-1 reopen: a closed dialogue continues; re-saving replaces its record', async () => {
+    // A conversation, saved and closed.
+    const { json: d } = await api('POST', `/api/employees/${empId}/dialogue`);
+    await api('POST', `/api/dialogues/${d.id}/messages`, { text: '先討論產品定位。' });
+    const first = await api('POST', `/api/dialogues/${d.id}/close`, { save: true });
+    assert.equal(first.json.saved, true);
+    const firstDocId = first.json.savedDocId;
+
+    // Reopen → SAME dialogue, transcript intact, conversation continues.
+    const reopened = await api('POST', `/api/dialogues/${d.id}/reopen`);
+    assert.equal(reopened.status, 200);
+    assert.equal(reopened.json.id, d.id, 'same conversation, not a fork');
+    assert.equal(reopened.json.status, 'open');
+    assert.equal(reopened.json.transcript.length, 2, 'history is intact');
+    const more = await api('POST', `/api/dialogues/${d.id}/messages`, { text: '再補充一點:通路策略。' });
+    assert.equal(more.json.transcript.length, 4, 'new turns append to the old transcript');
+
+    // Close-and-save AGAIN → the knowledge base holds exactly ONE record for
+    // this dialogue: the fresh distillation REPLACES the earlier one.
+    const second = await api('POST', `/api/dialogues/${d.id}/close`, { save: true });
+    assert.equal(second.json.saved, true);
+    assert.notEqual(second.json.savedDocId, firstDocId, 'a fresh record was written');
+    const { json: emp } = await api('GET', `/api/employees/${empId}`);
+    const records = emp.knowledge.filter((k) => k.metadata?.dialogueId === d.id);
+    assert.equal(records.length, 1, 'no duplicate 1on1 records after re-save');
+    assert.equal(records[0].id, second.json.savedDocId);
+
+    // Reopen + close WITHOUT save keeps the earlier record (pointer preserved,
+    // so a future save still replaces instead of duplicating).
+    await api('POST', `/api/dialogues/${d.id}/reopen`);
+    const noSave = await api('POST', `/api/dialogues/${d.id}/close`, { save: false });
+    assert.equal(noSave.json.saved, false);
+    assert.equal(noSave.json.savedDocId, second.json.savedDocId, 'earlier record is not orphaned');
+
+    // Reopen is refused while ANOTHER dialogue is open for the same employee…
+    const { json: blocker } = await api('POST', `/api/employees/${empId}/dialogue`);
+    const refused = await api('POST', `/api/dialogues/${d.id}/reopen`);
+    assert.equal(refused.status, 400, 'one open dialogue per employee');
+    // …and closing an EMPTY dialogue deletes it instead of littering history.
+    const gone = await api('POST', `/api/dialogues/${blocker.id}/close`, { save: false });
+    assert.equal(gone.json.discarded, true);
+    const { json: list } = await api('GET', `/api/employees/${empId}/dialogues`);
+    assert.ok(!list.some((x) => x.id === blocker.id), 'empty dialogue leaves no trace');
+
+    await api('DELETE', `/api/knowledge/${second.json.savedDocId}`);
+    await api('DELETE', `/api/dialogues/${d.id}`);
   });
 
   await step('cross-meeting memory: a finished meeting writes each participant a memory document', async () => {
