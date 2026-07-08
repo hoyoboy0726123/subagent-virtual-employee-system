@@ -160,6 +160,19 @@ export function Empty({ children }) {
   return <div className="empty">{children}</div>;
 }
 
+// Indeterminate progress indicator for the many "the model is working, please
+// wait" moments (meeting conclude/continue, goal execute/rerun, research,
+// ideate, memory consolidate…). An animated sliding bar plus an optional label
+// so the user always knows something is happening, not that it hung.
+export function ProgressBar({ label }) {
+  return (
+    <div className="progress-wrap" role="status" aria-live="polite">
+      {label && <div className="progress-label">⏳ {label}</div>}
+      <div className="progress-bar" aria-label={label || '處理中'} />
+    </div>
+  );
+}
+
 // Citation chips shared by every agent output (meeting turns, 1on1, goal
 // deliverables). WEB sources (🌐, snippet holds the URL) render as real links
 // that open in a NEW tab — rel="noopener noreferrer" prevents tab-nabbing, and

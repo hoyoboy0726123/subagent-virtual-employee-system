@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, ExportButtons, Citations } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
 // everything is canonicalized to Markdown by MarkItDown on ingestion.
@@ -232,6 +232,7 @@ function IdeateModal({ onClose, onDraft }) {
         onChange={(e) => setDesc(e.target.value)}
         placeholder="例如：負責我們後端 API 與資料庫可靠性的人選"
       />
+      {busy && <ProgressBar label="正在草擬角色檔案…" />}
       <div className="modal-actions">
         <button className="btn-ghost" onClick={onClose}>取消</button>
         <button className="btn" onClick={draft} disabled={busy || !desc.trim()}>{busy ? '草擬中…' : '草擬檔案 →'}</button>
@@ -361,6 +362,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                   把累積的會議／自主記憶合併成一則精簡、去重、以較新為準的記憶；原始記憶會封存（移出檢索但可還原）。
                 </span>
               </div>
+              {consolidating.busy && <ProgressBar label="正在整併記憶，請稍候…" />}
               {consolidating.err && <div className="banner-err sm">{consolidating.err}</div>}
               {consolidating.msg && <div className="banner-ok sm">{consolidating.msg}</div>}
             </div>
@@ -593,7 +595,7 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
             </div>
           )
         ))}
-        {busy && <p className="muted">💭 {employee.name} 思考中（需要查資料時會久一點）…</p>}
+        {busy && <ProgressBar label={`${employee.name} 思考中（需要查資料時會久一點）…`} />}
         <div ref={endRef} />
       </div>
       )}
@@ -620,12 +622,8 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
       ) : (
         <div className="chat-controls">
           <p className="muted">要把這場面談的紀錄整理後存進 {employee.name} 的知識庫嗎？（存下來，他之後開會就記得這些結論。）</p>
-          {ending === 'save' && (
-            <div className="banner-ok sm">
-              💾 正在把面談整理成知識文件並建立索引（AI 整理約需 10–30 秒,請稍候）…
-            </div>
-          )}
-          {ending === 'discard' && <div className="banner-ok sm">正在結束面談…</div>}
+          {ending === 'save' && <ProgressBar label="正在把面談整理成知識文件並建立索引（AI 整理約需 10–30 秒）…" />}
+          {ending === 'discard' && <ProgressBar label="正在結束面談…" />}
           <div className="row end">
             <button className="btn-ghost sm" onClick={() => setClosing(false)} disabled={Boolean(ending)}>取消</button>
             <button className="btn-ghost sm" onClick={() => end(false)} disabled={Boolean(ending)}>
@@ -752,9 +750,10 @@ function ResearchSection({ employee, onChange }) {
           disabled={!enabled || busy}
         />
         <button className="btn sm" onClick={run} disabled={!enabled || busy || !topic.trim()}>
-          {busy ? '研究中…（agent 正在多次搜尋與撰寫，約需 1–2 分鐘）' : '🔍 開始研究'}
+          {busy ? '研究中…' : '🔍 開始研究'}
         </button>
       </div>
+      {busy && <ProgressBar label="agent 正在多次上網搜尋並撰寫調查報告，約需 1–2 分鐘…" />}
       {err && <div className="banner-err sm">{err}</div>}
 
       <ul className="notes">

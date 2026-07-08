@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 
 // Goal-level status the MANAGER sets (dropdown). Task status is separate: a
 // task is 'pending'(待執行) until ▶ 執行交付 delivers it → 'done'.
@@ -146,14 +146,12 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
             : <EmployeePicker employees={employees} selected={selected} toggle={toggle} />}
         </label>
         <div className="row end">
-          {busy && progress && (
-            <span className="muted">
-              {progress.phase
-                || `⚡ 各負責人平行認領中 ${progress.doneTasks.length}/${progress.total}${progress.doneTasks.length ? `（最新完成：${progress.doneTasks[progress.doneTasks.length - 1].assignee}）` : ''}`}
-            </span>
-          )}
           <button className="btn" onClick={assign} disabled={busy}>{busy ? '指派中…' : '🎯 指派並協作'}</button>
         </div>
+        {busy && (
+          <ProgressBar label={progress?.phase
+            || `各負責人平行認領中 ${progress?.doneTasks.length || 0}/${progress?.total || '?'}${progress?.doneTasks.length ? `（最新完成：${progress.doneTasks[progress.doneTasks.length - 1].assignee}）` : ''}`} />
+        )}
       </div>
 
       <div className="section-head">
@@ -257,12 +255,9 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
                 {rerunning ? '重新執行中…' : '🔄 重新執行'}
               </button>
             </div>
-            {rerunning && progress && (
-              <p className="muted sm">
-                ⚡ {progress.phase || `各負責人重新認領中 ${progress.doneTasks.length}/${progress.total}…`}
-              </p>
-            )}
-            {!rerunning && (
+            {rerunning ? (
+              <ProgressBar label={progress?.phase || `各負責人重新認領中 ${progress?.doneTasks.length || 0}/${progress?.total || '?'}…`} />
+            ) : (
               <p className="muted sm">團隊會在前一版計畫的基礎上重新協作；結果會取代目前的任務拆解與協作產出。</p>
             )}
             {err && <div className="banner-err sm">{err}</div>}
@@ -294,12 +289,17 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="row" style={{ marginTop: 8 }}>
-                      <button className="btn sm" onClick={() => executeTask(t)} disabled={executing !== null}>
-                        {executing === t.order ? '⏳ 執行中（查證需要時間）…' : '▶ 執行交付'}
-                      </button>
-                      {executing !== t.order && (
-                        <span className="muted sm">讓 {t.assignee} 真的完成這項任務——上網查證並交出成品</span>
+                    <div style={{ marginTop: 8 }}>
+                      <div className="row">
+                        <button className="btn sm" onClick={() => executeTask(t)} disabled={executing !== null}>
+                          {executing === t.order ? '⏳ 執行中…' : '▶ 執行交付'}
+                        </button>
+                        {executing !== t.order && (
+                          <span className="muted sm">讓 {t.assignee} 真的完成這項任務——上網查證並交出成品</span>
+                        )}
+                      </div>
+                      {executing === t.order && (
+                        <ProgressBar label={`${t.assignee} 正在查證並產出交付物，請稍候…`} />
                       )}
                     </div>
                   )}

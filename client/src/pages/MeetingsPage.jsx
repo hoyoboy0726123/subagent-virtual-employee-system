@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 
 const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
 
@@ -174,6 +174,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
             {busy ? '開場中…' : '▶ 開始會議'}
           </button>
         </div>
+        {busy && <ProgressBar label="員工代理正在依序發言，請稍候…" />}
       </div>
 
       {room && (
@@ -326,7 +327,7 @@ function MeetingRoom({ room, onInterject, onContinue, onConclude, onLeave }) {
           {room.transcript.map((t, i) => <TurnRow key={i} t={t} />)}
           <div ref={endRef} />
         </div>
-        {room.phase && <div className="live-progress-head">⏳ {room.phase}</div>}
+        {room.streaming && <ProgressBar label={room.phase || '討論進行中…'} />}
       </div>
 
       <div className="meeting-room-controls">
@@ -339,14 +340,18 @@ function MeetingRoom({ room, onInterject, onContinue, onConclude, onLeave }) {
           />
           <button className="btn sm" onClick={send} disabled={sending || !note.trim()}>💬 插話</button>
         </div>
-        <div className="row end">
-          <button className="btn-ghost" onClick={onContinue} disabled={room.streaming || !room.meetingId}>
-            ▶ 繼續討論 1 輪
-          </button>
-          <button className="btn" onClick={onConclude} disabled={room.streaming || !room.meetingId}>
-            ✅ 結束會議，產出決議與報告
-          </button>
-        </div>
+        {room.streaming ? (
+          <ProgressBar label={room.phase || '主管代理處理中，請稍候…'} />
+        ) : (
+          <div className="row end">
+            <button className="btn-ghost" onClick={onContinue} disabled={!room.meetingId}>
+              ▶ 繼續討論 1 輪
+            </button>
+            <button className="btn" onClick={onConclude} disabled={!room.meetingId}>
+              ✅ 結束會議，產出決議與報告
+            </button>
+          </div>
+        )}
         <p className="muted sm">
           {room.streaming
             ? '討論進行中也可以插話——下一位發言者開口前就會看到你的指示。'
