@@ -121,6 +121,18 @@ export const config = {
   // the built-in prompt tool protocol, so tool autonomy still works.
   llm: {
     provider: (process.env.LLM_PROVIDER || 'google').toLowerCase(),
+    // Output-token ceilings per surface. These are HEADROOM, not targets — the
+    // model stops when it is done, and tokens only cost when actually
+    // generated — so they are set generously and are env-overridable:
+    //   turn     — meeting speeches / goal task turns (conversational)
+    //   document — real deliverables: meeting reports, goal plans, research
+    //              reports, 1on1 replies (which legitimately include documents)
+    //   summary  — distillations: memory, 1on1 records, consolidation
+    output: {
+      turn: Number(process.env.LLM_TURN_MAX_TOKENS) || 2048,
+      document: Number(process.env.LLM_DOC_MAX_TOKENS) || 8192,
+      summary: Number(process.env.LLM_SUMMARY_MAX_TOKENS) || 4096,
+    },
     // --- google ---
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemma-4-31b-it',

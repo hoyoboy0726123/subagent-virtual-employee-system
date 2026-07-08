@@ -16,6 +16,7 @@
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import * as engine from '../reasoning/engine.js';
 import { polishArtifact } from './output.js';
+import { config } from '../config.js';
 
 const MANAGER_SYSTEM = [
   '你是這場多代理協作的主管兼幕僚長（main agent）。你的讀者是沒有參加這場討論的高階主管，',
@@ -93,11 +94,12 @@ export async function synthesizeGoalOutput({ title, description, assignees, task
 }
 
 // One manager turn. Returns the trimmed text, or null to signal "fall back".
-// 4096 output tokens: a full manager report for a long meeting (many rounds ×
-// many participants) can overflow 1800; gemma-4's output ceiling is 32K so
-// there is ample headroom, and short reports simply stop early.
+// Document-tier output budget: a full manager report for a long meeting (many
+// rounds × many participants) is a real deliverable — the ceiling is headroom
+// (gemma-4 allows 32K out) and short reports simply stop early.
+// Overridable via LLM_DOC_MAX_TOKENS.
 async function run(user) {
   if (!llmEnabled()) return null;
-  const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: 4096, temperature: 0.55 });
+  const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: config.llm.output.document, temperature: 0.55 });
   return polishArtifact(res?.text?.trim() || '') || null;
 }

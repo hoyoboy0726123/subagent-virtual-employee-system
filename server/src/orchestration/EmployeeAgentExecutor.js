@@ -23,6 +23,7 @@ import { generateAgentic, llmEnabled, activeModelInfo } from '../reasoning/llm.j
 import { buildToolbox } from '../reasoning/tools.js';
 import * as engine from '../reasoning/engine.js';
 import { polishUtterance } from './output.js';
+import { config } from '../config.js';
 
 const asList = (v) =>
   (Array.isArray(v) ? v : String(v || '').split(',')).map((s) => String(s).trim()).filter(Boolean);
@@ -274,10 +275,10 @@ export async function oneOnOneTurn({ employee, grounding, history, message }) {
         user,
         toolbox,
         // 1on1s legitimately produce DOCUMENTS (roadmaps, plans, reports) when
-        // the manager asks — 1200 tokens hard-clipped them mid-section. Meeting
-        // turns stay short by design; this cap is per-request headroom, not a
-        // target, so longer only costs when the model actually writes more.
-        maxTokens: 4096,
+        // the manager asks — a small cap hard-clipped them mid-section. This is
+        // per-request headroom, not a target: longer only costs when the model
+        // actually writes more. Overridable via LLM_DOC_MAX_TOKENS.
+        maxTokens: config.llm.output.document,
         temperature: Number.isFinite(agentCfg.temperature) ? agentCfg.temperature : 0.65,
         ...(agentCfg.model ? { model: agentCfg.model } : {}),
         ...(agentCfg.maxToolCalls ? { maxSteps: agentCfg.maxToolCalls } : {}),
@@ -348,7 +349,10 @@ async function runOrFallback({ employee, grounding, user, fallback }) {
         system,
         user,
         toolbox,
-        maxTokens: 700,
+        // Meeting speeches AND goal task turns. Conversational by prompt, but
+        // 700 clipped substantive analyses mid-sentence — the ceiling is
+        // headroom, not a target (LLM_TURN_MAX_TOKENS to override).
+        maxTokens: config.llm.output.turn,
         temperature,
         ...(agentCfg.model ? { model: agentCfg.model } : {}),
         ...(agentCfg.maxToolCalls ? { maxSteps: agentCfg.maxToolCalls } : {}),

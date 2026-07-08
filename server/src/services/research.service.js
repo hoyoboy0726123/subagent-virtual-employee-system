@@ -58,7 +58,7 @@ export async function runResearch(employeeId, topic) {
     system: researchSystem(emp),
     user: `調查主題：「${subject}」。請開始查證並完成報告。`,
     toolbox,
-    maxTokens: 4096,
+    maxTokens: config.llm.output.document, // research reports are deliverables
     temperature: 0.5,
     maxSteps: config.tools.researchMaxCalls,
   });

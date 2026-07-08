@@ -15,6 +15,7 @@
 // stance + their final commitment + the report) so memory works offline too.
 // MEETING_MEMORY_DISABLE=1 turns the whole feature off.
 import { generate, llmEnabled } from '../reasoning/llm.js';
+import { config } from '../config.js';
 import { insertDocument, findMemoryDocument } from '../storage/knowledge.repo.js';
 import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { scheduleConsolidation } from './MemoryConsolidator.js';
@@ -80,7 +81,7 @@ export async function distillMeetingMemories({ meetingId, topic, participants, t
       '',
       '請輸出每位與會者的記憶 JSON 陣列。',
     ].filter(Boolean).join('\n');
-    const res = await generate({ system: DISTILL_SYSTEM, user, maxTokens: 2048, temperature: 0.3 });
+    const res = await generate({ system: DISTILL_SYSTEM, user, maxTokens: config.llm.output.summary, temperature: 0.3 });
     byName = res?.text ? parseDistillation(res.text, participants) : null;
     live = Boolean(byName);
   }

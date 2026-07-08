@@ -15,6 +15,7 @@ import { generate, llmEnabled } from '../reasoning/llm.js';
 import { badRequest, notFound } from '../util/http.js';
 import { withLock } from '../util/locks.js';
 import { normalizeTraditional } from '../orchestration/output.js';
+import { config } from '../config.js';
 
 // Serialize say()/close() per dialogue so a long LLM turn can't let two
 // requests read the same transcript and lose a message (or double-save).
@@ -125,7 +126,7 @@ async function closeLocked(dialogueId, { save } = {}) {
     let content = null;
     if (llmEnabled()) {
       const body = d.transcript.map((t) => `${t.who === 'manager' ? '主管' : emp.name}：${t.text}`).join('\n');
-      const res = await generate({ system: DISTILL_SYSTEM, user: body, maxTokens: 2048, temperature: 0.3 });
+      const res = await generate({ system: DISTILL_SYSTEM, user: body, maxTokens: config.llm.output.summary, temperature: 0.3 });
       content = res?.text?.trim() || null;
     }
     if (!content) content = fallbackRecord(emp, d.transcript);

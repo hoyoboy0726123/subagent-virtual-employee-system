@@ -82,7 +82,7 @@ export async function consolidateEmployeeMemories(employeeId, { force = false, g
     const body = mems
       .map((m, i) => `【記憶 ${i + 1}｜${String(m.createdAt).slice(0, 10)}】\n${m.content}`)
       .join('\n\n');
-    const res = await generate({ system: CONSOLIDATE_SYSTEM, user: body, maxTokens: 2048, temperature: 0.3 });
+    const res = await generate({ system: CONSOLIDATE_SYSTEM, user: body, maxTokens: config.llm.output.summary, temperature: 0.3 });
     content = res?.text?.trim() || null;
     if (content) method = 'live';
   }
