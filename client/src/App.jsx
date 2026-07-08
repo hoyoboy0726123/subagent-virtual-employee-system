@@ -20,6 +20,7 @@ export default function App() {
   // opt-in and remembered.
   const [theme, setTheme] = useState(() => localStorage.getItem('veemp-theme') || 'light');
   const [showKeys, setShowKeys] = useState(false); // 🔑 API-keys modal
+  const [showSettings, setShowSettings] = useState(false); // ⚙️ settings modal
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
@@ -96,6 +97,14 @@ export default function App() {
             aria-label="API 金鑰設定"
           >
             🔑
+          </button>
+          <button
+            className="icon-btn"
+            onClick={() => setShowSettings(true)}
+            title="系統設定（會議主持行為等）"
+            aria-label="系統設定"
+          >
+            ⚙️
           </button>
           {settings?.llm && (
             <label
@@ -176,7 +185,102 @@ export default function App() {
           onSaved={(next) => { setSettings((s) => ({ ...s, ...next })); refresh(); }}
         />
       )}
+
+      {showSettings && (
+        <SettingsModal
+          chair={settings?.chair}
+          onClose={() => setShowSettings(false)}
+          onSaved={(next) => setSettings((s) => ({ ...s, ...next }))}
+        />
+      )}
     </div>
+  );
+}
+
+// ⚙️ System settings. First section: the meeting chair (主管代理) — the AI
+// stand-in that orders each round, presses speakers with follow-ups, and
+// synthesizes reports. Everything here is stored server-side (SQLite settings)
+// and takes effect from the NEXT round — no restart needed.
+function SettingsModal({ chair, onClose, onSaved }) {
+  const [cfg, setCfg] = useState({
+    dynamicOrder: chair?.dynamicOrder !== false,
+    followUps: chair?.followUps !== false,
+    style: chair?.style || 'standard',
+    model: chair?.model || '',
+  });
+  const [state, setState] = useState({ busy: false, msg: '', err: '' });
+
+  const save = async () => {
+    setState({ busy: true, msg: '', err: '' });
+    try {
+      const next = await api.put('/settings', { chairConfig: cfg });
+      onSaved(next);
+      setState({ busy: false, msg: '已儲存——下一輪討論即刻生效', err: '' });
+    } catch (e) {
+      setState({ busy: false, msg: '', err: e.message });
+    }
+  };
+
+  return (
+    <Modal title="⚙️ 系統設定" onClose={onClose}>
+      <div className="upload-box">
+        <strong>👔 會議主持（主管代理）</strong>
+        <p className="muted sm">
+          主管代理是內建的 AI 主持人：每輪安排發言順序、對發言者追問、會後統整報告。
+          戰略永遠在你手上（插話／續會／作結），這裡調的是它的議事風格。
+        </p>
+
+        <label className="runtime-switch" style={{ margin: '6px 0' }}>
+          <input
+            type="checkbox"
+            checked={cfg.dynamicOrder}
+            onChange={(e) => setCfg({ ...cfg, dynamicOrder: e.target.checked })}
+          />
+          <span>動態點名——依討論內容安排每輪發言順序（關閉＝固定輪流，不呼叫主持人模型）</span>
+        </label>
+
+        <label className="runtime-switch" style={{ margin: '6px 0' }}>
+          <input
+            type="checkbox"
+            checked={cfg.followUps}
+            onChange={(e) => setCfg({ ...cfg, followUps: e.target.checked })}
+            disabled={!cfg.dynamicOrder}
+          />
+          <span>追問——允許主持人對發言者附上尖銳但建設性的追問</span>
+        </label>
+
+        <label className="block" style={{ margin: '8px 0' }}>
+          主持風格
+          <select
+            value={cfg.style}
+            onChange={(e) => setCfg({ ...cfg, style: e.target.value })}
+            disabled={!cfg.dynamicOrder || !cfg.followUps}
+          >
+            <option value="gentle">溫和——開放式引導，不施壓</option>
+            <option value="standard">標準——尖銳但建設性</option>
+            <option value="strict">嚴厲——逼出數字、期限與承諾</option>
+          </select>
+        </label>
+
+        <label className="block" style={{ margin: '8px 0' }}>
+          主持人模型（僅影響點名與追問的呼叫；留空＝跟隨目前大腦）
+          <input
+            placeholder="例如 gemma-4-31b-it；留空使用預設"
+            value={cfg.model}
+            onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
+            disabled={!cfg.dynamicOrder}
+          />
+        </label>
+
+        <div className="row end">
+          <button className="btn sm" onClick={save} disabled={state.busy}>
+            {state.busy ? '儲存中…' : '儲存'}
+          </button>
+        </div>
+        {state.err && <div className="banner-err sm">{state.err}</div>}
+        {state.msg && <div className="banner-ok sm">{state.msg}</div>}
+      </div>
+    </Modal>
   );
 }
 

@@ -229,6 +229,46 @@ try {
 
     passed++;
     console.log('  ✓ MeetingChair: whole-round ordering in one call, robust fallbacks (C3)');
+
+    // --- ⚙️ chair configuration (user-tunable in the settings panel) ---
+    // dynamicOrder off → fixed round-robin and ZERO chair model calls.
+    let called = 0;
+    const spyGen = async () => { called++; return { text: '{"order":[]}', functionCalls: [] }; };
+    const fixed = await planRoundOrder({
+      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, participants: roster,
+      _generate: spyGen, _chairConfig: { dynamicOrder: false },
+    });
+    assert.equal(called, 0, 'dynamic ordering off → the chair model is never called');
+    assert.equal(fixed.live, false);
+    assert.deepEqual(fixed.order.map((o) => o.employee), roster, 'fixed input order preserved');
+
+    // followUps off → questions stripped even if the model produces them, and
+    // the chair prompt forbids them.
+    const sysSeen = [];
+    const noQ = await planRoundOrder({
+      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, participants: roster,
+      _generate: async ({ system }) => {
+        sysSeen.push(system);
+        return { text: '{"order":[{"name":"Bo Chen","question":"偷偷追問"},{"name":"Ada Lin","question":""}]}', functionCalls: [] };
+      },
+      _chairConfig: { followUps: false },
+    });
+    assert.equal(noQ.live, true, 'ordering still live');
+    assert.ok(noQ.order.every((o) => o.question === null), 'follow-ups stripped');
+    assert.ok(sysSeen[0].includes('不要附加任何追問'), 'prompt forbids questions');
+
+    // style flows into the chair persona; model override rides the call.
+    const params = [];
+    await planRoundOrder({
+      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, participants: roster,
+      _generate: async (p) => { params.push(p); return { text: '{"order":[]}', functionCalls: [] }; },
+      _chairConfig: { style: 'strict', model: 'gemma-4-31b-it' },
+    });
+    assert.ok(params[0].system.includes('嚴格'), 'strict style shapes the chair persona');
+    assert.equal(params[0].model, 'gemma-4-31b-it', 'chair-only model override applied');
+
+    passed++;
+    console.log('  ✓ MeetingChair: ⚙️ config — fixed order, no follow-ups, style + model override');
   })();
 
   // --- Milestone C2: an aborted signal stops the run at a round boundary ---

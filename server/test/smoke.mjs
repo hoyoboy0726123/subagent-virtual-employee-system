@@ -705,6 +705,28 @@ try {
     assert.equal(health.tools.webSearchKey, false);
   });
 
+  await step('chair config (⚙️ 設定): persisted, sanitized, and merge-patchable', async () => {
+    const { json: before } = await api('GET', '/api/settings');
+    assert.deepEqual(before.chair, { dynamicOrder: true, followUps: true, style: 'standard', model: '' },
+      'defaults: dynamic ordering + follow-ups on, standard style, no model override');
+
+    // Garbage in → sanitized out; valid fields persist.
+    const { json: saved } = await api('PUT', '/api/settings', {
+      chairConfig: { dynamicOrder: false, followUps: false, style: 'weird', model: 123 },
+    });
+    assert.deepEqual(saved.chair, { dynamicOrder: false, followUps: false, style: 'standard', model: '' });
+
+    // Partial patch merges instead of resetting the rest.
+    const { json: patched } = await api('PUT', '/api/settings', { chairConfig: { style: 'strict' } });
+    assert.deepEqual(patched.chair, { dynamicOrder: false, followUps: false, style: 'strict', model: '' });
+
+    // Restore defaults for the rest of the suite.
+    const { json: restored } = await api('PUT', '/api/settings', {
+      chairConfig: { dynamicOrder: true, followUps: true, style: 'standard', model: '' },
+    });
+    assert.equal(restored.chair.dynamicOrder, true);
+  });
+
   await step('in-app API keys: save → masked status, unlocks features; clear → reverts', async () => {
     // Hermetic run starts with nothing configured (no env keys, empty DB).
     const { json: before } = await api('GET', '/api/settings');

@@ -15,6 +15,7 @@ settingsRouter.put('/settings', asyncHandler(async (req, res) => {
   let result;
   if (body.webSearchEnabled !== undefined) result = settings.setWebSearchEnabled(Boolean(body.webSearchEnabled));
   if (body.llmProvider !== undefined) result = settings.setLlmProvider(String(body.llmProvider));
+  if (body.chairConfig !== undefined) result = settings.setChairConfig(body.chairConfig || {});
   res.json(result || settings.getSettings());
 }));
 

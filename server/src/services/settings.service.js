@@ -9,6 +9,7 @@ import { WEB_SEARCH_SETTING_KEY, webSearchConfigured, webSearchEnabled } from '.
 import { LLM_PROVIDER_SETTING_KEY, PROVIDER_IDS, listProviders, currentProviderName } from '../reasoning/providers/index.js';
 import { activeModelInfo, llmEnabled } from '../reasoning/llm.js';
 import { keyStatus, saveKeys, testGeminiKey, testTavilyKey } from '../reasoning/apiKeys.js';
+import { CHAIR_SETTING_KEY, sanitizeChairConfig, getChairConfig } from '../orchestration/MeetingChair.js';
 
 export function getActiveRuntime() {
   return getRuntimeAdapter(DEFAULT_RUNTIME_MODE);
@@ -60,11 +61,20 @@ export async function testApiKey(provider, key) {
   throw badRequest('未知的供應商——可選:gemini、tavily');
 }
 
+/** Update the meeting-chair (主管代理) configuration — sanitized, persisted. */
+export function setChairConfig(patch = {}) {
+  const merged = sanitizeChairConfig({ ...getChairConfig(), ...patch });
+  setSetting(CHAIR_SETTING_KEY, JSON.stringify(merged));
+  return getSettings();
+}
+
 export function getSettings() {
   return {
     runtimeLabel: getActiveRuntime().label,
     // Masked key status only — the stored keys themselves never leave the server.
     apiKeys: keyStatus(),
+    // Meeting-chair (主管代理) behaviour — tunable in ⚙️ 設定.
+    chair: getChairConfig(),
     webSearch: {
       keyConfigured: webSearchConfigured(),
       enabled: webSearchEnabled(),
