@@ -253,7 +253,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
         </>
       )}
 
-      {open && <MeetingView meeting={open} onClose={() => setOpen(null)} onReopen={() => reopenConcluded(open)} />}
+      {open && <MeetingView meeting={open} onClose={() => setOpen(null)} onReopen={() => reopenConcluded(open)} onChange={onChange} />}
     </div>
   );
 }
@@ -419,9 +419,26 @@ function Grounding({ grounding }) {
 
 const SUBTAB_LABELS = { transcript: '逐字紀錄', minutes: '會議記錄', report: '報告', knowledge: '知識' };
 
-function MeetingView({ meeting, onClose, onReopen }) {
+function MeetingView({ meeting, onClose, onReopen, onChange }) {
   const [view, setView] = useState('transcript');
+  const [spin, setSpin] = useState({ busy: false, msg: '', err: '' });
   const rounds = [...new Set(meeting.transcript.map((t) => t.round))];
+
+  // How many action items have an owner who is an actual participant (only
+  // those become tasks) — drives the "派成目標" affordance.
+  const partNames = new Set((meeting.participants || []).map((p) => p.name));
+  const assignable = (meeting.minutes?.actionItems || []).filter((a) => partNames.has(a.owner));
+
+  const spinOffGoal = async () => {
+    setSpin({ busy: true, msg: '', err: '' });
+    try {
+      const goal = await api.post(`/goals/from-meeting/${meeting.id}`);
+      setSpin({ busy: false, msg: `已建立目標「${goal.title}」（${goal.tasks.length} 項任務）——切到「🎯 目標」分頁，逐項按「執行交付」讓負責人完成。`, err: '' });
+      onChange?.(); // the new goal shows at the top of the goals list
+    } catch (e) {
+      setSpin({ busy: false, msg: '', err: e.message });
+    }
+  };
 
   return (
     <Modal title={`🗓️ ${meeting.topic}`} onClose={onClose} wide>
@@ -472,6 +489,21 @@ function MeetingView({ meeting, onClose, onReopen }) {
           <ul>{meeting.minutes.decisions.map((a, i) => <li key={i}>{a.replace(/^- /, '')}</li>)}</ul>
           <h4>行動項目</h4>
           <ul>{meeting.minutes.actionItems.map((a, i) => <li key={i}><strong>{a.owner}</strong> — {a.action} <span className="muted">（期限：{a.due}）</span></li>)}</ul>
+
+          {assignable.length > 0 && (
+            <div className="upload-box">
+              <div className="upload-row">
+                <button className="btn sm" onClick={spinOffGoal} disabled={spin.busy}>
+                  {spin.busy ? '建立中…' : `🎯 把行動項目派成目標（${assignable.length} 項）`}
+                </button>
+                <span className="muted upload-hint">
+                  每個行動項目變成一項指派給負責人的任務；到「目標」分頁按「▶ 執行交付」讓他們實際完成並產出成品。
+                </span>
+              </div>
+              {spin.err && <div className="banner-err sm">{spin.err}</div>}
+              {spin.msg && <div className="banner-ok sm">{spin.msg}</div>}
+            </div>
+          )}
         </div>
       )}
 

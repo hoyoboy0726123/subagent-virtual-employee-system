@@ -761,6 +761,37 @@ try {
     await api('DELETE', `/api/goals/${goal.id}`);
   });
 
+  await step('close the loop: a meeting\'s action items spin off into an executable goal', async () => {
+    // A one-shot meeting is concluded with minutes; the engine gives each
+    // participant an action item owned by their name.
+    const { json: meeting } = await api('POST', '/api/meetings', {
+      topic: '閉環驗證會議', participantIds: [empId], rounds: 1,
+    });
+    assert.ok(meeting.minutes.actionItems.length > 0, 'meeting produced action items');
+
+    const spun = await api('POST', `/api/goals/from-meeting/${meeting.id}`);
+    assert.equal(spun.status, 201);
+    assert.ok(spun.json.title.includes('閉環驗證會議'), 'goal titled after the meeting');
+    assert.ok(spun.json.tasks.length > 0, 'action items became tasks');
+    assert.ok(spun.json.tasks.every((t) => t.status === 'pending'), 'tasks are 待執行, ready to execute');
+    assert.ok(spun.json.tasks.every((t) => t.assigneeId === empId), 'each task assigned to its action-item owner');
+    assert.ok(spun.json.tasks[0].subtask.length > 0, 'the action text becomes the subtask');
+    assert.deepEqual(spun.json.assigneeIds, [empId], 'goal assignees derived from mappable owners');
+
+    // The spun-off task is immediately executable through the SAME path (offline
+    // → refused with the actionable error, proving the wiring is real).
+    const exec = await api('POST', `/api/goals/${spun.json.id}/tasks/1/execute`);
+    assert.equal(exec.status, 400);
+    assert.ok(/即時大腦|金鑰|訂閱/.test(exec.json.error), 'the spun-off task feeds the real execution path');
+
+    // Missing meeting → 404.
+    const nope = await api('POST', '/api/goals/from-meeting/mtg_nope');
+    assert.equal(nope.status, 404);
+
+    await api('DELETE', `/api/goals/${spun.json.id}`);
+    await api('DELETE', `/api/meetings/${meeting.id}`);
+  });
+
   await step('web-search toggle: reported off and un-enableable without a provider key', async () => {
     const { json: settings } = await api('GET', '/api/settings');
     assert.equal(settings.webSearch.keyConfigured, false, 'hermetic run has no Tavily key');

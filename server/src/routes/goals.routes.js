@@ -25,6 +25,12 @@ goalsRouter.post('/goals', asyncHandler(async (req, res) => {
   res.status(201).json(await goals.create(req.body || {}));
 }));
 
+// Close the loop: turn a concluded meeting's action items into an executable
+// goal (each item → a 待執行 task for its owner).
+goalsRouter.post('/goals/from-meeting/:meetingId', asyncHandler(async (req, res) => {
+  res.status(201).json(goals.createFromMeeting(req.params.meetingId));
+}));
+
 // Streaming variant (Phase 15): SSE progress — assignees run in parallel, each
 // completed task streams as {type:'task'}, then {type:'done', goal}. Shared SSE
 // plumbing (heartbeat, abort-on-disconnect) lives in util/sse.js.

@@ -1,6 +1,7 @@
 // Service: goals. Resolves assignees, delegates execution to the active runtime
 // adapter, and persists. Status/task updates stay simple CRUD.
 import * as repo from '../storage/goals.repo.js';
+import { getMeeting } from '../storage/meetings.repo.js';
 import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { taskDeliverableTurn } from '../orchestration/EmployeeAgentExecutor.js';
@@ -86,6 +87,57 @@ export async function rerun(id, { instruction } = {}, onEvent) {
 export function remove(id) {
   if (!repo.deleteGoal(id)) throw notFound('找不到該目標');
   return { ok: true };
+}
+
+/**
+ * Close the loop (Phase 20): turn a concluded meeting's ACTION ITEMS into an
+ * executable goal. Each action item becomes a 待執行 task assigned to its owner
+ * (mapped by name to a meeting participant); the manager then runs ▶ 執行交付 on
+ * each. No planning LLM call — the meeting already decided the "what", so the
+ * action items ARE the plan. Owners that aren't participants (e.g. 主管, or a
+ * paraphrased name) are skipped; if none map, it's an honest error.
+ */
+export function createFromMeeting(meetingId) {
+  const meeting = getMeeting(meetingId);
+  if (!meeting) throw notFound('找不到該會議');
+  const actionItems = meeting.minutes?.actionItems || [];
+  if (!actionItems.length) throw badRequest('這場會議沒有可派工的行動項目（尚未作結或沒有產出行動項目）。');
+
+  const byName = new Map((meeting.participants || []).map((p) => [p.name, p]));
+  const assigneeMap = new Map();
+  const tasks = [];
+  for (const a of actionItems) {
+    const emp = byName.get(a.owner);
+    if (!emp) continue; // owner not a participant (e.g. 主管) — can't assign work to them
+    assigneeMap.set(emp.id, emp);
+    tasks.push({
+      assignee: emp.name,
+      assigneeId: emp.id,
+      role: emp.roleTitle,
+      subtask: a.action,
+      approach: `來自會議「${meeting.topic}」的行動項目${a.due ? `（期限：${a.due}）` : ''}`,
+      status: 'pending', // 待執行 — the manager runs ▶ 執行交付 to deliver it
+      live: false,
+      toolCalls: 0,
+      order: tasks.length + 1,
+    });
+  }
+  if (!tasks.length) {
+    throw badRequest('行動項目的負責人都不在與會員工名單中，無法自動指派。');
+  }
+
+  const assignees = [...assigneeMap.values()].map((e) => ({ id: e.id, name: e.name, roleTitle: e.roleTitle }));
+  return repo.insertGoal({
+    title: `執行「${meeting.topic}」的行動項目`,
+    description: `由會議「${meeting.topic}」的行動項目自動建立。逐項按「執行交付」讓負責人實際完成。`,
+    assigneeIds: assignees.map((a) => a.id),
+    assignees,
+    status: 'in-progress',
+    tasks,
+    output: '',
+    grounding: meeting.grounding || [], // carry the meeting's knowledge grounding forward
+    runtime: { mode: 'standalone', engine: 'standalone-multiagent', label: '由會議行動項目建立', note: `來源會議 ${meetingId}` },
+  });
 }
 
 /**
