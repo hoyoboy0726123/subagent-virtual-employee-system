@@ -85,10 +85,13 @@ function drainInterjections(runId, convo, roundNo, roundTitle, emit) {
  * transcript when `priorTranscript` is given (繼續討論), so round numbering and
  * every agent's memory of the conversation carry over.
  *
- * @param {object} req  { topic, participants, rounds, priorTranscript?, runId?, onEvent? }
+ * @param {object} req  { topic, participants, rounds, priorTranscript?, runId?, onEvent?, signal? }
+ *   signal — AbortSignal wired to the client connection (C2): when the manager
+ *   closes the tab we stop at the next round boundary and persist what ran,
+ *   instead of burning the rest of the LLM calls into a dead socket.
  * @returns {Promise<{transcript, grounding, stats}>}
  */
-export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], runId, onEvent }) {
+export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], runId, onEvent, signal }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   // Register the interjection mailbox SYNCHRONOUSLY, before the run event is
   // emitted — so a manager who interjects the instant they receive the runId
@@ -111,6 +114,7 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
 
   try {
     for (let r = 0; r < rounds; r++) {
+      if (signal?.aborted) break; // client left — stop; completed rounds are kept
       const roundNo = startRound + r + 1;
       const { title: roundTitle, goal: roundGoal } = plan[r] || DEEPEN_ROUND;
       emit({ type: 'round', round: roundNo, roundTitle, roundGoal });
@@ -120,6 +124,7 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
       // offline this degrades to the deterministic order.
       const remaining = [...participants];
       while (remaining.length) {
+        if (signal?.aborted) break; // stop between speakers too, to save calls
         // The human manager's live interjections take the floor first.
         drainInterjections(runId, convo, roundNo, roundTitle, emit);
 
@@ -196,8 +201,8 @@ export async function concludeMeeting({ topic, participants, transcript, groundi
  * @param {object} req  { topic, participants, rounds, onEvent? }
  * @returns {Promise<{transcript, minutes, report, grounding, stats}>}
  */
-export async function runMeeting({ topic, participants, rounds, onEvent }) {
-  const ran = await runMeetingRounds({ topic, participants, rounds, onEvent });
+export async function runMeeting({ topic, participants, rounds, onEvent, signal }) {
+  const ran = await runMeetingRounds({ topic, participants, rounds, onEvent, signal });
   const done = await concludeMeeting({
     topic, participants, transcript: ran.transcript, grounding: ran.grounding, onEvent,
   });

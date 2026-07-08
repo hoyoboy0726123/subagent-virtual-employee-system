@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { asyncHandler, sendDownload } from '../util/http.js';
+import { streamRun } from '../util/sse.js';
 import * as goals from '../services/goals.service.js';
 import { buildGoalExport } from '../export/reportDoc.js';
 
@@ -24,22 +25,11 @@ goalsRouter.post('/goals', asyncHandler(async (req, res) => {
   res.status(201).json(await goals.create(req.body || {}));
 }));
 
-// Streaming variant (Phase 15): SSE progress — assignees now run in parallel,
-// and each completed task streams as {type:'task'}, then {type:'done', goal}.
+// Streaming variant (Phase 15): SSE progress — assignees run in parallel, each
+// completed task streams as {type:'task'}, then {type:'done', goal}. Shared SSE
+// plumbing (heartbeat, abort-on-disconnect) lives in util/sse.js.
 goalsRouter.post('/goals/stream', asyncHandler(async (req, res) => {
-  res.setHeader('content-type', 'text/event-stream');
-  res.setHeader('cache-control', 'no-cache');
-  res.setHeader('connection', 'keep-alive');
-  res.flushHeaders?.();
-  const send = (e) => res.write(`data: ${JSON.stringify(e)}\n\n`);
-  try {
-    const goal = await goals.create(req.body || {}, send);
-    send({ type: 'done', goal });
-  } catch (err) {
-    send({ type: 'error', error: err.message || '內部錯誤' });
-  } finally {
-    res.end();
-  }
+  await streamRun(req, res, (send) => goals.create(req.body || {}, send), 'goal');
 }));
 
 goalsRouter.put('/goals/:id', asyncHandler(async (req, res) => {

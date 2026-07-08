@@ -54,7 +54,7 @@ export function get(id) {
   return m;
 }
 
-export async function create({ topic, participantIds, rounds } = {}, onEvent) {
+export async function create({ topic, participantIds, rounds } = {}, onEvent, signal) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
     throw badRequest('主題與至少一位與會者為必填');
@@ -62,7 +62,7 @@ export async function create({ topic, participantIds, rounds } = {}, onEvent) {
   const boundedRounds = Math.min(Math.max(Number(rounds) || 3, 1), 5);
 
   const runtime = getActiveRuntime();
-  const result = await runtime.runMeeting({ topic, participants, rounds: boundedRounds, onEvent });
+  const result = await runtime.runMeeting({ topic, participants, rounds: boundedRounds, onEvent, signal });
 
   const meeting = repo.insertMeeting({
     topic,
@@ -108,7 +108,7 @@ export function remove(id) {
 // ---------------------------------------------------------------------------
 
 /** Start a discussion: run the first rounds, persist as status 'discussing'. */
-export async function startDiscussion({ topic, participantIds, rounds } = {}, onEvent) {
+export async function startDiscussion({ topic, participantIds, rounds } = {}, onEvent, signal) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
     throw badRequest('主題與至少一位與會者為必填');
@@ -117,7 +117,7 @@ export async function startDiscussion({ topic, participantIds, rounds } = {}, on
   const runId = newId('run'); // the orchestrator registers the mailbox + emits 'run'
 
   const result = await runtime.runMeetingRounds({
-    topic, participants, rounds: boundRounds(rounds), runId, onEvent,
+    topic, participants, rounds: boundRounds(rounds), runId, onEvent, signal,
   });
 
   return repo.insertMeeting({
@@ -133,7 +133,7 @@ export async function startDiscussion({ topic, participantIds, rounds } = {}, on
 }
 
 /** Continue a discussing meeting for more rounds (transcript carries over). */
-export async function continueDiscussion(meetingId, { rounds } = {}, onEvent) {
+export async function continueDiscussion(meetingId, { rounds } = {}, onEvent, signal) {
   return withLock(mkey(meetingId), async () => {
     const meeting = repo.getMeeting(meetingId);
     if (!meeting) throw notFound('找不到該會議');
@@ -152,6 +152,7 @@ export async function continueDiscussion(meetingId, { rounds } = {}, onEvent) {
       priorTranscript: meeting.transcript,
       runId,
       onEvent,
+      signal,
     });
 
     // Re-read: a stored interjection may have been appended while we ran.

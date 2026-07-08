@@ -395,6 +395,7 @@ try {
     });
     assert.equal(res.status, 200);
     assert.ok(res.headers.get('content-type').includes('text/event-stream'));
+    assert.equal(res.headers.get('x-accel-buffering'), 'no', 'C2: tells nginx not to buffer the SSE stream');
 
     const events = [];
     const reader = res.body.getReader();

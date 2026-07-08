@@ -218,6 +218,22 @@ try {
     console.log('  ✓ MeetingChair: dynamic speaker picking with safe deterministic fallback');
   })();
 
+  // --- Milestone C2: an aborted signal stops the run at a round boundary ---
+  await (async () => {
+    const { runMeetingRounds } = await import('../src/orchestration/MeetingOrchestrator.js');
+    const aborted = AbortSignal.abort();
+    const res = await runMeetingRounds({
+      topic, participants: [analyst, designer], rounds: 3, signal: aborted,
+    });
+    assert.equal(res.transcript.length, 0, 'a pre-aborted run produces no turns (client left → stop, save nothing new)');
+
+    // Sanity: the same call WITHOUT an abort actually runs (offline engine).
+    const ran = await runMeetingRounds({ topic, participants: [analyst, designer], rounds: 1 });
+    assert.equal(ran.transcript.length, 2, 'without abort, both participants speak the round');
+    passed++;
+    console.log('  ✓ runMeetingRounds honours an AbortSignal (client-disconnect stop)');
+  })();
+
   console.log(`\n  All ${passed} orchestration checks passed ✅\n`);
 } catch (err) {
   console.error(`\n  ✗ FAILED after ${passed} checks:`, err.message, '\n', err.stack);
