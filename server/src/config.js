@@ -27,6 +27,11 @@ export const config = {
     chunkSize: Number(process.env.CHUNK_SIZE) || 480, // ~chars per chunk
     chunkOverlap: Number(process.env.CHUNK_OVERLAP) || 60,
     topK: Number(process.env.RETRIEVAL_TOP_K) || 4,
+    // Hard ceiling on chunks per document (C4). A 15 MiB upload could otherwise
+    // produce ~36k chunks = ~72k synchronous INSERTs, freezing the event loop
+    // (and every in-flight SSE meeting) for seconds. 2000 chunks ≈ ~1 MB of
+    // indexed text — ample for a knowledge doc; excess is dropped and noted.
+    maxChunksPerDoc: Number(process.env.MAX_CHUNKS_PER_DOC) || 2000,
   },
 
   // Document ingestion (Phase 7). Uploaded knowledge files are converted to

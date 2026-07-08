@@ -9,6 +9,7 @@ import { withTx } from '../db/tx.js';
 import { id, now } from '../util/ids.js';
 import { chunkText } from '../reasoning/chunk.js';
 import { segmentForFts } from './fts.js';
+import { config } from '../config.js';
 
 const parseJson = (s, fallback) => {
   try { return JSON.parse(s); } catch { return fallback; }
@@ -37,9 +38,11 @@ export function listDocuments(employeeId) {
   const rows = db
     .prepare('SELECT * FROM documents WHERE employee_id = ? ORDER BY created_at ASC')
     .all(employeeId);
+  // Scope the count to THIS employee (C4) — the old query GROUP BY'd every
+  // employee's chunks. idx_chunks_employee makes this cheap.
   const counts = db
-    .prepare('SELECT document_id, COUNT(*) AS n FROM chunks GROUP BY document_id')
-    .all()
+    .prepare('SELECT document_id, COUNT(*) AS n FROM chunks WHERE employee_id = ? GROUP BY document_id')
+    .all(employeeId)
     .reduce((m, r) => ((m[r.document_id] = r.n), m), {});
   return rows.map((r) => rowToDocument(r, counts[r.id] || 0));
 }
@@ -77,7 +80,15 @@ export function insertDocument(employeeId, data) {
 
   // Uploaded documents arrive as canonical Markdown → chunk section-aware; pasted
   // notes stay on the plain sentence packer. `format` is set by the ingestion path.
-  const chunks = chunkText(doc.content, { format: data.format });
+  const allChunks = chunkText(doc.content, { format: data.format });
+  // Cap chunks per document (C4) so a giant upload can't freeze the event loop
+  // with tens of thousands of synchronous INSERTs; note truncation, don't hide it.
+  const max = config.retrieval.maxChunksPerDoc;
+  const chunks = allChunks.length > max ? allChunks.slice(0, max) : allChunks;
+  if (chunks.length < allChunks.length) {
+    doc.metadata = { ...doc.metadata, truncatedChunks: true, totalChunks: allChunks.length, indexedChunks: chunks.length };
+    console.warn(`[knowledge] document "${doc.title}" produced ${allChunks.length} chunks; indexed first ${max} (MAX_CHUNKS_PER_DOC).`);
+  }
 
   withTx(db, () => {
     db.prepare(`INSERT INTO documents
@@ -110,12 +121,9 @@ export function insertDocument(employeeId, data) {
 export function deleteDocument(documentId) {
   const db = getDb();
   return withTx(db, () => {
-    const chunkIds = db
-      .prepare('SELECT id FROM chunks WHERE document_id = ?')
-      .all(documentId)
-      .map((r) => r.id);
-    const delFts = db.prepare('DELETE FROM chunks_fts WHERE chunk_id = ?');
-    for (const cid of chunkIds) delFts.run(cid);
+    // Single statement instead of a per-chunk DELETE loop — one bulk delete on
+    // the FTS table via a subquery (C4).
+    db.prepare('DELETE FROM chunks_fts WHERE chunk_id IN (SELECT id FROM chunks WHERE document_id = ?)').run(documentId);
     const info = db.prepare('DELETE FROM documents WHERE id = ?').run(documentId);
     return info.changes;
   }) > 0;

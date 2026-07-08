@@ -658,6 +658,27 @@ try {
     assert.equal(missing.status, 404);
   });
 
+  await step('C4: a huge document is chunk-capped (event-loop guard) and delete removes FTS rows', async () => {
+    // Build content that far exceeds the chunk cap (each ~500-char line ≈ one
+    // chunk, ×2500 → >2000 chunks), then confirm it's bounded.
+    const filler = '資料必須留在境內'.repeat(60); // ~480 chars
+    const huge = Array.from({ length: 2500 }, (_, i) => `第 ${i} 條規則：${filler}。`).join('\n\n');
+    const { status, json: big } = await api('POST', `/api/employees/${empId}/knowledge`, { title: '超大文件', content: huge });
+    assert.ok(status === 200 || status === 201, `created (got ${status})`);
+    assert.ok(big.chunkCount <= 2000, `chunk count is capped (got ${big.chunkCount})`);
+    assert.equal(big.metadata.truncatedChunks, true, 'truncation is recorded, not hidden');
+    assert.ok(big.metadata.totalChunks > big.metadata.indexedChunks, 'metadata reports full vs indexed');
+
+    // Retrieval still works on the indexed portion.
+    const found = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('境內')}&employeeIds=${empId}`);
+    assert.ok(found.json.results.some((r) => r.documentId === big.id), 'capped doc is still retrievable');
+
+    // Delete removes the doc AND its FTS rows (single-statement path).
+    await api('DELETE', `/api/knowledge/${big.id}`);
+    const after = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('境內')}&employeeIds=${empId}`);
+    assert.ok(!after.json.results.some((r) => r.documentId === big.id), 'FTS rows gone after delete');
+  });
+
   await step('delete knowledge document', async () => {
     const { status } = await api('DELETE', `/api/knowledge/${docId}`);
     assert.equal(status, 200);
