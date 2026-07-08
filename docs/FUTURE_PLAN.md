@@ -30,19 +30,15 @@ CONTRIBUTING/SECURITY、跨平台 `setup:markitdown`、user-first README + CHANG
 
 > 依代理實測推估:**約 500–1,000 場會議 / 破萬知識 chunk 後日常操作開始卡**。
 
-### C1【最高】會議/目標列表:SQL 下推,別再全表載入 + JS 過濾
-- **現況**:`GET /api/meetings` 執行 `SELECT *` 全表、`JSON.parse` 每筆完整
-  transcript/grounding 後才在 JS filter/sort/slice。2,000 場 ≈ 150–500ms/請求;
-  dashboard / health 還各自 `listAllMeetings()`(pageSize=10⁶)只為算 count。
-- **修法**:列表查詢不取 transcript/grounding 欄;`WHERE`/`ORDER BY`/`LIMIT` 下推
-  SQL;dashboard 改 `COUNT(*)` + `SUM(json_extract(runtime,'$.liveTurns'))`。
+### C1 ✅【最高】會議/目標列表:SQL 下推（已完成)
+列表查詢已下推 WHERE/ORDER/LIMIT,列表只取輕量欄位(count 用 json_array_length),
+不再解析 transcript/grounding blob;dashboard/health 改 SQL COUNT/SUM;client 點擊
+才 fetch 完整記錄。commit `aaf859c`。
 
-### C2【高】SSE heartbeat + 斷線中止（部署到任何反向代理後必現)
-- **現況**:結論階段可靜默 30–120 秒;nginx(60s)/ Heroku(55s)/ Cloudflare(100s)
-  會切線 → 前端「串流意外中斷」,**但伺服器繼續燒完整場 LLM 配額**。缺
-  `X-Accel-Buffering: no`(nginx 預設緩衝 SSE)。
-- **修法**:每 15–25s 寫 `:hb\n\n`;`res.on('close')` 接 `AbortSignal` 傳入
-  orchestrator;加 `x-accel-buffering: no`。
+### C2 ✅【高】SSE heartbeat + 斷線中止（已完成)
+新增共用 `util/sse.js`:20s heartbeat、`x-accel-buffering: no`、writableEnded 護欄;
+`res.on('close')` 的 AbortSignal 穿透到 orchestrator,回合/發言邊界檢查後提前收束並
+持久化已完成回合。commit `3e0f253`。
 
 ### C3【高】會議 R×P 序列 LLM 呼叫的牆鐘時間
 - 3 輪×4 人 ≈ 24+ 次模型呼叫、Gemini 1.5–4 分鐘、CLI provider 5–15 分鐘;
