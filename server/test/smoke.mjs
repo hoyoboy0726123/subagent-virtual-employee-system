@@ -630,6 +630,36 @@ try {
     await api('DELETE', `/api/dialogues/${d.id}`);
   });
 
+  await step('1-on-1 export: record downloads as .docx and Markdown (open or closed)', async () => {
+    const { json: d } = await api('POST', `/api/employees/${empId}/dialogue`);
+    await api('POST', `/api/dialogues/${d.id}/messages`, { text: '把回歸測試計畫整理給我。' });
+
+    // Markdown export while the dialogue is still OPEN.
+    const md = await download(`/api/dialogues/${d.id}/export?format=md`);
+    assert.equal(md.status, 200);
+    assert.ok(md.contentType.includes('markdown'));
+    const body = md.buf.toString('utf-8');
+    assert.ok(body.includes('# 面談紀錄'), 'titled as a 1on1 record');
+    assert.ok(body.includes('## 逐字紀錄') && body.includes('**主管**'), 'verbatim transcript included');
+    assert.ok(body.includes('回歸測試計畫'), 'the actual conversation is in the export');
+
+    // Close WITH save → the distilled record leads the export.
+    const closed = await api('POST', `/api/dialogues/${d.id}/close`, { save: true });
+    const md2 = (await download(`/api/dialogues/${d.id}/export?format=md`)).buf.toString('utf-8');
+    assert.ok(md2.includes('## 整理後紀錄'), 'saved distillation leads the document');
+
+    // Word export: a real OOXML zip with a clean attachment filename.
+    const docx = await download(`/api/dialogues/${d.id}/export?format=docx`);
+    assert.equal(docx.status, 200);
+    assert.ok(docx.contentType.includes('wordprocessingml'), 'docx mime');
+    assert.ok(/attachment/.test(docx.disposition) && /\.docx/.test(docx.disposition), 'attachment .docx filename');
+    assert.ok(decodeURIComponent(docx.disposition).includes('面談紀錄'), 'kind-prefixed filename');
+    assert.equal(docx.buf.slice(0, 2).toString(), 'PK', 'valid OOXML (zip) magic');
+
+    await api('DELETE', `/api/knowledge/${closed.json.savedDocId}`);
+    await api('DELETE', `/api/dialogues/${d.id}`);
+  });
+
   await step('cross-meeting memory: a finished meeting writes each participant a memory document', async () => {
     delete process.env.MEETING_MEMORY_DISABLE; // feature on for this step only
     try {

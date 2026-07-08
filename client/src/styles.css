@@ -221,6 +221,11 @@ textarea { resize: vertical; }
 .markdown tbody tr:nth-child(even) { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
 .report, .minutes { font-size: 14px; }
 
+/* Keep-mounted tab panels: inactive pages are hidden, NOT unmounted, so an
+   in-flight meeting/goal SSE stream survives switching tabs. */
+.tab-hidden { display: none; }
+.tab-dot { margin-left: 6px; font-size: 9px; vertical-align: 2px; }
+
 .footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
 .footer code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
 

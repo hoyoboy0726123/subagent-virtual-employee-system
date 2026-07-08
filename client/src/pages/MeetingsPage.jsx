@@ -4,7 +4,7 @@ import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../compon
 
 const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
 
-export default function MeetingsPage({ refreshKey, onChange }) {
+export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   const [employees, setEmployees] = useState([]);
   const [meetingData, setMeetingData] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
   const [open, setOpen] = useState(null); // meeting being viewed
@@ -17,6 +17,9 @@ export default function MeetingsPage({ refreshKey, onChange }) {
   // Phase 16 — the meeting room: a discussion the MANAGER is chairing right now.
   // { meetingId, topic, transcript: [], runId, streaming, phase }
   const [room, setRoom] = useState(null);
+  // Tell the shell a discussion is live — the tab shows a dot, and the page is
+  // kept mounted (not unmounted) on tab switches so the stream survives.
+  useEffect(() => { onActivity?.(Boolean(room)); }, [room, onActivity]);
 
   const reload = async (next = filters) => {
     const [employeeList, meetings] = await Promise.all([

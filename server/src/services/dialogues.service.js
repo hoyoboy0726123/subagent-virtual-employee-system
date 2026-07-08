@@ -7,7 +7,8 @@
 // employee's knowledge base.
 import * as repo from '../storage/dialogues.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
-import { insertDocument, deleteDocument } from '../storage/knowledge.repo.js';
+import { insertDocument, deleteDocument, getDocument } from '../storage/knowledge.repo.js';
+import { buildDialogueExport } from '../export/reportDoc.js';
 import { search as retrievalSearch } from '../storage/retrieval.js';
 import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { oneOnOneTurn } from '../orchestration/EmployeeAgentExecutor.js';
@@ -160,4 +161,16 @@ async function closeLocked(dialogueId, { save } = {}) {
 export function remove(dialogueId) {
   if (!repo.deleteDialogue(dialogueId)) throw notFound('找不到該面談');
   return { ok: true };
+}
+
+/**
+ * Build a downloadable 1on1 record (docx / md) — works on open AND closed
+ * dialogues. When the manager saved a distilled record, it leads the document;
+ * the verbatim transcript always follows.
+ */
+export async function exportRecord(dialogueId, format = 'docx') {
+  const d = get(dialogueId);
+  const employee = getEmployee(d.employeeId); // may be null if since deleted
+  const savedDoc = d.savedDocId ? getDocument(d.savedDocId) : null;
+  return buildDialogueExport({ dialogue: d, employee, savedDoc }, format);
 }

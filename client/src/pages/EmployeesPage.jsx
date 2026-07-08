@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, ExportButtons } from '../components/ui.jsx';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
 // everything is canonicalized to Markdown by MarkItDown on ingestion.
@@ -554,7 +554,10 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
                         {d.savedDocId && <span className="tag" title="結束時已整理存入知識庫；續談後再儲存會更新同一份紀錄">💾 已入庫</span>}
                         <span className="muted sm"> {new Date(d.createdAt).toLocaleDateString('zh-Hant')} · {d.transcript.length} 則訊息</span>
                       </div>
-                      <button className="btn-ghost sm" onClick={() => continueOld(d.id)}>▶ 繼續</button>
+                      <span className="actions">
+                        <ExportButtons path={`/dialogues/${d.id}`} compact />
+                        <button className="btn-ghost sm" onClick={() => continueOld(d.id)}>▶ 繼續</button>
+                      </span>
                     </li>
                   );
                 })}
@@ -614,6 +617,7 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
             <button className="btn sm" onClick={send} disabled={busy || !draft.trim() || !dialogue}>送出</button>
           </div>
           <div className="row end">
+            <ExportButtons path={`/dialogues/${dialogue.id}`} compact />
             <button className="btn-ghost sm" onClick={() => setClosing(true)} disabled={busy || !dialogue}>
               ⏹ 結束面談…
             </button>

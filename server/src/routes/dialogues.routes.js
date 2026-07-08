@@ -8,7 +8,7 @@
 //   POST   /api/dialogues/:id/reopen          → continue a CLOSED dialogue where it left off
 //   DELETE /api/dialogues/:id
 import { Router } from 'express';
-import { asyncHandler } from '../util/http.js';
+import { asyncHandler, sendDownload } from '../util/http.js';
 import * as dialogues from '../services/dialogues.service.js';
 
 export const dialoguesRouter = Router();
@@ -37,6 +37,13 @@ dialoguesRouter.post('/dialogues/:id/close', asyncHandler(async (req, res) => {
 // (refused while the employee has another open dialogue).
 dialoguesRouter.post('/dialogues/:id/reopen', asyncHandler(async (req, res) => {
   res.json(dialogues.reopen(req.params.id));
+}));
+
+// Download the 1on1 record as Word (default) or Markdown — same export surface
+// as meetings/goals; works on open and closed dialogues.
+dialoguesRouter.get('/dialogues/:id/export', asyncHandler(async (req, res) => {
+  const artifact = await dialogues.exportRecord(req.params.id, String(req.query.format || 'docx'));
+  sendDownload(res, artifact);
 }));
 
 dialoguesRouter.delete('/dialogues/:id', asyncHandler(async (req, res) => {

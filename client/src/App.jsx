@@ -23,6 +23,11 @@ export default function App() {
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
+  // Which tabs have work in flight (an open meeting room / a running goal) —
+  // shown as a dot on the tab so the manager knows it's safe to switch away.
+  const [activity, setActivity] = useState({});
+  const reportActivity = (key) => (active) =>
+    setActivity((a) => (Boolean(a[key]) === Boolean(active) ? a : { ...a, [key]: Boolean(active) }));
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -138,14 +143,26 @@ export default function App() {
             onClick={() => setTab(t.key)}
           >
             {t.label}
+            {activity[t.key] && <span className="tab-dot" title="有進行中的工作——切換分頁不會中斷它">🟢</span>}
           </button>
         ))}
       </nav>
 
+      {/* All three pages stay MOUNTED; inactive ones are only hidden. An
+          in-flight meeting round or goal run (SSE) survives tab switches — the
+          manager can hop to a 1on1 or the goals page and come back to a
+          discussion that kept going. Unmounting would drop the stream and
+          trigger the server's abort-on-disconnect. */}
       <main className="content">
-        {tab === 'employees' && <EmployeesPage refreshKey={refreshKey} onChange={refresh} />}
-        {tab === 'meetings' && <MeetingsPage refreshKey={refreshKey} onChange={refresh} />}
-        {tab === 'goals' && <GoalsPage refreshKey={refreshKey} onChange={refresh} />}
+        <div className={tab === 'employees' ? '' : 'tab-hidden'}>
+          <EmployeesPage refreshKey={refreshKey} onChange={refresh} />
+        </div>
+        <div className={tab === 'meetings' ? '' : 'tab-hidden'}>
+          <MeetingsPage refreshKey={refreshKey} onChange={refresh} onActivity={reportActivity('meetings')} />
+        </div>
+        <div className={tab === 'goals' ? '' : 'tab-hidden'}>
+          <GoalsPage refreshKey={refreshKey} onChange={refresh} onActivity={reportActivity('goals')} />
+        </div>
       </main>
 
       <footer className="footer">

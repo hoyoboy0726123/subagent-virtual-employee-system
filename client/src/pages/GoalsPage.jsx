@@ -6,7 +6,7 @@ const STATUSES = ['in-progress', 'blocked', 'done'];
 const STATUS_LABELS = { 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
 const DEFAULT_FILTERS = { q: '', assigneeId: '', runtime: '', live: '', status: '', sort: 'newest', page: 1, pageSize: 5 };
 
-export default function GoalsPage({ refreshKey, onChange }) {
+export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   const [employees, setEmployees] = useState([]);
   const [goalData, setGoalData] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
   const [open, setOpen] = useState(null);
@@ -16,6 +16,9 @@ export default function GoalsPage({ refreshKey, onChange }) {
   const [err, setErr] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [progress, setProgress] = useState(null); // Phase 15 live progress: { doneTasks, total, phase }
+  // Tell the shell a goal run is streaming — dot on the tab; page stays mounted
+  // across tab switches so the run isn't dropped.
+  useEffect(() => { onActivity?.(busy); }, [busy, onActivity]);
 
   const reload = async (next = filters) => {
     const [employeeList, goals] = await Promise.all([
