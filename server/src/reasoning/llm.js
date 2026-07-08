@@ -245,6 +245,15 @@ export async function generateAgentic({
     // (e.g. the external-source attribution rule) rides on the system prompt.
     const sysNative = toolbox.policy ? `${system}\n\n${toolbox.policy}` : system;
     const contents = [{ role: 'user', parts: [{ text: user }] }];
+    // Text the model emitted ALONGSIDE earlier tool calls. A model asked for a
+    // long document often writes half of it, calls a tool mid-stream, then
+    // CONTINUES after the result — dropping those segments truncated the front
+    // of real deliverables (a roadmap arriving as「Phase 3…」with 0–2 missing).
+    const emitted = [];
+    // Skip segments the final answer already contains (a model that restarts
+    // from scratch after the tool call must not get its preamble duplicated).
+    const assemble = (tail) =>
+      [...emitted.filter((s) => !tail || !tail.includes(s)), tail].filter(Boolean).join('\n\n');
     // Force convergence instead of dropping the turn: one final call with tools
     // disabled so the model MUST speak from what it already looked up.
     const converge = async () => {
@@ -253,7 +262,8 @@ export async function generateAgentic({
         toolConfig: { functionCallingConfig: { mode: 'NONE' } },
         maxTokens, temperature, model,
       });
-      return final?.text ? { text: final.text.trim(), toolCalls: toolbox.trace.length } : null;
+      const text = assemble(final?.text?.trim());
+      return text ? { text, toolCalls: toolbox.trace.length } : null;
     };
     for (let step = 0; step <= maxSteps; step++) {
       const res = await _generate({
@@ -262,14 +272,22 @@ export async function generateAgentic({
       if (!res) return null;
       const calls = res.functionCalls || [];
       if (!calls.length) {
-        return res.text ? { text: res.text.trim(), toolCalls: toolbox.trace.length } : null;
+        const text = assemble(res.text?.trim());
+        return text ? { text, toolCalls: toolbox.trace.length } : null;
       }
       // Budget is by ACTUAL tool calls executed (toolbox.trace), not by response
       // rounds — Gemini can emit N parallel functionCalls in a single response,
       // which used to cost only 1 "step" and could burn maxSteps × N real calls.
       if (step === maxSteps || toolbox.trace.length >= maxSteps) return converge();
 
-      contents.push({ role: 'model', parts: calls.map((c) => ({ functionCall: c })) });
+      // Keep the model's OWN words in its turn (text + functionCalls) — both
+      // for a faithful API-side history and for the final assembly above.
+      const stepText = res.text?.trim();
+      if (stepText) emitted.push(stepText);
+      contents.push({
+        role: 'model',
+        parts: [...(stepText ? [{ text: stepText }] : []), ...calls.map((c) => ({ functionCall: c }))],
+      });
       const budget = maxSteps - toolbox.trace.length; // remaining executes this round
       const parts = [];
       let i = 0;

@@ -186,6 +186,44 @@ try {
     assert.ok(res.text.startsWith('我直接'));
   });
 
+  await step('generateAgentic (native): text written ALONGSIDE a tool call is not lost', async () => {
+    // Real observed bug: asked for a roadmap, the model wrote Phase 0–2, called
+    // web_search mid-stream, then continued with Phase 3+ — and the reply
+    // reached the manager starting at「Phase 3」because the pre-call text was
+    // dropped from the model turn. The mid-stream segments must survive.
+    const tb = buildToolbox({ employee, searchKnowledge: fakeSearch });
+    let modelTurn = null;
+    const fake = async ({ contents }) => {
+      if (contents.length === 1) {
+        return {
+          text: '## Phase 0–2:定位與規格盤點\n先確立錯位競爭策略。',
+          functionCalls: [{ name: 'search_knowledge', args: { query: 'SLA' } }],
+        };
+      }
+      modelTurn = contents[1]; // the pushed-back model turn
+      return { text: '## Phase 3–4:開發與上市\n依查證結果排程六週開發。', functionCalls: [] };
+    };
+    const res = await generateAgentic({
+      system: 'persona', user: '直接產出 roadmap', toolbox: tb, _generate: fake, _legacyProtocol: false,
+    });
+    assert.ok(res.text.includes('Phase 0–2'), 'the pre-call half of the document survives');
+    assert.ok(res.text.includes('Phase 3–4'), 'the post-call half follows');
+    assert.ok(res.text.indexOf('Phase 0–2') < res.text.indexOf('Phase 3–4'), 'in order');
+    assert.ok(modelTurn.parts.some((p) => p.text?.includes('Phase 0–2')),
+      'the API-side model turn carries its own text, not just the functionCall');
+
+    // If the final answer RESTARTS and already contains an earlier segment,
+    // that segment must not be duplicated by assembly.
+    const tb2 = buildToolbox({ employee, searchKnowledge: fakeSearch });
+    const fake2 = async ({ contents }) => (contents.length === 1
+      ? { text: '開頭段落。', functionCalls: [{ name: 'search_knowledge', args: { query: 'SLA' } }] }
+      : { text: '開頭段落。\n完整重寫的全文。', functionCalls: [] });
+    const res2 = await generateAgentic({
+      system: 'p', user: 'u', toolbox: tb2, _generate: fake2, _legacyProtocol: false,
+    });
+    assert.equal(res2.text.match(/開頭段落。/g).length, 1, 'contained segment is not duplicated');
+  });
+
   await step('api-key test connections: injected transports, sanitized errors, no network', async () => {
     const { testTavilyKey, testGeminiKey } = await import('../src/reasoning/apiKeys.js');
 

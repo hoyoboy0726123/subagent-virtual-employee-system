@@ -273,7 +273,11 @@ export async function oneOnOneTurn({ employee, grounding, history, message }) {
         system,
         user,
         toolbox,
-        maxTokens: 1200,
+        // 1on1s legitimately produce DOCUMENTS (roadmaps, plans, reports) when
+        // the manager asks — 1200 tokens hard-clipped them mid-section. Meeting
+        // turns stay short by design; this cap is per-request headroom, not a
+        // target, so longer only costs when the model actually writes more.
+        maxTokens: 4096,
         temperature: Number.isFinite(agentCfg.temperature) ? agentCfg.temperature : 0.65,
         ...(agentCfg.model ? { model: agentCfg.model } : {}),
         ...(agentCfg.maxToolCalls ? { maxSteps: agentCfg.maxToolCalls } : {}),
