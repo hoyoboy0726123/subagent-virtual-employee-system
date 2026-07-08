@@ -78,10 +78,14 @@ export function createCodexCliProvider({ execFileImpl = execFile, _available } =
     // Fold the persona into the prompt (no system flag on `codex exec`).
     const prompt = system ? `${system}\n\n${body}` : body;
 
+    // Only pin a model when one was explicitly chosen: ChatGPT-subscription
+    // auth 400s on ids it doesn't offer (observed with 'gpt-5.5-codex'), and
+    // the account default is always valid — so no -m means "CLI's default".
+    const effModel = model || cfg().model;
     const args = [
       'exec',
       '--json',
-      '-m', model || cfg().model,
+      ...(effModel ? ['-m', effModel] : []),
       '--sandbox', 'read-only',       // text generation only — no file/command agency
       '--skip-git-repo-check',
       '--cd', scratch(),
@@ -111,8 +115,8 @@ export function createCodexCliProvider({ execFileImpl = execFile, _available } =
 
   return {
     name: 'codex-cli',
-    label: () => `Codex 訂閱（codex CLI · ${cfg().model}）`,
-    modelId: () => cfg().model,
+    label: () => `Codex 訂閱（codex CLI · ${cfg().model || '帳號預設模型'}）`,
+    modelId: () => cfg().model || '帳號預設',
     availableSync,
     version: () => probedVersion,
     generate,

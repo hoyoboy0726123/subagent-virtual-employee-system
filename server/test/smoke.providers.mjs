@@ -97,10 +97,18 @@ try {
     assert.equal(res.text, 'codex 的發言');
     assert.equal(seen.args[0], 'exec');
     assert.ok(seen.args.includes('--json'));
-    assert.equal(seen.args[seen.args.indexOf('-m') + 1], 'gpt-5.5-codex');
+    // No pinned model by default: ChatGPT-subscription auth 400s on ids it
+    // doesn't offer, so we let the CLI use the account's default model.
+    assert.ok(!seen.args.includes('-m'), 'no -m unless a model is explicitly configured');
     assert.equal(seen.args[seen.args.indexOf('--sandbox') + 1], 'read-only', 'no file/command agency');
     assert.equal(seen.args[seen.args.length - 1], '-', 'prompt rides stdin');
     assert.ok(seen.stdin.startsWith('你是工程師\n\n請發言'), 'system prompt folded into the body');
+
+    // An explicit per-call model override IS pinned.
+    const { impl: impl2, seen: seen2 } = fakeExec('{"type":"item.completed","item":{"type":"agent_message","text":"ok"}}');
+    const p2 = createCodexCliProvider({ execFileImpl: impl2, _available: true });
+    await p2.generate({ user: 'x', model: 'my-model' });
+    assert.equal(seen2.args[seen2.args.indexOf('-m') + 1], 'my-model', 'explicit model rides -m');
   });
 
   await step('llm.js integration: provider selection, gating, and tool-protocol routing', async () => {

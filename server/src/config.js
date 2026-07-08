@@ -155,7 +155,11 @@ export const config = {
     // --- codex-cli (subscription) ---
     codexCli: {
       cli: process.env.CODEX_CLI || 'codex',
-      model: process.env.CODEX_MODEL || 'gpt-5.5-codex',
+      // '' = let the CLI use the ACCOUNT's default model. Pinning an id here is
+      // fragile: ChatGPT-subscription auth rejects ids it doesn't offer (e.g.
+      // 'gpt-5.5-codex' → 400 invalid_request_error, observed live), and
+      // OpenAI renames the lineup often. Set CODEX_MODEL only to override.
+      model: process.env.CODEX_MODEL || '',
       timeoutSec: Number(process.env.CODEX_CLI_TIMEOUT_SEC) || 300,
       maxConcurrent: Number(process.env.CODEX_CLI_MAX_CONCURRENT) || 2,
     },
