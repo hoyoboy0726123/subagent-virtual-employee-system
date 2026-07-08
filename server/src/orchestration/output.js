@@ -25,8 +25,39 @@ const cn2t = OpenCC.Converter({ from: 'cn', to: 't' });
 const HAS_CJK = /[㐀-鿿]/;
 const KEEP = new Set(['台', '后', '里', '范']); // Taiwan-valid; OpenCC over-converts these per-char
 
+// Some models (observed with gemma-4) emit LaTeX inline math — $\rightarrow$,
+// $\ge 64GB$, $\le 13.9\text{mm}$ — which our plain Markdown renderer shows as
+// raw garbage. Convert the common commands to Unicode, unwrap \text{}, and drop
+// the $…$ delimiters. Deliberately PRECISE: only $…$ spans that actually contain
+// a backslash command are touched, so a price like "$799" is never damaged.
+const LATEX_CMD = {
+  rightarrow: '→', Rightarrow: '⇒', longrightarrow: '→', to: '→',
+  leftarrow: '←', Leftarrow: '⇐', leftrightarrow: '↔', mapsto: '↦',
+  ge: '≥', geq: '≥', le: '≤', leq: '≤', neq: '≠', ne: '≠', ll: '≪', gg: '≫',
+  times: '×', div: '÷', cdot: '·', pm: '±', mp: '∓', ast: '＊',
+  approx: '≈', equiv: '≡', propto: '∝', infty: '∞', sim: '∼', simeq: '≃',
+  ldots: '…', dots: '…', cdots: '⋯', deg: '°', bullet: '•', checkmark: '✓',
+  alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', theta: 'θ', lambda: 'λ',
+  mu: 'µ', pi: 'π', sigma: 'σ', Omega: 'Ω', Delta: 'Δ', Sigma: 'Σ',
+};
+const convertLatex = (inner) => String(inner)
+  .replace(/\\(?:text|textbf|textit|textrm|mathrm|mathbf|mathit|mathsf|operatorname)\s*\{([^{}]*)\}/g, '$1')
+  .replace(/\\([a-zA-Z]+)/g, (m, cmd) => (Object.prototype.hasOwnProperty.call(LATEX_CMD, cmd) ? LATEX_CMD[cmd] : m))
+  .replace(/\\([%&_#{}$])/g, '$1');
+
+export function stripLatexMath(text = '') {
+  let s = String(text);
+  if (!s.includes('\\')) return s; // the artifact always involves a backslash command
+  // $…$ / $$…$$ spans that contain a LaTeX command → unwrap + drop the $ markers.
+  s = s.replace(/\$\$?([^$\n]*?\\[a-zA-Z][^$\n]*?)\$\$?/g, (m, inner) => convertLatex(inner));
+  // \( … \) and \[ … \] math spans.
+  s = s.replace(/\\[([]([^\n]*?)\\[)\]]/g, (m, inner) => convertLatex(inner));
+  // Bare commands outside any delimiter (e.g. "\rightarrow 陳冠宇").
+  return convertLatex(s);
+}
+
 export function normalizeTraditional(text = '') {
-  const s = String(text || '');
+  const s = stripLatexMath(String(text || ''));
   if (!HAS_CJK.test(s)) return s;
   return s
     .replace(/[㐀-鿿]/g, (ch) => (KEEP.has(ch) ? ch : cn2t(ch)))

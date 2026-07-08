@@ -25,8 +25,33 @@ export function ExportButtons({ path, compact = false }) {
 // acceptable output). Deliberately does NOT parse raw HTML (sanitation stance —
 // keep it that way if you ever replace this). Memoized (C5): the parse is
 // O(text); unchanged transcript rows must not re-parse on every keystroke.
+// Display-time safety net: some models emit LaTeX inline math ($\rightarrow$,
+// $\ge 64GB$, $\le 13.9\text{mm}$) which we can't render as math. New content is
+// already cleaned server-side (output.js stripLatexMath); this fixes text stored
+// before that fix, mirroring the same precise rules (only $…$ with a backslash
+// command is touched, so a "$799" price is never damaged).
+const LATEX_CMD = {
+  rightarrow: '→', Rightarrow: '⇒', longrightarrow: '→', to: '→', mapsto: '↦',
+  leftarrow: '←', Leftarrow: '⇐', leftrightarrow: '↔',
+  ge: '≥', geq: '≥', le: '≤', leq: '≤', neq: '≠', ne: '≠',
+  times: '×', div: '÷', cdot: '·', pm: '±', approx: '≈', equiv: '≡',
+  infty: '∞', sim: '∼', ldots: '…', dots: '…', deg: '°', bullet: '•',
+  alpha: 'α', beta: 'β', mu: 'µ', pi: 'π', delta: 'δ',
+};
+const convertLatex = (inner) => String(inner)
+  .replace(/\\(?:text|textbf|textit|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, '$1')
+  .replace(/\\([a-zA-Z]+)/g, (m, cmd) => (LATEX_CMD[cmd] ?? m))
+  .replace(/\\([%&_#{}$])/g, '$1');
+function stripLatexMath(text) {
+  let s = String(text);
+  if (!s.includes('\\')) return s;
+  s = s.replace(/\$\$?([^$\n]*?\\[a-zA-Z][^$\n]*?)\$\$?/g, (m, inner) => convertLatex(inner));
+  s = s.replace(/\\[([]([^\n]*?)\\[)\]]/g, (m, inner) => convertLatex(inner));
+  return convertLatex(s);
+}
+
 function MarkdownImpl({ text = '' }) {
-  const lines = String(text).split('\n');
+  const lines = stripLatexMath(String(text)).split('\n');
   const blocks = [];
   let list = null;
 

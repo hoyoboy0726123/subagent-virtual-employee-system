@@ -10,7 +10,7 @@
 import './_hermetic.mjs';
 import assert from 'node:assert/strict';
 import { ConversationState } from '../src/orchestration/ConversationState.js';
-import { polishArtifact, polishUtterance } from '../src/orchestration/output.js';
+import { polishArtifact, polishUtterance, stripLatexMath } from '../src/orchestration/output.js';
 import * as engine from '../src/reasoning/engine.js';
 
 let passed = 0;
@@ -95,6 +95,26 @@ try {
     // chars must survive byte-identical (只能→隻能 / 平台→平臺 were real regressions).
     const ambiguous = '我頂多只能先在平台上做競品拆解，裡面的軟件更新要拆細，皇后住在台北。';
     assert.equal(polishUtterance(ambiguous), ambiguous, 'ambiguous/Taiwan chars (只/裡/平台/台北/后) survive untouched');
+  });
+
+  step('LaTeX inline math is de-mathed to Unicode (models emit $\\ge$ / $\\text{}$)', () => {
+    // The observed gemma-4 artifact: LaTeX in $…$ that our renderer can't parse.
+    assert.equal(stripLatexMath('$\\rightarrow$ 陳冠宇 (ID)'), '→ 陳冠宇 (ID)');
+    assert.equal(stripLatexMath('記憶體 $\\ge 64GB$ LPDDR6'), '記憶體 ≥ 64GB LPDDR6');
+    assert.equal(stripLatexMath('厚度 $\\le 13.9\\text{mm}$'), '厚度 ≤ 13.9mm');
+    assert.equal(stripLatexMath('功耗約 $25\\text{W}$ 且 $\\pm 2$'), '功耗約 25W 且 ± 2');
+    // Bare command outside $…$ is still converted.
+    assert.equal(stripLatexMath('王志豪 \\rightarrow 交付'), '王志豪 → 交付');
+    // CRITICAL: a plain dollar price (no backslash command) is NEVER touched.
+    assert.equal(stripLatexMath('DDR5 合約價漲到 $19.5 美元'), 'DDR5 合約價漲到 $19.5 美元');
+    assert.equal(stripLatexMath('售價 $799 起，競品 $999'), '售價 $799 起，競品 $999');
+    // Unknown command is left as-is (not silently deleted).
+    assert.equal(stripLatexMath('路徑 \\genuinepath 保留'), '路徑 \\genuinepath 保留');
+    // Text with no backslash at all passes through byte-identical.
+    assert.equal(stripLatexMath('一般繁體中文，沒有 LaTeX。'), '一般繁體中文，沒有 LaTeX。');
+    // Runs inside the full polish pipeline (report path) too.
+    assert.ok(polishArtifact('## 交接\n- 王志豪 $\\rightarrow$ EE：功耗 $\\le 25\\text{W}$').includes('→ EE：功耗 ≤ 25W'),
+      'polishArtifact strips LaTeX in reports');
   });
 
   step('output polish removes boilerplate opener and repairs dangling sentence tails', () => {
