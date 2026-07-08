@@ -96,9 +96,17 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 
 ### D3【記憶專屬】組織記憶的「整併」而非「無限堆積」
 > 這是本系統獨有、比通用 RAG 更重要的一塊。會議記憶/研究報告/1on1 紀錄會無限累積。
-- [ ] **週期性記憶蒸餾合併**(Mem0 式):背景工作把同員工的舊記憶合併、去重、更新
-      「事實的演變」,而非平行堆疊。
-- [ ] **分層記憶**(Letta / MemGPT 式):核心記憶常駐 system prompt;檔案記憶走檢索。
+- [x] **週期性記憶蒸餾合併(Mem0 式)（已完成)**:`orchestration/MemoryConsolidator.js`
+      把同員工累積的 `source:'memory'` 文件合併成一份精簡、去重、矛盾以「較新」為準
+      並註明演變的記憶。**非破壞性**:原始記憶不硬刪,而是「封存」——移出檢索索引
+      (chunks/FTS/向量),但保留 documents 列與全文 + `supersededBy` 指標可稽核/還原
+      (`archiveDocumentChunks`)。LLM 做語義合併(一次呼叫),離線則走確定性逐行去重。
+      會後 `MemoryDistiller` 自動觸發(fire-and-forget、單飛、超過門檻才跑);另有手動
+      端點 `POST /employees/:id/memory/consolidate`。門檻/開關:
+      `MEMORY_CONSOLIDATE_THRESHOLD`(預設 12)、`MEMORY_CONSOLIDATE_DISABLE`。
+      hermetic 測試見 `smoke.memory.mjs`(證明合併去重、封存後原文仍在但退出檢索、
+      門檻閘、live 路徑採用注入的模型輸出)。
+- [ ] **分層記憶**(Letta / MemGPT 式):核心記憶常駐 system prompt;檔案記憶走檢索。（下一步)
 - [ ] **善用長上下文**:短會議直接把完整逐字稿塞進上下文,不必事事檢索。
 
 > **明確不做**:GraphRAG 目前是過度設計。等真的需要「跨數百份文件的多跳推理」再評估
@@ -150,6 +158,7 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 3. **D1(檢索便宜升級:CJK bigram)** ✅ 已完成——召回率立即改善。
 4. **E 的次要 bug** ✅ 已完成——六項全修,附 hermetic 測試。
 5. **D2(混合檢索)** ✅ 已完成——BM25 + 本地向量 RRF,預設關閉、純 BM25 保底。
-6. **D3(記憶整併)** → 與 D2 併為**差異化護城河**:一個會累積、會整併組織知識的
-   多代理系統,在開源界比「又一個 RAG chatbot」稀缺得多。(下一步)
+6. **D3(記憶整併)** ✅ 已完成——與 D2 併為**差異化護城河**:一個會累積、會整併
+   組織知識的多代理系統,在開源界比「又一個 RAG chatbot」稀缺得多。(D3 分層記憶/
+   長上下文為選配後續)
 7. **里程碑 B(公網硬化)** → 視社群自架需求推進。

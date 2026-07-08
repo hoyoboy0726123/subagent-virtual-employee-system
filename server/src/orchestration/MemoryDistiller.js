@@ -17,6 +17,7 @@
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import { insertDocument, findMemoryDocument } from '../storage/knowledge.repo.js';
 import { scheduleEmbedding } from '../reasoning/indexer.js';
+import { scheduleConsolidation } from './MemoryConsolidator.js';
 import { normalizeTraditional } from './output.js';
 
 const disabled = () => /^(1|true|yes|on)$/i.test(process.env.MEETING_MEMORY_DISABLE || '');
@@ -101,5 +102,8 @@ export async function distillMeetingMemories({ meetingId, topic, participants, t
     results.push({ employeeId: p.id, documentId: doc.id, live });
   }
   if (results.length) scheduleEmbedding(); // fire-and-forget; no-op unless enabled
+  // Now that each participant has a fresh memory, tidy up any whose backlog has
+  // grown past the threshold (fire-and-forget, single-flight, no-op when off).
+  for (const r of results) scheduleConsolidation(r.employeeId);
   return results;
 }

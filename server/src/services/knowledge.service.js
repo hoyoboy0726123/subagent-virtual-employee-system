@@ -6,6 +6,7 @@ import * as docs from '../storage/knowledge.repo.js';
 import { getEmployee } from '../storage/employees.repo.js';
 import { search as retrievalSearch } from '../storage/retrieval.js';
 import { scheduleEmbedding } from '../reasoning/indexer.js';
+import { consolidateEmployeeMemories } from '../orchestration/MemoryConsolidator.js';
 import { badRequest, notFound, HttpError } from '../util/http.js';
 import { id } from '../util/ids.js';
 import { config } from '../config.js';
@@ -33,6 +34,16 @@ export function addDocument(employeeId, data = {}) {
 export function removeDocument(documentId) {
   if (!docs.deleteDocument(documentId)) throw notFound('找不到該文件');
   return { ok: true };
+}
+
+/**
+ * Manually consolidate an employee's accumulated memory documents (D3). `force`
+ * bypasses the auto-trigger threshold — a manual request should run even with a
+ * modest backlog. Returns the consolidation result (or a `skipped` reason).
+ */
+export async function consolidateMemory(employeeId, { force = true } = {}) {
+  if (!getEmployee(employeeId)) throw notFound('找不到該員工');
+  return consolidateEmployeeMemories(employeeId, { force });
 }
 
 /** Full document detail + its retrievable chunks (the knowledge viewer). */

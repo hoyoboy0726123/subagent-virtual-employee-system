@@ -54,6 +54,12 @@ employeesRouter.post('/employees/:id/knowledge', asyncHandler(async (req, res) =
   res.status(201).json(knowledge.addDocument(req.params.id, req.body || {}));
 }));
 
+// Consolidate this employee's accumulated memory documents into one merged,
+// de-duplicated memory (D3). Manual trigger forces past the auto threshold.
+employeesRouter.post('/employees/:id/memory/consolidate', asyncHandler(async (req, res) => {
+  res.json(await knowledge.consolidateMemory(req.params.id, { force: true }));
+}));
+
 // Upload a knowledge FILE (multipart, field name `file`): PDF / DOCX / TXT / MD /
 // HTML → MarkItDown → canonical Markdown → chunked + indexed like a pasted note.
 employeesRouter.post(

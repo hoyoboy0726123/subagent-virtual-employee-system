@@ -149,4 +149,16 @@ export const config = {
     },
   },
 
+  // Organizational memory (Phase 15 distillation + D3 consolidation). An employee
+  // accumulates a `source:'memory'` document after every meeting (plus anything it
+  // chooses to `remember`), so those pile up, overlap, and eventually contradict.
+  // Consolidation periodically MERGES them into one compact, de-duplicated,
+  // contradiction-reconciled memory — archiving (not deleting) the originals.
+  memory: {
+    // Consolidate once an employee has at least this many ACTIVE memory docs.
+    consolidateThreshold: Number(process.env.MEMORY_CONSOLIDATE_THRESHOLD) || 12,
+    // Kill switch for the whole consolidation feature (auto + manual).
+    consolidateDisabled: /^(1|true|yes|on)$/i.test(process.env.MEMORY_CONSOLIDATE_DISABLE || ''),
+  },
+
 };

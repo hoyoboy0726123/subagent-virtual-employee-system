@@ -35,8 +35,14 @@ function rowToDocument(row, chunkCount) {
 
 export function listDocuments(employeeId) {
   const db = getDb();
+  // Exclude consolidated-away memory docs (D3): once merged, the originals are
+  // ARCHIVED (row + content kept, chunks removed from the index) — showing them
+  // in the card would defeat the point of consolidation. They remain fetchable by
+  // id (getDocument) for audit/recovery.
   const rows = db
-    .prepare('SELECT * FROM documents WHERE employee_id = ? ORDER BY created_at ASC')
+    .prepare(`SELECT * FROM documents
+      WHERE employee_id = ? AND COALESCE(json_extract(metadata, '$.archived'), 0) = 0
+      ORDER BY created_at ASC`)
     .all(employeeId);
   // Scope the count to THIS employee (C4) — the old query GROUP BY'd every
   // employee's chunks. idx_chunks_employee makes this cheap.
@@ -63,6 +69,48 @@ export function findMemoryDocument(employeeId, meetingId) {
   return getDb().prepare(
     "SELECT id FROM documents WHERE employee_id = ? AND source = 'memory' AND json_extract(metadata, '$.meetingId') = ?",
   ).get(employeeId, meetingId) || null;
+}
+
+/** Active (non-archived) memory documents for an employee, oldest→newest — the
+ *  input set for memory consolidation (D3). */
+export function listMemoryDocuments(employeeId) {
+  return getDb().prepare(
+    `SELECT id, title, content, metadata, created_at AS createdAt
+       FROM documents
+      WHERE employee_id = ? AND source = 'memory'
+        AND COALESCE(json_extract(metadata, '$.archived'), 0) = 0
+      ORDER BY created_at ASC`,
+  ).all(employeeId).map((r) => ({ ...r, metadata: parseJson(r.metadata, {}) }));
+}
+
+/** Count of active memory documents — the cheap gate before firing consolidation. */
+export function countActiveMemoryDocuments(employeeId) {
+  return getDb().prepare(
+    `SELECT COUNT(*) AS n FROM documents
+      WHERE employee_id = ? AND source = 'memory'
+        AND COALESCE(json_extract(metadata, '$.archived'), 0) = 0`,
+  ).get(employeeId).n;
+}
+
+/**
+ * Archive a document WITHOUT deleting it (D3, non-destructive): remove its chunks
+ * from the retrieval index (FTS + embeddings cascade) so it stops surfacing, but
+ * keep the `documents` row and its full `content` for audit/recovery, merging
+ * `metadataPatch` (e.g. {archived:true, supersededBy}) into its metadata.
+ */
+export function archiveDocumentChunks(documentId, metadataPatch = {}) {
+  const db = getDb();
+  return withTx(db, () => {
+    const row = db.prepare('SELECT metadata FROM documents WHERE id = ?').get(documentId);
+    if (!row) return false;
+    // Drop the FTS mirror first (no FK), then the chunks — chunk_embeddings has an
+    // ON DELETE CASCADE off chunks, so vectors go with them.
+    db.prepare('DELETE FROM chunks_fts WHERE chunk_id IN (SELECT id FROM chunks WHERE document_id = ?)').run(documentId);
+    db.prepare('DELETE FROM chunks WHERE document_id = ?').run(documentId);
+    const metadata = { ...parseJson(row.metadata, {}), ...metadataPatch };
+    db.prepare('UPDATE documents SET metadata = ? WHERE id = ?').run(JSON.stringify(metadata), documentId);
+    return true;
+  });
 }
 
 /** The retrievable chunks of one document, in order — exactly what the FTS

@@ -246,7 +246,11 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   const [upload, setUpload] = useState({ busy: false, err: '', ok: '' });
   const [viewDoc, setViewDoc] = useState(null); // knowledge viewer (doc + chunks)
   const [oneOnOne, setOneOnOne] = useState(false); // 1-on-1 chat modal (Phase 19)
+  const [consolidating, setConsolidating] = useState({ busy: false, msg: '', err: '' }); // D3
   const fileRef = useRef(null);
+
+  // How many accumulated memory docs this employee has (drives the consolidate CTA).
+  const memoryCount = (employee.knowledge || []).filter((k) => k.source === 'memory').length;
 
   const openDoc = async (docId) => {
     try { setViewDoc(await api.get(`/knowledge/${docId}`)); } catch { /* ignore */ }
@@ -278,6 +282,27 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   };
 
   const delNote = async (kid) => { await api.del(`/knowledge/${kid}`); onChange(); };
+
+  // Merge this employee's accumulated memories into one de-duplicated memory
+  // (D3). Non-destructive on the server — originals are archived, not deleted.
+  const consolidate = async () => {
+    setConsolidating({ busy: true, msg: '', err: '' });
+    try {
+      const res = await api.post(`/employees/${employee.id}/memory/consolidate`);
+      if (res.skipped) {
+        const why = res.skipped === 'disabled' ? '整併功能已停用'
+          : res.skipped === 'nothing-to-merge' ? '目前沒有可整併的記憶'
+          : '記憶量尚未達整併門檻';
+        setConsolidating({ busy: false, msg: why, err: '' });
+      } else {
+        const via = res.method === 'live' ? 'AI 整併' : '離線去重';
+        setConsolidating({ busy: false, msg: `已把 ${res.mergedCount} 則記憶整併為 1 則（${via}）`, err: '' });
+        onChange();
+      }
+    } catch (e) {
+      setConsolidating({ busy: false, msg: '', err: e.message });
+    }
+  };
 
   const remove = async () => {
     if (!confirm(`確定要刪除 ${employee.name}？此操作會一併移除其知識庫。`)) return;
@@ -326,6 +351,21 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
             {upload.ok && <div className="banner-ok sm">{upload.ok}</div>}
           </div>
 
+          {memoryCount >= 2 && (
+            <div className="upload-box">
+              <div className="upload-row">
+                <button className="btn-ghost sm" onClick={consolidate} disabled={consolidating.busy}>
+                  {consolidating.busy ? '整併中…' : `🧠 整併記憶（${memoryCount} 則）`}
+                </button>
+                <span className="muted upload-hint">
+                  把累積的會議／自主記憶合併成一則精簡、去重、以較新為準的記憶；原始記憶會封存（移出檢索但可還原）。
+                </span>
+              </div>
+              {consolidating.err && <div className="banner-err sm">{consolidating.err}</div>}
+              {consolidating.msg && <div className="banner-ok sm">{consolidating.msg}</div>}
+            </div>
+          )}
+
           <div className="note-form">
             <input
               placeholder="筆記標題"
@@ -358,9 +398,15 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                     </span>
                   )}
                   {k.source === 'memory' && (
-                    <span className="tag" title={k.metadata?.topic ? `來自會議：${k.metadata.topic}` : '代理自主記憶'}>
-                      🧠 記憶
-                    </span>
+                    k.metadata?.consolidated ? (
+                      <span className="tag tag-blue" title={`由 ${k.metadata.mergedCount || '多'} 則記憶整併而成`}>
+                        🧠 整併記憶
+                      </span>
+                    ) : (
+                      <span className="tag" title={k.metadata?.topic ? `來自會議：${k.metadata.topic}` : '代理自主記憶'}>
+                        🧠 記憶
+                      </span>
+                    )
                   )}
                   {k.source === 'research' && (
                     <span className="tag tag-blue" title="經你核准的自主研究報告">🔍 研究</span>

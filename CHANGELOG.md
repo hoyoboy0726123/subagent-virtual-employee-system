@@ -6,6 +6,12 @@ this file summarizes shipped milestones.
 
 ## Shipped
 
+- **Milestone D3 — Memory consolidation.** Accumulated per-employee memories are
+  periodically merged into one de-duplicated, contradiction-reconciled memory
+  (LLM merge, deterministic offline fallback). Non-destructive: originals are
+  archived — removed from retrieval but kept as recoverable rows with a
+  `supersededBy` pointer. Auto-triggered after meetings past a threshold, plus a
+  manual `POST /employees/:id/memory/consolidate`.
 - **Milestone D2 — Hybrid semantic retrieval (optional).** BM25/FTS fused with a
   local vector model (transformers.js, multilingual, no API) via Reciprocal Rank
   Fusion, so paraphrases and near-synonyms surface alongside exact-term hits. Off
