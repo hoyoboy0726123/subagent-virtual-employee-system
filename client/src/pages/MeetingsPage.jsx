@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations } from '../components/ui.jsx';
 
 const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
 
@@ -287,13 +287,7 @@ const TurnRow = React.memo(function TurnRow({ t }) {
         </div>
         {t.managerQuestion && <div className="muted turn-question">主管代理追問：「{t.managerQuestion}」</div>}
         <div className="turn-text">{t.text}</div>
-        {t.citations?.length > 0 && (
-          <div className="citations">
-            {t.citations.map((c, ci) => (
-              <span key={ci} className="cite" title={c.snippet}>{c.web ? '🌐' : '📎'} {c.documentTitle}</span>
-            ))}
-          </div>
-        )}
+        <Citations items={t.citations} />
       </div>
     </div>
   );

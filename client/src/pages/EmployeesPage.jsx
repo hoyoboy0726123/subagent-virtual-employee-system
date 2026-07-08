@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, ExportButtons } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, ExportButtons, Citations } from '../components/ui.jsx';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
 // everything is canonicalized to Markdown by MarkItDown on ingestion.
@@ -588,13 +588,7 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
               <div className="chat-bubble">
                 {t.toolCalls > 0 && <div className="muted sm">🛠 查證了 {t.toolCalls} 次</div>}
                 <Markdown text={t.text} />
-                {(t.citations || []).length > 0 && (
-                  <div className="citations">
-                    {t.citations.map((c, ci) => (
-                      <span key={ci} className="cite" title={c.snippet}>{c.web ? '🌐' : '📎'} {c.documentTitle}</span>
-                    ))}
-                  </div>
-                )}
+                <Citations items={t.citations} />
               </div>
             </div>
           )

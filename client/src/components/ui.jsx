@@ -135,6 +135,35 @@ export function Empty({ children }) {
   return <div className="empty">{children}</div>;
 }
 
+// Citation chips shared by every agent output (meeting turns, 1on1, goal
+// deliverables). WEB sources (🌐, snippet holds the URL) render as real links
+// that open in a NEW tab — rel="noopener noreferrer" prevents tab-nabbing, and
+// only http(s) URLs become anchors (defense against javascript: etc.).
+// Knowledge sources (📎) stay as hover-titled spans (internal, not navigable).
+export function Citations({ items }) {
+  if (!items?.length) return null;
+  return (
+    <div className="citations">
+      {items.map((c, i) => (
+        c.web && /^https?:\/\//i.test(c.snippet || '') ? (
+          <a
+            key={i}
+            className="cite cite-link"
+            href={c.snippet}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={`在新分頁開啟：${c.snippet}`}
+          >
+            🌐 {c.documentTitle}
+          </a>
+        ) : (
+          <span key={i} className="cite" title={c.snippet}>📎 {c.documentTitle}</span>
+        )
+      ))}
+    </div>
+  );
+}
+
 // Multi-select checklist of employees.
 export function EmployeePicker({ employees, selected, toggle }) {
   return (

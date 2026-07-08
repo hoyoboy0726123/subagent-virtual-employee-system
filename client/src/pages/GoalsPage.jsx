@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
-import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
+import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations } from '../components/ui.jsx';
 
 // Goal-level status the MANAGER sets (dropdown). Task status is separate: a
 // task is 'pending'(待執行) until ▶ 執行交付 delivers it → 'done'.
@@ -286,13 +286,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
                         {t.deliveredAt && <span className="muted sm"> · {new Date(t.deliveredAt).toLocaleString('zh-Hant')}</span>}
                       </div>
                       <Markdown text={t.deliverable} />
-                      {(t.deliverableCitations || []).length > 0 && (
-                        <div className="citations">
-                          {t.deliverableCitations.map((c, ci) => (
-                            <span key={ci} className="cite" title={c.snippet}>{c.web ? '🌐' : '📎'} {c.documentTitle}</span>
-                          ))}
-                        </div>
-                      )}
+                      <Citations items={t.deliverableCitations} />
                       <div className="row end">
                         <button className="btn-ghost sm" onClick={() => executeTask(t)} disabled={executing !== null}>
                           {executing === t.order ? '⏳ 重新執行中…' : '🔁 重新執行交付'}

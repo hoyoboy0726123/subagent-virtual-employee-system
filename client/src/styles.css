@@ -286,6 +286,9 @@ textarea { resize: vertical; }
 .grounding { font-size: 14px; }
 .citations { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .cite { font-size: 11px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; cursor: default; }
+/* Web-source chips are real links (open in a new tab) — signal it. */
+a.cite-link { color: var(--brand); cursor: pointer; text-decoration: none; transition: background 0.12s, border-color 0.12s; }
+a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent); border-color: var(--brand); text-decoration: underline; }
 .note .count { margin-left: 8px; }
 
 @media (max-width: 900px) {
