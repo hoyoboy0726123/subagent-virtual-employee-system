@@ -9,15 +9,46 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
 
-// Known real-executable locations relative to the shim's node_modules.
+// Known real-executable locations relative to the shim's node_modules. These
+// are checked first (fast path); when a package reshuffles its layout (codex
+// did in 0.142.x, moving the exe into a platform sub-package), the bounded
+// recursive search below still finds it.
 const PKG_EXE = {
   claude: ['@anthropic-ai/claude-code/bin/claude.exe'],
   codex: [
+    // 0.142.x layout: platform sub-package
+    '@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe',
+    // older layouts
     '@openai/codex/bin/codex.exe',
     '@openai/codex/bin/codex-x86_64-pc-windows-msvc.exe',
     '@openai/codex/vendor/x86_64-pc-windows-msvc/codex/codex.exe',
   ],
 };
+
+// Package roots to sweep when the known paths miss (layout drift).
+const PKG_ROOT = {
+  claude: '@anthropic-ai/claude-code',
+  codex: '@openai/codex',
+};
+
+// Bounded recursive search for `${name}.exe` under a package dir. Package trees
+// are small (a few hundred entries); depth-capped and best-effort so a weird
+// layout can never hang startup. Helper exes (rg.exe, *-runner.exe…) don't
+// match because we require the EXACT basename.
+function findExeUnder(dir, exeName, depth = 0) {
+  if (depth > 6) return null;
+  let entries;
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return null; }
+  for (const e of entries) {
+    const p = path.join(dir, e.name);
+    if (e.isFile() && e.name.toLowerCase() === exeName) return p;
+    if (e.isDirectory()) {
+      const hit = findExeUnder(p, exeName, depth + 1);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
 
 function probe(cmd) {
   try {
@@ -55,11 +86,23 @@ export function resolveCli(cli) {
   if (!shim) return null;
 
   const base = path.basename(cli).replace(/\.(cmd|exe)$/i, '');
+  const nodeModules = path.join(path.dirname(shim), 'node_modules');
   for (const rel of PKG_EXE[base] || []) {
-    const exe = path.join(path.dirname(shim), 'node_modules', ...rel.split('/'));
+    const exe = path.join(nodeModules, ...rel.split('/'));
     if (fs.existsSync(exe)) {
       version = probe(exe);
       if (version) return { cmd: exe, version };
+    }
+  }
+
+  // Layout drift fallback: sweep the package tree for the exact `${base}.exe`
+  // (codex 0.142.x moved it into a platform sub-package unannounced).
+  const root = PKG_ROOT[base];
+  if (root) {
+    const hit = findExeUnder(path.join(nodeModules, ...root.split('/')), `${base}.exe`);
+    if (hit) {
+      version = probe(hit);
+      if (version) return { cmd: hit, version };
     }
   }
   return null;
