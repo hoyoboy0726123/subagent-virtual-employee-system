@@ -60,6 +60,12 @@ meetingsRouter.post('/meetings/:id/conclude/stream', asyncHandler(async (req, re
   await streamRun(req, res, (send) => meetings.concludeDiscussion(req.params.id, send), 'meeting');
 }));
 
+// Reopen a CONCLUDED meeting — the discussion continues on the same transcript
+// (the next 作結 replaces the minutes/report and re-distills memories).
+meetingsRouter.post('/meetings/:id/reopen', asyncHandler(async (req, res) => {
+  res.json(await meetings.reopenDiscussion(req.params.id)); // withLock → Promise
+}));
+
 meetingsRouter.delete('/meetings/:id', asyncHandler(async (req, res) => {
   res.json(meetings.remove(req.params.id));
 }));

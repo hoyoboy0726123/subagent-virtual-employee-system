@@ -16,9 +16,11 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   const [err, setErr] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [progress, setProgress] = useState(null); // Phase 15 live progress: { doneTasks, total, phase }
+  const [rerunNote, setRerunNote] = useState('');
+  const [rerunning, setRerunning] = useState(false);
   // Tell the shell a goal run is streaming — dot on the tab; page stays mounted
   // across tab switches so the run isn't dropped.
-  useEffect(() => { onActivity?.(busy); }, [busy, onActivity]);
+  useEffect(() => { onActivity?.(busy || rerunning); }, [busy, rerunning, onActivity]);
 
   const reload = async (next = filters) => {
     const [employeeList, goals] = await Promise.all([
@@ -77,6 +79,32 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
     // Patch only the status so the lightweight list row keeps its shape.
     setGoalData((data) => ({ ...data, items: data.items.map((g) => (g.id === goal.id ? { ...g, status: updated.status } : g)) }));
     if (open?.id === goal.id) setOpen(updated);
+  };
+
+  // Re-run the collaboration (the goal's「重啟」): the team builds on the
+  // previous plan plus the manager's revision instruction; the fresh result
+  // REPLACES tasks/output. Streams the same task-by-task progress as assign.
+  const rerunGoal = async () => {
+    if (!open || rerunning) return;
+    setErr('');
+    setRerunning(true);
+    setProgress({ doneTasks: [], total: (open.assignees || []).length, phase: null });
+    try {
+      const { goal } = await api.stream(
+        `/goals/${open.id}/rerun/stream`,
+        { instruction: rerunNote },
+        (evt) => {
+          if (evt.type === 'task') {
+            setProgress((p) => ({ ...p, doneTasks: [...(p?.doneTasks || []), evt.task] }));
+          } else if (evt.type === 'synthesizing') {
+            setProgress((p) => ({ ...p, phase: '主管代理正在整合各負責人的計畫…' }));
+          }
+        },
+      );
+      setRerunNote('');
+      onChange?.();
+      setOpen(goal);
+    } catch (e) { setErr(e.message); } finally { setRerunning(false); setProgress(null); }
   };
 
   const del = async (id) => { await api.del(`/goals/${id}`); onChange?.(); };
@@ -199,6 +227,31 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
             </div>
           )}
           {open.description && <p className="muted">{open.description}</p>}
+
+          <div className="upload-box">
+            <div className="interject-row">
+              <input
+                placeholder="修訂指示（選填）——例如「把時程壓到 6 週，聚焦行動端」"
+                value={rerunNote}
+                onChange={(e) => setRerunNote(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') rerunGoal(); }}
+                disabled={rerunning}
+              />
+              <button className="btn-ghost sm" onClick={rerunGoal} disabled={rerunning}>
+                {rerunning ? '重新執行中…' : '🔄 重新執行'}
+              </button>
+            </div>
+            {rerunning && progress && (
+              <p className="muted sm">
+                ⚡ {progress.phase || `各負責人重新認領中 ${progress.doneTasks.length}/${progress.total}…`}
+              </p>
+            )}
+            {!rerunning && (
+              <p className="muted sm">團隊會在前一版計畫的基礎上重新協作；結果會取代目前的任務拆解與協作產出。</p>
+            )}
+            {err && <div className="banner-err sm">{err}</div>}
+          </div>
+
           <h4>任務拆解</h4>
           <div className="tasks">
             {open.tasks.map((t, i) => (

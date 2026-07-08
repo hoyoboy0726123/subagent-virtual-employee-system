@@ -43,6 +43,40 @@ export function update(id, patch = {}) {
   return updated;
 }
 
+/**
+ * Re-run a goal (the「重啟」for goals, mirroring the 1on1/meeting reopen).
+ * The team collaborates AGAIN with the previous plan as context plus the
+ * manager's revision instruction (highest priority), and the result REPLACES
+ * tasks/output — one current plan per goal, never a stale duplicate. The
+ * stored description stays the ORIGINAL; the prior-plan context is composed
+ * per run only.
+ */
+export async function rerun(id, { instruction } = {}, onEvent) {
+  const goal = get(id);
+  const assignees = getEmployees(goal.assigneeIds || []);
+  if (!assignees.length) throw badRequest('負責人已不存在，無法重新執行');
+
+  const note = String(instruction || '').trim();
+  const description = [
+    goal.description || '',
+    goal.output
+      ? `【前一版協作計畫——請在此基礎上改進，而不是重新發明】\n${String(goal.output).slice(0, 4000)}`
+      : '',
+    note ? `【主管的修訂指示（最高優先）】\n${note}` : '',
+  ].filter(Boolean).join('\n\n');
+
+  const runtime = getActiveRuntime();
+  const result = await runtime.executeGoal({ title: goal.title, description, assignees, onEvent });
+
+  return update(id, {
+    tasks: result.tasks,
+    output: result.output,
+    grounding: result.grounding || [],
+    runtime: result.runtime || {},
+    status: 'in-progress', // a re-run reopens the goal regardless of prior status
+  });
+}
+
 export function remove(id) {
   if (!repo.deleteGoal(id)) throw notFound('找不到該目標');
   return { ok: true };

@@ -532,6 +532,25 @@ try {
     const lateInj = await api('POST', '/api/meetings/interject', { meetingId: m.id, text: 'x' });
     assert.equal(lateInj.status, 400);
 
+    // 6) REOPEN (mirrors the 1on1): concluded → discussing on the SAME
+    // transcript; discussion continues; the next 作結 replaces the report.
+    const priorTurns = concluded.transcript.length;
+    const reopened = await api('POST', `/api/meetings/${m.id}/reopen`);
+    assert.equal(reopened.status, 200);
+    assert.equal(reopened.json.status, 'discussing', 'concluded → discussing');
+    assert.equal(reopened.json.transcript.length, priorTurns, 'transcript intact');
+    const idem = await api('POST', `/api/meetings/${m.id}/reopen`);
+    assert.equal(idem.json.status, 'discussing', 'reopen is idempotent while discussing');
+
+    const moreEvents = await readSse(`/api/meetings/${m.id}/continue/stream`, { rounds: 1 });
+    const more = moreEvents[moreEvents.length - 1].meeting;
+    assert.ok(more.transcript.length > priorTurns, 'discussion continued on the same record');
+
+    const reconcEvents = await readSse(`/api/meetings/${m.id}/conclude/stream`, {});
+    const reconc = reconcEvents[reconcEvents.length - 1].meeting;
+    assert.equal(reconc.status, 'concluded');
+    assert.ok(reconc.report.length > 0, 're-conclusion regenerates the report from the full transcript');
+
     await api('DELETE', `/api/meetings/${m.id}`);
   });
 
@@ -684,11 +703,53 @@ try {
       const q = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('記憶功能 驗證')}&employeeIds=${alice.id}`);
       assert.ok(q.json.results.some((r) => r.documentId === mem.id), 'the next meeting WOULD ground on this memory');
 
+      // Reopen + re-conclude REPLACES the per-participant memory (one active
+      // memory per (employee, meeting) — never a stale duplicate).
+      await api('POST', `/api/meetings/${meeting.id}/reopen`);
+      const readSse = async (pathname, body) => {
+        const res = await fetch(base + pathname, {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(body || {}),
+        });
+        return (await res.text()).split('\n\n').filter(Boolean)
+          .map((f) => f.split('\n').find((l) => l.startsWith('data: ')))
+          .filter(Boolean).map((l) => JSON.parse(l.slice(6)));
+      };
+      await readSse(`/api/meetings/${meeting.id}/continue/stream`, { rounds: 1 });
+      await readSse(`/api/meetings/${meeting.id}/conclude/stream`, {});
+      const { json: aliceAfter } = await api('GET', `/api/employees/${alice.id}`);
+      const memsAfter = aliceAfter.knowledge.filter(
+        (k) => k.source === 'memory' && k.metadata?.meetingId === meeting.id,
+      );
+      assert.equal(memsAfter.length, 1, 'exactly one active memory per meeting after re-conclusion');
+      assert.notEqual(memsAfter[0].id, mem.id, 'the memory was REPLACED (fresh distillation), not kept stale');
+
       await api('DELETE', `/api/employees/${alice.id}`);
       await api('DELETE', `/api/employees/${bob.id}`);
     } finally {
       process.env.MEETING_MEMORY_DISABLE = '1';
     }
+  });
+
+  await step('goal rerun: the team re-collaborates on the prior plan; result replaces it', async () => {
+    const { json: goal } = await api('POST', '/api/goals', {
+      title: '重跑驗證目標', description: '第一版', assigneeIds: [empId],
+    });
+    assert.ok(goal.output.length > 0, 'first run produced a plan');
+    await api('PUT', `/api/goals/${goal.id}`, { status: 'done' }); // manager closed it
+
+    const rerun = await api('POST', `/api/goals/${goal.id}/rerun`, { instruction: '把範疇縮小到行動端' });
+    assert.equal(rerun.status, 200);
+    assert.equal(rerun.json.status, 'in-progress', 'a re-run reopens the goal');
+    assert.ok(Array.isArray(rerun.json.tasks) && rerun.json.tasks.length > 0, 'tasks regenerated');
+    assert.ok(rerun.json.output.length > 0, 'a fresh plan replaced the old one');
+    assert.equal(rerun.json.description, '第一版',
+      'the STORED description stays original — prior-plan context is per-run only');
+
+    const { json: fresh } = await api('GET', `/api/goals/${goal.id}`);
+    assert.equal(fresh.status, 'in-progress', 'replacement persisted');
+
+    await api('DELETE', `/api/goals/${goal.id}`);
   });
 
   await step('web-search toggle: reported off and un-enableable without a provider key', async () => {

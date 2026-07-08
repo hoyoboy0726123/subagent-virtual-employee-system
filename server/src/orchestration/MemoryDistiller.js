@@ -16,7 +16,7 @@
 // MEETING_MEMORY_DISABLE=1 turns the whole feature off.
 import { generate, llmEnabled } from '../reasoning/llm.js';
 import { config } from '../config.js';
-import { insertDocument, findMemoryDocument } from '../storage/knowledge.repo.js';
+import { insertDocument, findMemoryDocument, deleteDocument } from '../storage/knowledge.repo.js';
 import { scheduleEmbedding } from '../reasoning/indexer.js';
 import { scheduleConsolidation } from './MemoryConsolidator.js';
 import { normalizeTraditional } from './output.js';
@@ -88,11 +88,17 @@ export async function distillMeetingMemories({ meetingId, topic, participants, t
 
   const results = [];
   for (const p of participants) {
-    // Idempotent: never distil a second memory for the same (employee, meeting)
-    // — a re-run (or a partial-failure retry) would otherwise duplicate it.
-    if (meetingId && findMemoryDocument(p.id, meetingId)) continue;
     const memory = byName?.get(p.name) || fallbackMemory(p, topic, transcript);
     if (!memory) continue;
+    // REPLACE, don't duplicate: a reopened-then-reconcluded meeting distills
+    // again over the extended transcript, so the previous active memory for
+    // this (employee, meeting) is superseded. Retries stay idempotent too —
+    // re-running just rewrites the same document. Archived copies (already
+    // consolidated) are left alone as the audit trail.
+    if (meetingId) {
+      const prev = findMemoryDocument(p.id, meetingId);
+      if (prev) deleteDocument(prev.id);
+    }
     const doc = insertDocument(p.id, {
       title: `會議記憶：${topic}`,
       content: normalizeTraditional(memory), // enforce TC before it enters the KB

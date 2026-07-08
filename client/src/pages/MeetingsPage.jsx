@@ -132,6 +132,19 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
     } catch (e) { setErr(e.message); }
   };
 
+  // Reopen a CONCLUDED meeting (mirrors the 1on1): status flips back to
+  // 'discussing' and the room opens on the same transcript — continue,
+  // interject, and conclude again (which REPLACES the minutes/report).
+  const reopenConcluded = async (m) => {
+    setErr('');
+    try {
+      const fresh = await api.post(`/meetings/${m.id}/reopen`);
+      setOpen(null);
+      setRoom({ meetingId: fresh.id, topic: fresh.topic, transcript: fresh.transcript, runId: null, streaming: false, phase: null });
+      onChange?.(); // list badge: concluded → 討論中
+    } catch (e) { setErr(e.message); }
+  };
+
   const del = async (id) => { await api.del(`/meetings/${id}`); onChange?.(); };
   const patchFilters = (patch) => setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
   const meetings = meetingData.items || [];
@@ -240,7 +253,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
         </>
       )}
 
-      {open && <MeetingView meeting={open} onClose={() => setOpen(null)} />}
+      {open && <MeetingView meeting={open} onClose={() => setOpen(null)} onReopen={() => reopenConcluded(open)} />}
     </div>
   );
 }
@@ -406,7 +419,7 @@ function Grounding({ grounding }) {
 
 const SUBTAB_LABELS = { transcript: '逐字紀錄', minutes: '會議記錄', report: '報告', knowledge: '知識' };
 
-function MeetingView({ meeting, onClose }) {
+function MeetingView({ meeting, onClose, onReopen }) {
   const [view, setView] = useState('transcript');
   const rounds = [...new Set(meeting.transcript.map((t) => t.round))];
 
@@ -415,6 +428,15 @@ function MeetingView({ meeting, onClose }) {
       <div className="view-meta">
         <RuntimeBadge runtime={meeting.runtime} />
         <ExportButtons path={`/meetings/${meeting.id}`} />
+        {onReopen && meeting.status !== 'discussing' && (
+          <button
+            className="btn-ghost sm"
+            onClick={onReopen}
+            title="重新打開討論——團隊在原逐字稿上繼續；下次作結會以完整討論重寫決議與報告"
+          >
+            🔄 重啟討論
+          </button>
+        )}
       </div>
       <div className="subtabs">
         {['transcript', 'minutes', 'report', 'knowledge'].map((v) => (

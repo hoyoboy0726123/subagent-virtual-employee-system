@@ -198,6 +198,24 @@ export function addInterjection(meetingId, { text, runId } = {}) {
   return { ok: true, delivery: 'stored', turn };
 }
 
+/**
+ * Reopen a CONCLUDED meeting so the discussion continues where it left off —
+ * same conversation, full transcript intact (mirrors the 1on1 reopen).
+ * Idempotent on a still-discussing meeting. The old minutes/report stay
+ * visible until the next 作結 REPLACES them with a synthesis of the full,
+ * extended transcript (and re-distills each participant's memory).
+ */
+export function reopenDiscussion(meetingId) {
+  return withLock(mkey(meetingId), () => {
+    const meeting = repo.getMeeting(meetingId);
+    if (!meeting) throw notFound('找不到該會議');
+    if (meeting.status === 'discussing') return meeting;
+    const updated = repo.updateMeeting(meetingId, { status: 'discussing' }, { expectStatus: 'concluded' });
+    if (!updated) throw badRequest('這場會議的狀態已變更，請重新整理。');
+    return updated;
+  });
+}
+
 /** The manager concludes: synthesize minutes + report, distill memories. */
 export async function concludeDiscussion(meetingId, onEvent) {
   const meeting = repo.getMeeting(meetingId);

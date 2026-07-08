@@ -63,11 +63,16 @@ export function getDocument(documentId) {
   return rowToDocument(row, n);
 }
 
-/** The memory document already distilled for (employee, meeting), if any —
- *  makes meeting-memory distillation idempotent so a re-run can't duplicate it. */
+/** The ACTIVE memory document already distilled for (employee, meeting), if
+ *  any. The distiller REPLACES it on re-conclusion (a reopened meeting's memory
+ *  must cover the extended transcript); archived copies (consolidated away)
+ *  are ignored — they stay as the audit trail. */
 export function findMemoryDocument(employeeId, meetingId) {
   return getDb().prepare(
-    "SELECT id FROM documents WHERE employee_id = ? AND source = 'memory' AND json_extract(metadata, '$.meetingId') = ?",
+    `SELECT id FROM documents
+      WHERE employee_id = ? AND source = 'memory'
+        AND json_extract(metadata, '$.meetingId') = ?
+        AND COALESCE(json_extract(metadata, '$.archived'), 0) = 0`,
   ).get(employeeId, meetingId) || null;
 }
 

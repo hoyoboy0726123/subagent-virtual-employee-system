@@ -32,6 +32,17 @@ goalsRouter.post('/goals/stream', asyncHandler(async (req, res) => {
   await streamRun(req, res, (send) => goals.create(req.body || {}, send), 'goal');
 }));
 
+// Re-run the collaboration with the previous plan + an optional manager
+// instruction as context; the fresh result REPLACES tasks/output.
+goalsRouter.post('/goals/:id/rerun', asyncHandler(async (req, res) => {
+  res.json(await goals.rerun(req.params.id, req.body || {}));
+}));
+
+// Streaming variant — same SSE event shape as /goals/stream.
+goalsRouter.post('/goals/:id/rerun/stream', asyncHandler(async (req, res) => {
+  await streamRun(req, res, (send) => goals.rerun(req.params.id, req.body || {}, send), 'goal');
+}));
+
 goalsRouter.put('/goals/:id', asyncHandler(async (req, res) => {
   res.json(goals.update(req.params.id, req.body || {}));
 }));
