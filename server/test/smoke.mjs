@@ -387,6 +387,27 @@ try {
     await api('DELETE', `/api/knowledge/${doc.id}`);
   });
 
+  await step('D1: long CJK compound queries match paraphrases (bigram recall)', async () => {
+    // Doc writes the compound SPLIT (退貨...的政策); the old exact-phrase query
+    // required 退貨政策 contiguous and would miss this.
+    const { json: doc } = await api('POST', `/api/employees/${empId}/knowledge`, {
+      title: '客服規範', content: '關於退貨，我們的政策是七天鑑賞期；至於客戶滿意度，追蹤機制每月檢討。',
+    });
+    const split = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('退貨政策')}&employeeIds=${empId}`);
+    assert.ok(split.json.results.some((r) => r.documentId === doc.id),
+      '「退貨政策」matches a doc that wrote 「退貨...的政策」 (bigram recall)');
+
+    // And an EXACT contiguous compound still matches (and ranks — precision kept).
+    const { json: doc2 } = await api('POST', `/api/employees/${empId}/knowledge`, {
+      title: '滿意度', content: '客戶滿意度指標是本季重點。',
+    });
+    const exact = await api('GET', `/api/knowledge/search?q=${encodeURIComponent('客戶滿意度')}&employeeIds=${empId}`);
+    assert.ok(exact.json.results[0]?.documentId === doc2.id, 'exact compound still ranks first');
+
+    await api('DELETE', `/api/knowledge/${doc.id}`);
+    await api('DELETE', `/api/knowledge/${doc2.id}`);
+  });
+
   await step('SSE streaming: a meeting streams round/turn events live, then done', async () => {
     const res = await fetch(`${base}/api/meetings/stream`, {
       method: 'POST',
