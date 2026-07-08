@@ -17,3 +17,16 @@ settingsRouter.put('/settings', asyncHandler(async (req, res) => {
   if (body.llmProvider !== undefined) result = settings.setLlmProvider(String(body.llmProvider));
   res.json(result || settings.getSettings());
 }));
+
+// Save UI-managed API keys (Gemini / Tavily). Stored in the local SQLite
+// settings table (gitignored, single-user); '' clears back to the env fallback.
+settingsRouter.put('/settings/api-keys', asyncHandler(async (req, res) => {
+  const { gemini, tavily } = req.body || {};
+  res.json(settings.setApiKeys({ gemini, tavily }));
+}));
+
+// Test-connect a key BEFORE saving it (or the stored one when `key` is absent).
+settingsRouter.post('/settings/api-keys/test', asyncHandler(async (req, res) => {
+  const { provider, key } = req.body || {};
+  res.json(await settings.testApiKey(String(provider || ''), key));
+}));

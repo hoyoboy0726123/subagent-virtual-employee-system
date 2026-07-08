@@ -186,6 +186,39 @@ try {
     assert.ok(res.text.startsWith('我直接'));
   });
 
+  await step('api-key test connections: injected transports, sanitized errors, no network', async () => {
+    const { testTavilyKey, testGeminiKey } = await import('../src/reasoning/apiKeys.js');
+
+    // Tavily: 200 → ok; 401 → clear invalid-key hint; upstream error message
+    // containing the key is sanitized before it reaches the caller.
+    const ok = await testTavilyKey('test-key-abc', { fetchImpl: async () => ({ ok: true }) });
+    assert.deepEqual(ok, { ok: true });
+    const unauth = await testTavilyKey('test-key-abc', { fetchImpl: async () => ({ ok: false, status: 401 }) });
+    assert.equal(unauth.ok, false);
+    assert.ok(unauth.error.includes('金鑰無效'));
+    const leaky = await testTavilyKey('test-key-abc', {
+      fetchImpl: async () => { throw new Error('bad request for key test-key-abc'); },
+    });
+    assert.ok(!leaky.error.includes('test-key-abc'), 'the key never echoes back through an error');
+    assert.ok(leaky.error.includes('［金鑰］'));
+
+    // Gemini: a successful tiny generation → ok + model id; failures → ok:false.
+    const gOk = await testGeminiKey('test-key-g', {
+      clientFactory: () => ({ models: { generateContent: async () => ({ text: 'pong' }) } }),
+    });
+    assert.equal(gOk.ok, true);
+    assert.equal(gOk.model, config.llm.model);
+    const gBad = await testGeminiKey('test-key-g', {
+      clientFactory: () => ({ models: { generateContent: async () => { throw new Error('API key not valid: test-key-g'); } } }),
+    });
+    assert.equal(gBad.ok, false);
+    assert.ok(!gBad.error.includes('test-key-g'), 'sanitized');
+
+    // No key anywhere → honest local failure, transport never touched.
+    const none = await testTavilyKey('', { fetchImpl: async () => { throw new Error('MUST NOT be called'); } });
+    assert.deepEqual(none, { ok: false, error: '未提供金鑰' });
+  });
+
   console.log(`\n  All ${passed} agentic-tool checks passed ✅\n`);
 } catch (err) {
   console.error(`\n  ✗ check #${passed + 1} failed`);

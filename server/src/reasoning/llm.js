@@ -21,6 +21,7 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { config } from '../config.js';
 import { cliProvider, isCliProvider } from './providers/index.js';
+import { effectiveGeminiKey } from './apiKeys.js';
 
 // Re-exported so callers can build function-declaration schemas without importing
 // the SDK directly (keeps the coupling in one place).
@@ -35,7 +36,7 @@ export { Type };
  */
 export function llmEnabled() {
   if (isCliProvider()) return cliProvider().availableSync();
-  return Boolean(config.llm.apiKey);
+  return Boolean(effectiveGeminiKey()); // UI-saved key or env var (apiKeys.js)
 }
 
 /** Honest identity of the active brain (runtime metadata / health / UI). */
@@ -58,9 +59,16 @@ export function nativeToolsSupported(model) {
 }
 
 let client = null;
+let clientKey = '';
 function getClient() {
-  if (!config.llm.apiKey) return null;
-  if (!client) client = new GoogleGenAI({ apiKey: config.llm.apiKey });
+  const key = effectiveGeminiKey();
+  if (!key) { client = null; clientKey = ''; return null; }
+  // Rebuild when the effective key changes — the user can save a new key in the
+  // UI at runtime and the very next turn should use it, no restart needed.
+  if (!client || clientKey !== key) {
+    client = new GoogleGenAI({ apiKey: key });
+    clientKey = key;
+  }
   return client;
 }
 

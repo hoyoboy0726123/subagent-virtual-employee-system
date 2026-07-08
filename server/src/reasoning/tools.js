@@ -26,13 +26,15 @@ import { search as searchKnowledgeBase } from '../storage/retrieval.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
 import { scheduleEmbedding } from './indexer.js';
 import { getSetting } from '../storage/settings.repo.js';
+import { effectiveTavilyKey } from './apiKeys.js';
 import { normalizeTraditional } from '../orchestration/output.js';
 
 export const WEB_SEARCH_SETTING_KEY = 'webSearchEnabled';
 
-/** Is a web-search provider key configured at all? (capability) */
+/** Is a web-search provider key configured at all? (capability) UI-saved key
+ *  or environment variable — see apiKeys.js for the precedence. */
 export function webSearchConfigured() {
-  return Boolean(config.tools.webSearch.apiKey);
+  return Boolean(effectiveTavilyKey());
 }
 
 /** Is the in-app toggle on? Only meaningful when a key is configured. */
@@ -226,12 +228,13 @@ export function buildToolbox({
       }
       if (name === 'web_search') {
         if (!webOn) return { error: '網路搜尋未啟用（缺少 API 金鑰或開關未開）' };
-        const { apiKey, endpoint, timeoutSec, depth, chunksPerSource, maxResults } = config.tools.webSearch;
+        const { endpoint, timeoutSec, depth, chunksPerSource, maxResults } = config.tools.webSearch;
         const res = await fetchImpl(endpoint, {
           method: 'POST',
           headers: {
             'content-type': 'application/json',
-            authorization: `Bearer ${apiKey}`,
+            // Effective key: UI-saved (settings) first, then the environment.
+            authorization: `Bearer ${effectiveTavilyKey()}`,
           },
           body: JSON.stringify({
             query: String(args.query || ''),

@@ -620,6 +620,48 @@ try {
     assert.equal(health.tools.webSearchKey, false);
   });
 
+  await step('in-app API keys: save → masked status, unlocks features; clear → reverts', async () => {
+    // Hermetic run starts with nothing configured (no env keys, empty DB).
+    const { json: before } = await api('GET', '/api/settings');
+    assert.equal(before.apiKeys.gemini.configured, false);
+    assert.equal(before.apiKeys.tavily.configured, false);
+
+    // Testing an unknown provider is a 400; testing with no key stored is an
+    // honest local failure (never a network call).
+    const badProvider = await api('POST', '/api/settings/api-keys/test', { provider: 'nonsense' });
+    assert.equal(badProvider.status, 400);
+    const noKey = await api('POST', '/api/settings/api-keys/test', { provider: 'tavily' });
+    assert.equal(noKey.json.ok, false);
+    assert.ok(noKey.json.error.includes('未提供金鑰'));
+
+    // Save both keys via the UI endpoint (deliberately fake values).
+    const fakeTavily = 'test-tavily-key-000000001234';
+    const fakeGemini = 'test-gemini-key-000000005678';
+    const { json: saved } = await api('PUT', '/api/settings/api-keys', { tavily: fakeTavily, gemini: fakeGemini });
+    // CRITICAL: a saved key must never round-trip to the client — only a tail.
+    assert.ok(!JSON.stringify(saved).includes(fakeTavily), 'full Tavily key never leaves the server');
+    assert.ok(!JSON.stringify(saved).includes(fakeGemini), 'full Gemini key never leaves the server');
+    assert.deepEqual(saved.apiKeys.tavily, { configured: true, source: 'ui', tail: '…1234' });
+    assert.deepEqual(saved.apiKeys.gemini, { configured: true, source: 'ui', tail: '…5678' });
+
+    // The keys actually unlock features: web-search toggle turns on-able and
+    // the google brain reports live.
+    assert.equal(saved.webSearch.keyConfigured, true);
+    assert.equal(saved.llm.live, true, 'google brain is live via the UI-saved key');
+    const on = await api('PUT', '/api/settings', { webSearchEnabled: true });
+    assert.equal(on.status, 200, 'toggle now accepts ON');
+    assert.equal(on.json.webSearch.enabled, true);
+
+    // Clear both keys ('' = back to env fallback, which is empty here) — the
+    // whole surface degrades honestly, including the previously-ON toggle.
+    const { json: cleared } = await api('PUT', '/api/settings/api-keys', { tavily: '', gemini: '' });
+    assert.equal(cleared.apiKeys.tavily.configured, false);
+    assert.equal(cleared.apiKeys.gemini.configured, false);
+    assert.equal(cleared.webSearch.keyConfigured, false);
+    assert.equal(cleared.webSearch.enabled, false, 'toggle reads OFF once the key is gone');
+    assert.equal(cleared.llm.live, false);
+  });
+
   await step('autonomous research: refused while research prerequisites are missing', async () => {
     const { status, json } = await api('POST', `/api/employees/${empId}/research`, { topic: '任意主題' });
     assert.equal(status, 400);

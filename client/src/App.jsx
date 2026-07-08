@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api } from './api.js';
+import { Modal } from './components/ui.jsx';
 import EmployeesPage from './pages/EmployeesPage.jsx';
 import MeetingsPage from './pages/MeetingsPage.jsx';
 import GoalsPage from './pages/GoalsPage.jsx';
@@ -18,6 +19,7 @@ export default function App() {
   // Theme: the Claude-style light palette is the product default; dark is
   // opt-in and remembered.
   const [theme, setTheme] = useState(() => localStorage.getItem('veemp-theme') || 'light');
+  const [showKeys, setShowKeys] = useState(false); // 🔑 API-keys modal
   // Bump this to force child pages to refetch after cross-cutting changes.
   const [refreshKey, setRefreshKey] = useState(0);
   const refresh = () => setRefreshKey((k) => k + 1);
@@ -70,7 +72,7 @@ export default function App() {
               className="runtime-switch web-toggle"
               title={settings.webSearch?.keyConfigured
                 ? '開啟後，AI 員工在會議、目標與自主研究中可視需要上網搜尋（Tavily 深度搜索），引用外部資料時會標明出處'
-                : '需要在伺服器環境設定 TAVILY_API_KEY 才能開啟網路搜尋'}
+                : '點右側 🔑 輸入 Tavily 金鑰（或在伺服器環境設定 TAVILY_API_KEY）即可開啟網路搜尋'}
             >
               <input
                 type="checkbox"
@@ -82,6 +84,14 @@ export default function App() {
               </span>
             </label>
           )}
+          <button
+            className="icon-btn"
+            onClick={() => setShowKeys(true)}
+            title="設定 Gemini / 網路搜尋 API 金鑰（僅儲存在本機）"
+            aria-label="API 金鑰設定"
+          >
+            🔑
+          </button>
           {settings?.llm && (
             <label
               className="runtime-switch brain-switch"
@@ -141,7 +151,108 @@ export default function App() {
       <footer className="footer">
         獨立運作 · 內建多代理編排 · SQLite 儲存 · 無需外部服務{settings?.runtimeLabel ? ` · ${settings.runtimeLabel}` : ''}
       </footer>
+
+      {showKeys && (
+        <ApiKeysModal
+          status={settings?.apiKeys}
+          onClose={() => setShowKeys(false)}
+          onSaved={(next) => { setSettings((s) => ({ ...s, ...next })); refresh(); }}
+        />
+      )}
     </div>
+  );
+}
+
+// 🔑 In-app API-key settings (Gemini brain + Tavily web search). Keys are saved
+// to the LOCAL SQLite settings store on the server — the GET side only ever
+// returns a masked tail, so a saved key never round-trips to the browser.
+function KeyRow({ label, hint, provider, status, onSaved }) {
+  const [value, setValue] = useState('');
+  const [test, setTest] = useState({ busy: false, ok: null, msg: '' });
+  const [saving, setSaving] = useState(false);
+
+  const sourceLabel = status?.source === 'ui' ? 'UI 設定' : status?.source === 'env' ? '環境變數' : null;
+
+  const runTest = async () => {
+    setTest({ busy: true, ok: null, msg: '' });
+    try {
+      // Test the typed key; with the field empty this tests the stored one.
+      const res = await api.post('/settings/api-keys/test', { provider, key: value || undefined });
+      setTest({ busy: false, ok: res.ok, msg: res.ok ? `連線成功${res.model ? `（${res.model}）` : ''}` : res.error });
+    } catch (e) {
+      setTest({ busy: false, ok: false, msg: e.message });
+    }
+  };
+
+  const save = async (clear = false) => {
+    setSaving(true);
+    try {
+      const next = await api.put('/settings/api-keys', { [provider]: clear ? '' : value });
+      setValue('');
+      setTest({ busy: false, ok: null, msg: clear ? '已清除（改用環境變數,若有）' : '已儲存' });
+      onSaved(next);
+    } catch (e) {
+      setTest({ busy: false, ok: false, msg: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="upload-box">
+      <strong>{label}</strong>
+      <p className="muted sm">
+        {hint} · 目前:{status?.configured ? `已設定 ${status.tail}（${sourceLabel}）` : '未設定'}
+      </p>
+      <div className="upload-row">
+        <input
+          type="password"
+          placeholder={status?.configured ? '輸入新金鑰以更換…' : '貼上 API 金鑰…'}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          autoComplete="off"
+          style={{ flex: 1 }}
+        />
+        <button className="btn-ghost sm" onClick={runTest} disabled={test.busy || (!value && !status?.configured)}>
+          {test.busy ? '測試中…' : '測試連線'}
+        </button>
+        <button className="btn sm" onClick={() => save(false)} disabled={saving || !value.trim()}>
+          儲存
+        </button>
+        {status?.source === 'ui' && (
+          <button className="btn-ghost sm" onClick={() => save(true)} disabled={saving} title="清除 UI 儲存的金鑰">
+            清除
+          </button>
+        )}
+      </div>
+      {test.msg && (
+        <div className={test.ok === false ? 'banner-err sm' : 'banner-ok sm'}>{test.msg}</div>
+      )}
+    </div>
+  );
+}
+
+function ApiKeysModal({ status, onClose, onSaved }) {
+  return (
+    <Modal title="🔑 API 金鑰設定" onClose={onClose}>
+      <p className="muted sm">
+        金鑰只儲存在你本機的資料庫（不進版本控制、不回傳前端）；清除後會改用伺服器環境變數（若有設定）。
+      </p>
+      <KeyRow
+        label="🧠 Google Gemini API 金鑰"
+        hint="驅動 AI 員工的即時推理（gemma-4）。可於 aistudio.google.com/apikey 免費取得"
+        provider="gemini"
+        status={status?.gemini}
+        onSaved={onSaved}
+      />
+      <KeyRow
+        label="🌐 網路搜尋金鑰（Tavily）"
+        hint="讓員工能上網查證與自主研究。可於 tavily.com 免費取得"
+        provider="tavily"
+        status={status?.tavily}
+        onSaved={onSaved}
+      />
+    </Modal>
   );
 }
 
