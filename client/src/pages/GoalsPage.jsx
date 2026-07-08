@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons } from '../components/ui.jsx';
 
+// Goal-level status the MANAGER sets (dropdown). Task status is separate: a
+// task is 'pending'(待執行) until ▶ 執行交付 delivers it → 'done'.
 const STATUSES = ['in-progress', 'blocked', 'done'];
-const STATUS_LABELS = { 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
+const STATUS_LABELS = { pending: '待執行', 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
 const DEFAULT_FILTERS = { q: '', assigneeId: '', runtime: '', live: '', status: '', sort: 'newest', page: 1, pageSize: 5 };
 
 export default function GoalsPage({ refreshKey, onChange, onActivity }) {

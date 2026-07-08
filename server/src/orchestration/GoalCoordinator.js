@@ -55,7 +55,9 @@ export async function executeGoal({ title, description, assignees, onEvent }) {
       approach: turn.text,
       live: turn.live,
       toolCalls: turn.toolCalls || 0,
-      status: 'in-progress',
+      // A freshly-planned task is 待執行, not 進行中 — nothing runs until the
+      // manager clicks ▶ 執行交付 (which flips it to 'done'). Honest labeling.
+      status: 'pending',
       order: i + 1,
     };
     emit({ type: 'task', task, done: null, total: assignees.length });

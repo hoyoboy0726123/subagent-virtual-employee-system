@@ -394,7 +394,7 @@ export function executeGoal({ title, description, assignees, groundingByEmployee
       role: emp.roleTitle,
       subtask: goalSubtask(emp, title),
       approach: goalApproach(emp, title, hits),
-      status: 'in-progress',
+      status: 'pending', // 待執行 until ▶ 執行交付 delivers it
       order: i + 1,
     };
   });
