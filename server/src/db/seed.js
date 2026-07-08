@@ -1,71 +1,160 @@
-// Seed the SQLite store with example employees, knowledge documents (which get
-// chunked + FTS-indexed), and one grounded demo meeting so the app is instantly
-// explorable. Run: `npm run seed` (this RESETS the database).
-import { resetDb } from './connection.js';
+// Seed the SQLite store with a DEFAULT ASUS (華碩電腦) product-development team:
+// seven cross-functional personas plus a research-grounded professional
+// knowledge base for each (competitor intel + role domain knowledge, sourced
+// from 2025–2026 web research), and one grounded demo meeting so the app is
+// instantly explorable. Run: `npm run seed` (this RESETS the database).
+//
+// The reset wipes demo DATA (employees, knowledge, meetings, goals, dialogues)
+// but PRESERVES the user's configuration — API keys, the selected brain, the
+// web-search toggle, chair/tunable settings — so a reseed never forces you to
+// re-enter your keys. Clear those in the UI if you want a truly blank slate.
+import { getDb, resetDb } from './connection.js';
+import { getSetting, setSetting } from '../storage/settings.repo.js';
 import { insertEmployee } from '../storage/employees.repo.js';
 import { insertDocument } from '../storage/knowledge.repo.js';
 import { insertMeeting } from '../storage/meetings.repo.js';
 import { generateProfile } from '../reasoning/engine.js';
 import { getRuntimeAdapter } from '../runtime/index.js';
 
+// Config settings that survive a reseed (painful or careless to lose).
+const PRESERVED_SETTING_KEYS = [
+  'apiKeyGemini', 'apiKeyTavily', 'llmProvider', 'webSearchEnabled', 'chairConfig', 'tunables',
+];
+
 export async function seed() {
+  // Snapshot config BEFORE the reset so keys/brain choice survive it.
+  const preserved = {};
+  try {
+    getDb();
+    for (const k of PRESERVED_SETTING_KEYS) {
+      const v = getSetting(k);
+      if (v != null) preserved[k] = v;
+    }
+  } catch { /* fresh DB — nothing to preserve */ }
+
   resetDb();
 
   const make = (data) => insertEmployee({ ...data, profile: generateProfile(data) });
 
-  const aria = make({
-    name: 'Aria Chen',
+  // ── The default team: a balanced ASUS product-development crew ────────────
+  const pm = make({
+    name: '林思妤',
     roleTitle: '產品經理',
-    personality: '果斷且重視成效',
-    expertise: ['產品策略', '路線圖規劃', '使用者研究', '優先排序'],
-    objectives: '在維持務實範疇的前提下，交付讓顧客喜愛的產品。',
-    communicationStyle: '簡潔且具敘事性',
+    personality: '果斷、以商業結果與數據為先，擅長逼出取捨',
+    expertise: ['產品路線圖', '規格與成本取捨', '市場定位', '優先級排序（RICE）', 'AI PC 策略'],
+    objectives: '在成本、時程與市場三方壓力下，交付真正打中買家需求、避免規格虛榮的產品。',
+    communicationStyle: '簡潔且以路線圖與優先級敘事',
   });
-  const marcus = make({
-    name: 'Marcus Reid',
-    roleTitle: '後端工程師',
-    personality: '有系統且重視風險',
-    expertise: ['API', '資料庫', '可擴展性', '可靠性'],
-    objectives: '打造穩健、易維護且可擴展的後端。',
-    communicationStyle: '精確且結構化',
+  const id = make({
+    name: '陳冠宇',
+    roleTitle: '工業設計師',
+    personality: '重直覺與美感、擇善固執，追求「有意義的設計」',
+    expertise: ['工業設計', 'CMF 材質色彩', '人因工學', '品牌設計語言', '永續與可維修'],
+    objectives: '打造兼具品牌識別、觸感與可製造性的設計，讓人一眼想擁有、長期愛用。',
+    communicationStyle: '以草圖、材質與使用者故事溝通',
   });
-  const lena = make({
-    name: 'Lena Ortiz',
-    roleTitle: '前端工程師',
-    personality: '注重細節且富同理心',
-    expertise: ['React', 'UI/UX', '無障礙設計', '設計系統'],
-    objectives: '交付令人愉悅且具無障礙性的介面。',
-    communicationStyle: '重視視覺與範例',
+  const hw = make({
+    name: '王志豪',
+    roleTitle: '硬體工程師',
+    personality: '務實、以物理與熱力學極限為底線，不接受行銷式承諾',
+    expertise: ['散熱設計', '機構與 PCB', '電源與電池', '運算平台選型', '可靠度'],
+    objectives: '在薄度、散熱、電池與效能的物理極限之間，找到穩定可量產的最佳平衡。',
+    communicationStyle: '精確、以數字、瓦數與溫度說話',
   });
-  const sam = make({
-    name: 'Sam Patel',
-    roleTitle: '資料科學家',
-    personality: '好奇且嚴謹',
-    expertise: ['統計', '機器學習', '實驗設計', '數據敘事'],
-    objectives: '將數據轉化為團隊能夠信賴的決策。',
-    communicationStyle: '以證據為先並量化',
+  const fw = make({
+    name: '黃思翰',
+    roleTitle: '韌體／軟體工程師',
+    personality: '系統思考、重相依與邊界情況、謹慎',
+    expertise: ['BIOS/EC 韌體', '驅動程式', '系統軟體（MyASUS／Armoury Crate）', 'AI／NPU 功能整合'],
+    objectives: '交付穩定、不打架的系統軟體與真正有感的 AI 功能，杜絕韌體與驅動不一致。',
+    communicationStyle: '結構化、重版本與相依風險',
+  });
+  const sc = make({
+    name: '蔡怡君',
+    roleTitle: '供應鏈／採購經理',
+    personality: '精算、對成本與風險高度敏感，對承諾保守',
+    expertise: ['BOM 成本管控', 'ODM／OEM 管理', '零組件採購', '供應風險', '交期與庫存'],
+    objectives: '在記憶體暴漲與關稅動盪下，守住 BOM 成本與交期，並分散供應風險。',
+    communicationStyle: '以成本、交期與風險量化說話',
+  });
+  const mkt = make({
+    name: '周庭安',
+    roleTitle: '產品行銷經理',
+    personality: '市場敏銳、重故事與差異化，但堅持誠實訴求',
+    expertise: ['上市策略（GTM）', '產品定位', '競品差異化', '通路與電商', '媒體與評測公關'],
+    objectives: '用誠實而有差異化的訊息讓市場理解產品價值，不靠 AI 噱頭堆砌。',
+    communicationStyle: '有感染力、以競品與客戶語言溝通',
+  });
+  const qa = make({
+    name: '郭建成',
+    roleTitle: '品保／可靠度工程師',
+    personality: '嚴謹、獨立、對含糊零容忍，是關卡把關者',
+    expertise: ['可靠度驗證', 'EVT/DVT/PVT', '環境與落摔測試', '法規認證', '品質把關'],
+    objectives: '以獨立、嚴格的驗證關卡守住品質底線，不合格就不放行量產。',
+    communicationStyle: '直接、以測試數據與不合格點說話',
   });
 
-  const employees = [aria, marcus, lena, sam];
+  const employees = [pm, id, hw, fw, sc, mkt, qa];
 
-  // Knowledge documents — richer than the old one-line notes so chunking/retrieval
-  // have something to work with.
+  // ── Professional background knowledge — grounded in 2025–2026 web research,
+  //    each doc carries its sources so agents can cite them. [emp, title, body, tags]
   const docs = [
-    [aria, '北極星指標', '我們的北極星指標是每週至少舉行一次會議的活躍團隊數。一切都以「啟用（activation）」為依歸。次要的護欄指標為第四週留存率與首次會議所需時間。我們不會為了註冊數等虛榮指標而最佳化。', ['策略']],
-    [aria, '上線限制', 'MVP 必須能在本機執行，不需任何外部 API 金鑰，也不需原生建置步驟。範疇僅限核心流程：員工、知識庫、會議、目標。任何需要雲端基礎設施的項目在上線階段皆不在範圍內。', ['範疇']],
-    [marcus, '持久化決策', '我們從 JSON 檔案儲存遷移到內建 node:sqlite 模組的 SQLite。這帶來交易、索引與 FTS5 全文檢索，且無需原生建置。已啟用 WAL 模式以支援並行讀取。外鍵會將員工的刪除層級式串連到其文件與知識片段。', ['後端', '架構決策']],
-    [marcus, '檢索設計', '知識文件會被切分為約 480 字元、彼此重疊的片段，並索引於 FTS5 資料表中。檢索採用 BM25 排序，且可限定於一位或多位員工，這正是會議與目標能以正確人員知識為依據的關鍵。', ['後端', 'RAG']],
-    [lena, '無障礙基準', '所有可互動元素都需有清楚可見的聚焦狀態與 ARIA 標籤。對比度須達 WCAG AA 標準。對話框必須鎖定焦點並可用 Esc 關閉。切勿僅以顏色來傳達狀態。', ['無障礙']],
-    [sam, '實驗護欄', '指標變動未達 2 個標準誤前，絕不上線任何變更。務必在測試前先定義主要指標。偏好小而可量測的切片，而非一次到位的大改版，並事先登錄成功門檻。', ['統計']],
+    [pm, 'AI PC 市場與功能取捨',
+      'Copilot+ PC 門檻為專屬 NPU ≥40 TOPS、記憶體 ≥16GB、SSD ≥256GB。Canalys 估 2025 年全球 AI PC 出貨突破 5,000 萬台，是消費運算成長最快的區隔；但約 75% 買家覺得「夠用就好」，對高價 AI 機種動機偏低。買家真正有感的 NPU 功能是離線轉錄、視訊通話強化、即時翻譯字幕、本地影像編修與 Recall。決策原則：嚴格區分「真需求」與「規格虛榮」——任何 NPU 功能都要綁一個買家會實際使用的任務，否則不投工程資源。優先級以 RICE（Reach／Impact／Confidence／Effort）排序，市場規模以 TAM／SAM／SOM 界定。\n來源：Canalys、Futurum Q3 2025 PC 報告、digitalapplied AI PC 買家指南。',
+      ['策略', 'AI PC']],
+    [pm, '競爭態勢與華碩產品線定位',
+      '華碩 2025 品牌營收約新台幣 6,889 億元（年增 26%）。客群結構：玩家約 43%（最大支柱）、消費者約 30%、企業約 27%（含 AI 伺服器，快速擴張）。領先領域：主機板全球第一（約 45%）、NVIDIA 生態 AIB 板卡出貨第一；筆電總量全球市佔約 6.9%，落後 Lenovo／HP／Dell。產品線：Zenbook（高階輕薄）、Vivobook（平價全能）、ProArt（創作工作站）、ROG／TUF（電競）、ExpertBook（商用）、ROG Ally（掌機）。主要對手：Apple（M5，能效與單核領先，但封閉、不可維修）、Alienware（頂配電競但笨重）、Lenovo Legion（規模與性價比）、HP Omen、Acer（平價續航的台灣同鄉）、Razer（輕薄精品但量小）。\n來源：Digitimes、Futurum、Statista、GamesRadar。',
+      ['競品', '市場']],
+    [pm, '產品開發方法論與決策關卡',
+      '產品從概念到 EOL 由 PM 全程負責：定義路線圖、目標市場、規格、價格帶與商業論證，設定目標 BOM 成本與毛利，並在各開發關卡（concept→ID→EVT→DVT→PVT→量產）做 go／no-go。核心是取捨：更薄機身 vs 更大電池、更強規格 vs 目標成本、更早上市 vs 零組件供應到位。PM 是把 ID、工程、韌體、供應鏈、行銷對齊到同一份規格與時程的樞紐，並在品保簽核前把關。以 RICE 排序，避免被單一部門偏好綁架。\n來源：HWE.design 開發週期、BestJobDescriptions OEM PM、ProductCompass。',
+      ['方法論']],
+
+    [id, '工業設計方法、CMF 與華碩設計語言',
+      '工業設計以 CMF（Color／Material／Finish）為核心。華碩設計哲學為「simplicity、method、meaning」——顏色與材質都要「有意義，而非為不同而不同」。主流材料為鋁合金、鎂合金（強度重量比佳，是超薄與電競輕量化的關鍵）與再生材料。核心工程取捨是「薄度 vs 散熱 vs 電池」三角。華碩以自研 Ceraluminum（陶鋁）差異化：結合鋁的輕與陶瓷的韌，較傳統陽極鋁輕約 30%、強 3 倍、不沾指紋、可 100% 回收；於 Milan Design Week 2025 推「Design You Can Feel」，建立有別於 Apple（Space Black 鋁）與 Dell（鎂合金極簡）的觸感語言。\n來源：ASUS Pressroom（Ceraluminum）、ASUS Design Philosophy、Creative Bloq。',
+      ['設計', 'CMF']],
+    [id, '永續與維修權法規（2025–2026）',
+      '歐盟維修權指令（2024/7 生效、2026/7/31 起各國適用）結合 2025 生態設計永續產品法規（ESPR），要求備件於數個工作日內供應、產品停售後仍供零件多年，電池須耐約 ≥800 次循環仍保 ≥80% 容量。設計須內建可拆解性與維修分數；Framework 以 iFixit 可維修性 9.6/10 樹立標竿（對比 MacBook Pro 16 的 3.8/10）。這對華碩一體式輕薄設計形成張力：如何在維持觸感與薄度的同時，提升可維修性與再生料比例。\n來源：歐盟執委會（維修指令／ESPR）、Framework、iFixit。',
+      ['永續', '法規']],
+
+    [hw, '運算平台與散熱設計（2025–2026）',
+      '散熱是筆電系統工程核心。傳統熱導管（heat pipe）逐漸被均熱板（vapor chamber）取代，相變散熱效率為熱導管數倍；高階電競搭配液態金屬導熱介面，風扇曲線由 AI 動態調校。2025–2026 運算平台：Intel Panther Lake（Core Ultra 300、NPU5、約 50 TOPS，2026/1 取代 Lunar Lake 的約 48 TOPS）、AMD Ryzen AI 400（XDNA 2，約 55 TOPS）、Qualcomm Snapdragon X2 Elite（ARM 架構，NPU 達 80 TOPS）、獨顯 NVIDIA RTX 50 Blackwell（RTX 5090 Laptop：24GB GDDR7、TGP 95–150W）。設計時 NPU／CPU／GPU 的合計 TOPS 與散熱、噪音、續航必須一起算。\n來源：PCWorld CES 2026、Tom’s Hardware RTX 50、ROG。',
+      ['散熱', '平台']],
+    [hw, '電池、面板與可靠度基準',
+      '電競與高效能機主流採 99Wh 鋰電池（民航手提上限），USB-C PD 供電已成趨勢。面板：OLED 對比與色域最佳，對比 IPS／Mini-LED，並走向高更新率（120Hz 起，最高 240Hz）。積極的裝置端 AI 運算會顯著降低續航——這是與行銷「全天候續航」訴求的直接張力，工程端須誠實揭露 AI＋GPU 重載下的實測數字。可靠度認證以 MIL-STD-810H 為基準，涵蓋約 28 項極端溫度、濕度、震動與落摔測試。\n來源：LaptopMedia（MIL-STD-810）、業界面板／電池規範。',
+      ['電池', '可靠度']],
+
+    [fw, '系統軟體堆疊與 AI 功能整合',
+      '職責涵蓋 BIOS/UEFI、嵌入式控制器（EC）韌體、驅動程式，以及華碩軟體層：MyASUS（主流）與 Armoury Crate（ROG／電競），加上日益重要的 AI 功能（NPU／Copilot+ 體驗、AI 降噪、效能模式）。決定風扇曲線／熱節流邏輯與電源效能設定檔。最大風險是跨界一致性：BIOS 更新後若 EC↔BIOS↔驅動版本不匹配，會造成散熱失控或裝置異常——這是本職經典失效模式，更新機制與版本相依必須嚴格管控。AI 功能要挑買家真正會用的（離線轉錄、即時字幕、本地影像編修），而非湊 TOPS 數字。\n來源：ROG（Armoury Crate vs MyASUS）、WindowsReport（BIOS 更新流程）。',
+      ['韌體', 'AI 功能']],
+
+    [sc, '供應鏈、ODM 與 BOM 成本現況',
+      '全球筆電逾八成由台灣 ODM 代工：廣達（Quanta）、仁寶（Compal）、和碩（Pegatron）、緯創（Wistron）、英業達（Inventec）。PC ODM 市場 2025 年約 152 億美元。採購核心是把實際 BOM 壓到 PM 的目標成本，並為關鍵零件（面板、電池、記憶體、散熱件）建立第二供應商、鎖定產能與交期。決定 make-vs-buy 與由哪家 ODM 生產，並提供工廠圖面、BOM 與測試標準。部分零件交期仍拉長至逾 30 週，需庫存前置。\n來源：Future Market Insights（PC ODM）、aDreamerTech（OEM／ODM）。',
+      ['供應鏈', 'ODM']],
+    [sc, '記憶體暴漲與關稅、產地多元化（2025–2026）',
+      '2025–2026 供應現實嚴峻：受 AI 伺服器與企業儲存需求排擠，記憶體出現歷史級上漲——NAND 自 2025 年初漲幅達約 246%；2026 第一季 DRAM／NAND／HBM 較前季暴漲約 80–90%，Samsung DDR5 合約價由約 $7 漲逾一倍至 $19.5，產能已排到 2027。應對：長約鎖價、庫存前置、審慎控制單機記憶體容量。關稅與地緣：美國 2025 關稅下筆電雖獲部分豁免，中國製仍受最高 20% 相關稅；越南筆電產量年增約 130%，首度超越中國成美國最大筆電供應國，China+1 多元化加速。\n來源：wccftech、Sourceability、Bloomberg。',
+      ['成本', '關稅']],
+
+    [mkt, '上市策略與 AI PC 行銷教訓',
+      '消費電子上市（GTM）須整合定位、定價、通路與媒體種子。2025–2026 最大教訓：AI PC 行銷遇冷——Dell 於 CES 2026 坦承對消費者主打「AI 整合」大致失敗，AI 品牌造成混淆而非銷售；實務上仍以價格、電池續航、效能三要素成交。續航訴求須誠實：裝置端 AI 運算會降低續航，誇大易被評測打臉，是信任風險。Q4 2025 出貨筆電已有 54% 含 NPU（其中約四分之一達 40+ TOPS）。\n來源：The Register、TechNewsWorld、Intel Newsroom。',
+      ['行銷', 'AI PC']],
+    [mkt, '分眾戰場與競品差異化',
+      '市場已清楚分眾：（1）續航優先的 ARM 機種（Snapdragon X 系列）；（2）AI 感知的 Intel／AMD NPU 系統；（3）效能優先的電競／創作者機種（NVIDIA 獨顯）。訊息要對族群說話：學生／差旅重攜帶、續航、鍵盤手感；創作者／工程師重顯示、效能、散熱；商務重耐用、安全、擴充。差異化槓桿：華碩的雙螢幕（Zenbook DUO）、Ceraluminum 觸感、ROG 電競生態與 Armoury Crate。通路須實體零售與電商並重，並以評測媒體／KOL 種子鋪陳口碑。\n來源：Intel 2025 AI PC 買家指南、競品評測。',
+      ['分眾', '競品']],
+
+    [qa, '可靠度驗證關卡與認證標準',
+      '品保是量產前的獨立簽核。硬體開發依 EVT（工程驗證）→DVT（設計驗證）→PVT（量產驗證）關卡推進，每關對電性、機構、散熱、系統做嚴格測試；PC OEM 的測試程序常達數萬步驟。可靠度以 MIL-STD-810H 為基準（約 28 項極端溫濕度、震動、落摔），加上環境測試、HTOL 高溫壽命與熱衝擊。無障礙硬體須對生理、感官、動作、認知障礙實測。原則：不合格就不放行——含糊、未達門檻的項目一律擋下，這是對品質底線的最後把關。\n來源：ToughRuggedLaptops（MIL-STD）、HP MIL-STD-810 白皮書、HWE.design（EVT/DVT）。',
+      ['品保', '認證']],
   ];
   for (const [emp, title, content, tags] of docs) {
     insertDocument(emp.id, { title, content, tags, source: 'note' });
   }
 
-  // One grounded demo meeting through the default (standalone) runtime.
+  // One grounded demo meeting through the default (standalone) runtime. With no
+  // brain configured yet (keys are restored AFTER this), it runs on the offline
+  // deterministic engine — fast, free, and always available.
   const runtime = getRuntimeAdapter('standalone');
-  const participants = [aria, marcus, lena];
-  const topic = '虛擬員工系統的 MVP 範疇與持久化';
+  const participants = [pm, id, hw, sc, mkt];
+  const topic = '2026 下半年 Zenbook 旗艦的 AI PC 定位與規格取捨';
   const result = await runtime.runMeeting({ topic, participants, rounds: 3 });
   insertMeeting({
     topic,
@@ -79,7 +168,11 @@ export async function seed() {
     runtime: result.runtime,
   });
 
-  return { employees: employees.length, documents: docs.length, meetings: 1 };
+  // Restore preserved config (API keys, brain choice, toggles) so the reseed
+  // never costs the user their setup.
+  for (const [k, v] of Object.entries(preserved)) setSetting(k, v);
+
+  return { employees: employees.length, documents: docs.length, meetings: 1, preserved: Object.keys(preserved).length };
 }
 
 // Run when invoked directly.
@@ -87,5 +180,5 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   const counts = await seed();
-  console.log(`已建立 ${counts.employees} 位員工、${counts.documents} 份知識文件、${counts.meetings} 場會議。`);
+  console.log(`已建立 ${counts.employees} 位員工、${counts.documents} 份知識文件、${counts.meetings} 場會議（保留 ${counts.preserved} 項設定）。`);
 }
