@@ -101,6 +101,11 @@ brain's live availability (installed? logged in?).
 > subscription credentials for other users violates the providers' terms. The
 > app strips metered-billing env vars from the CLI subprocess and isolates the
 > turn. See [SECURITY.md](./SECURITY.md).
+>
+> 📖 **Want this pattern in your own project?** The full how-to — headless CLI
+> invocations, the six pitfalls (Windows shims, billing safety, process-tree
+> hangs…) and copy-paste code — lives in
+> [docs/SUBSCRIPTION_BRAINS.md](./docs/SUBSCRIPTION_BRAINS.md).
 
 ---
 
