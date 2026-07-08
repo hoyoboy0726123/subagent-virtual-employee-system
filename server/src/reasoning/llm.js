@@ -237,6 +237,16 @@ export async function generateAgentic({
     // (e.g. the external-source attribution rule) rides on the system prompt.
     const sysNative = toolbox.policy ? `${system}\n\n${toolbox.policy}` : system;
     const contents = [{ role: 'user', parts: [{ text: user }] }];
+    // Force convergence instead of dropping the turn: one final call with tools
+    // disabled so the model MUST speak from what it already looked up.
+    const converge = async () => {
+      const final = await _generate({
+        system: sysNative, contents, tools: toolset(toolbox.declarations),
+        toolConfig: { functionCallingConfig: { mode: 'NONE' } },
+        maxTokens, temperature, model,
+      });
+      return final?.text ? { text: final.text.trim(), toolCalls: toolbox.trace.length } : null;
+    };
     for (let step = 0; step <= maxSteps; step++) {
       const res = await _generate({
         system: sysNative, contents, tools: toolset(toolbox.declarations), maxTokens, temperature, model,
@@ -246,20 +256,29 @@ export async function generateAgentic({
       if (!calls.length) {
         return res.text ? { text: res.text.trim(), toolCalls: toolbox.trace.length } : null;
       }
-      if (step === maxSteps) return null; // still asking for tools with no budget left
+      // Budget is by ACTUAL tool calls executed (toolbox.trace), not by response
+      // rounds — Gemini can emit N parallel functionCalls in a single response,
+      // which used to cost only 1 "step" and could burn maxSteps × N real calls.
+      if (step === maxSteps || toolbox.trace.length >= maxSteps) return converge();
+
       contents.push({ role: 'model', parts: calls.map((c) => ({ functionCall: c })) });
+      const budget = maxSteps - toolbox.trace.length; // remaining executes this round
       const parts = [];
+      let i = 0;
       for (const call of calls) {
         const key = `${call.name}:${JSON.stringify(call.args || {})}`;
-        const response = seenCalls.has(key)
-          ? { error: '你已經用相同參數查過了，請直接發言。' }
-          : await toolbox.execute(call.name, call.args || {});
+        const response = i >= budget
+          ? { error: '本回合工具預算已用完，請直接發言。' }
+          : seenCalls.has(key)
+            ? { error: '你已經用相同參數查過了，請直接發言。' }
+            : await toolbox.execute(call.name, call.args || {});
         seenCalls.add(key);
         parts.push({ functionResponse: { name: call.name, response } });
+        i++;
       }
       contents.push({ role: 'user', parts });
     }
-    return null;
+    return converge();
   }
 
   // Legacy Gemma (1–3) prompt protocol: the tool contract lives in the
@@ -271,7 +290,16 @@ export async function generateAgentic({
     if (!res?.text) return null;
     const req = parseToolRequest(res.text);
     if (!req) return { text: res.text.trim(), toolCalls: toolbox.trace.length };
-    if (step === maxSteps) return null;
+    if (step === maxSteps || toolbox.trace.length >= maxSteps) {
+      // Force convergence: re-prompt forbidding JSON, take the speech.
+      const final = await _generate({
+        system: sys,
+        user: `${convo}\n\n查詢次數已用完，禁止再輸出任何 JSON 或工具語法，請直接輸出你的正式發言。`,
+        maxTokens, temperature, model,
+      });
+      const t = final?.text?.trim();
+      return t && !parseToolRequest(t) ? { text: t, toolCalls: toolbox.trace.length } : null;
+    }
     const key = `${req.tool}:${JSON.stringify(req.args)}`;
     const result = seenCalls.has(key)
       ? { error: '你已經用相同參數查過了，請直接發言。' }

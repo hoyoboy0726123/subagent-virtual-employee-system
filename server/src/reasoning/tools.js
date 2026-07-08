@@ -151,6 +151,7 @@ export function buildToolbox({
   const trace = [];
   const collectedHits = [];
   const collectedSources = [];
+  const remembered = new Set(); // titles already saved this turn (dedup)
 
   const declarations = [
     {
@@ -255,6 +256,11 @@ export function buildToolbox({
         const title = String(args.title || '').trim();
         const fact = String(args.fact || '').trim();
         if (!title || !fact) return { error: 'remember 需要 title 與 fact' };
+        // Dedup within a turn (a retried turn reuses this toolbox) so the same
+        // fact isn't written to the KB twice.
+        const key = normalizeTraditional(title);
+        if (remembered.has(key)) { entry.ok = true; return { saved: true, title, deduped: true }; }
+        remembered.add(key);
         const doc = saveMemory(employee.id, {
           title: `記憶：${normalizeTraditional(title)}`,
           content: normalizeTraditional(fact), // enforce TC before it enters the KB

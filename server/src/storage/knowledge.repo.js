@@ -57,6 +57,14 @@ export function getDocument(documentId) {
   return rowToDocument(row, n);
 }
 
+/** The memory document already distilled for (employee, meeting), if any —
+ *  makes meeting-memory distillation idempotent so a re-run can't duplicate it. */
+export function findMemoryDocument(employeeId, meetingId) {
+  return getDb().prepare(
+    "SELECT id FROM documents WHERE employee_id = ? AND source = 'memory' AND json_extract(metadata, '$.meetingId') = ?",
+  ).get(employeeId, meetingId) || null;
+}
+
 /** The retrievable chunks of one document, in order — exactly what the FTS
  *  index serves to agents during grounding/search. */
 export function listChunks(documentId) {

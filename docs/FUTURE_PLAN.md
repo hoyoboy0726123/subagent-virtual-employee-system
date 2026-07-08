@@ -62,8 +62,9 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 > **不建議直接跳傳統向量 RAG**,而是分階段、守住 standalone-first。
 
 ### D1【先做,低成本高回報】檢索品質的「便宜升級」
-- [ ] **CJK 滑動 bigram 召回**:現在「退貨政策」→ 單一精確 phrase,文件寫「退貨的
-      政策」就零命中。對 ≥4 字的 CJK 詞補 OR 上 bigram 子片語,召回立刻改善。
+- [x] **CJK 滑動 bigram 召回**（已完成,commit `9f399f2`):`toMatchQuery` 對 ≥4 字的
+      CJK 詞補上完整 phrase + 所有相鄰 bigram 子片語(term 上限 12、32 clause 上限),
+      「退貨政策」現在也能命中寫成「退貨的政策」的文件。
 - [ ] **FTS5 trigram tokenizer**(取代逐字 + phrase):posting 分佈更均勻,配
       `content=''`(external content)可砍掉約 240MB 重複儲存。
 - [ ] **Anthropic Contextual Retrieval**:入庫時用一次便宜 LLM 呼叫,給每個 chunk 補
@@ -88,22 +89,32 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 
 ---
 
-## 里程碑 E — 剩餘的次要 bug 與品質重構
+## 里程碑 E — 剩餘的次要 bug 與品質重構 ✅（bug 全數修復)
 
-### 待修的次要 bug（審查發現、非阻斷)
-- [ ] **CLI timeout 後 process tree 不死** → semaphore 槽位永久流失。acquire 後掛自備
-      逾時強制 resolve(null) + `taskkill /T`(Win)/ process group kill(POSIX)清樹。
-- [ ] **native 工具迴圈預算單位是「回合」非「呼叫數」**:Gemini 並行 function calling
-      下一個 step 可燒 2N credits。改用 `toolbox.trace.length` 對 maxSteps 計數。
-- [ ] **maxSteps 用盡直接丟棄整個 turn**:research 場景燒完 6 次 Tavily 後整單作廢。
-      最後一步改強制收斂。
-- [ ] **runOrFallback 重試 × remember = 重複記憶文件**:以 title 去重或跨 attempt 重用。
-- [ ] **雙欄 PDF 假表格**:text-strategy 誤判散文。要求 ≥3 欄或與該頁純文字量比對。
-- [ ] **記憶蒸餾重複防護**:同 meetingId 重跑用 `metadata.meetingId` 查重。
+### 待修的次要 bug（審查發現、非阻斷)—— 全部已修
+- [x] **CLI timeout 後 process tree 不死** → semaphore 槽位永久流失。已抽共用
+      `reasoning/providers/cliRunner.js`:acquire 後自備逾時 `setTimeout` 強制
+      resolve(null),POSIX 用 `detached` + `process.kill(-pid)` 殺整個 process group、
+      Windows 用 `taskkill /T /F /PID` 清樹;`done()` 冪等避免雙重 resolve。
+      claudeCli / codexCli 皆改走此 runner。hermetic 測試見 `smoke.cliRunner.mjs`。
+- [x] **native 工具迴圈預算單位是「回合」非「呼叫數」**:Gemini 並行 function calling
+      下一個 step 可燒 2N credits。改用 `toolbox.trace.length` 對 maxSteps 計數,並在
+      單一 step 內以 `budget = maxSteps - trace.length` 截斷超額的並行呼叫。
+- [x] **maxSteps 用盡直接丟棄整個 turn**:research 場景燒完預算後整單作廢。native 與
+      legacy 兩條路徑都改為最後一步強制收斂(native 用 `functionCallingConfig.mode:
+      'NONE'` 逼出純文字;legacy 重新 prompt 禁止 JSON)。
+- [x] **runOrFallback 重試 × remember = 重複記憶文件**:`toolbox` 已提到重試迴圈外重用
+      (runOrFallback 與 oneOnOneTurn 皆是),再加 `remembered` Set 對 (employee,title,
+      content) 去重。
+- [x] **雙欄 PDF 假表格**:markitdown_helper 的 `credible()` 要求恰好單一欄寬且 ≥3 欄,
+      並在抽出的表格字數 > 該頁純文字 0.6 倍時判定為誤抓散文而放棄。
+- [x] **記憶蒸餾重複防護**:`findMemoryDocument(employeeId, meetingId)` 以
+      `json_extract(metadata,'$.meetingId')` 查重,同 meetingId 重跑直接跳過。
 
 ### 品質重構（為開源可維護性)
-- [ ] **抽 `util/semaphore.js`**:claudeCli 與 codexCli 各一份完全相同的實作。
-- [ ] **抽 `util/sse.js`**:meetings.routes 與 goals.routes 的 sse()/streamRun() 重複;
+- [x] **抽共用 CLI runner**:claudeCli 與 codexCli 的 execFile-on-stdin + 逾時清樹邏輯
+      已收斂到 `cliRunner.js`。(`createSemaphore` 仍各留一份、體積極小,暫不再抽。)
+- [x] **抽 `util/sse.js`**:meetings.routes 與 goals.routes 的 sse()/streamRun() 重複;
       也是加 heartbeat/close(C2)的唯一落點。
 - [ ] **抽 `util/json.js`**:「從模型輸出挖 JSON」寫了 4 遍(MeetingChair /
       MemoryDistiller / tools / claudeCli)。
@@ -118,9 +129,9 @@ LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取
 ## 建議動手順序
 
 1. **里程碑 A** ✅ 已完成——已解鎖發布。
-2. **C1(SQL 下推)+ C2(SSE heartbeat)** → 對日常體感與部署穩定性影響最大。
-3. **D1(檢索便宜升級)** → 破萬 chunk 前完成,召回率立即改善。
-4. **E 的次要 bug** → 隨手清。
+2. **C1–C5(效能與規模化)** ✅ 已完成——日常體感與部署穩定性。
+3. **D1(檢索便宜升級:CJK bigram)** ✅ 已完成——召回率立即改善。
+4. **E 的次要 bug** ✅ 已完成——六項全修,附 hermetic 測試。
 5. **D2(sqlite-vec 混合檢索)+ D3(記憶整併)** → 這是**差異化護城河**:一個會累積、
    會整併組織知識的多代理系統,在開源界比「又一個 RAG chatbot」稀缺得多。
 6. **里程碑 B(公網硬化)** → 視社群自架需求推進。

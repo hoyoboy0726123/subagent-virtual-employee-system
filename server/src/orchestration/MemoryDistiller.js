@@ -15,7 +15,7 @@
 // stance + their final commitment + the report) so memory works offline too.
 // MEETING_MEMORY_DISABLE=1 turns the whole feature off.
 import { generate, llmEnabled } from '../reasoning/llm.js';
-import { insertDocument } from '../storage/knowledge.repo.js';
+import { insertDocument, findMemoryDocument } from '../storage/knowledge.repo.js';
 import { normalizeTraditional } from './output.js';
 
 const disabled = () => /^(1|true|yes|on)$/i.test(process.env.MEETING_MEMORY_DISABLE || '');
@@ -85,6 +85,9 @@ export async function distillMeetingMemories({ meetingId, topic, participants, t
 
   const results = [];
   for (const p of participants) {
+    // Idempotent: never distil a second memory for the same (employee, meeting)
+    // — a re-run (or a partial-failure retry) would otherwise duplicate it.
+    if (meetingId && findMemoryDocument(p.id, meetingId)) continue;
     const memory = byName?.get(p.name) || fallbackMemory(p, topic, transcript);
     if (!memory) continue;
     const doc = insertDocument(p.id, {

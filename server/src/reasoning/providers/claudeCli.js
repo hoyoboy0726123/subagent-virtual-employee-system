@@ -21,6 +21,7 @@
 import { execFile } from 'node:child_process';
 import { config } from '../../config.js';
 import { resolveCli } from './resolveCli.js';
+import { runCli } from './cliRunner.js';
 
 // Tiny FIFO semaphore: subscription rate windows are shared, so we cap
 // concurrent CLI turns instead of letting a 5-person meeting stampede them.
@@ -116,26 +117,14 @@ export function createClaudeCliProvider({ execFileImpl = execFile, _available } 
 
     await sem.acquire();
     try {
-      const stdout = await new Promise((resolve) => {
-        const child = execFileImpl(
-          resolvedCmd,
-          args,
-          {
-            env,
-            timeout: cfg().timeoutSec * 1000,
-            maxBuffer: 32 * 1024 * 1024,
-            windowsHide: true,
-          },
-          (err, out) => resolve(err && !out ? null : String(out || '')),
-        );
-        // The user prompt rides stdin — immune to argv quoting/length limits.
-        // An 'error' handler is MANDATORY: if the CLI exits before draining a
-        // large prompt (>~64KB pipe buffer), the EPIPE/EOF surfaces as an
-        // async stream error that bypasses try/catch and would crash the whole
-        // server (a failed agent turn must degrade, not take the process down).
-        child?.stdin?.on('error', () => {});
-        child?.stdin?.end(prompt);
-      });
+      // runCli feeds `prompt` on stdin and guards against a hung process tree
+      // that would otherwise leak this semaphore slot forever (see cliRunner.js).
+      const stdout = await runCli(
+        resolvedCmd,
+        args,
+        { env, timeoutMs: cfg().timeoutSec * 1000, execFileImpl },
+        prompt,
+      );
       if (!stdout) return null;
 
       const parsed = parseClaudeJson(stdout);

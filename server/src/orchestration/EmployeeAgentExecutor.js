@@ -267,8 +267,8 @@ export async function oneOnOneTurn({ employee, grounding, history, message }) {
 
   if (llmEnabled()) {
     const agentCfg = employee.agentConfig || {};
+    const toolbox = buildToolbox({ employee }); // one toolbox across attempts (remember-dedup)
     for (let attempt = 0; attempt < 2; attempt++) {
-      const toolbox = buildToolbox({ employee });
       const res = await generateAgentic({
         system,
         user,
@@ -334,8 +334,12 @@ async function runOrFallback({ employee, grounding, user, fallback }) {
     const temperature = Number.isFinite(agentCfg.temperature)
       ? agentCfg.temperature
       : 0.72 + ((seedOf(employee.id || employee.name) % 16) / 100); // 0.72–0.87
+    // ONE toolbox across both attempts: if attempt 1 already wrote a `remember`
+    // to the KB and then failed, a fresh toolbox on attempt 2 would re-run the
+    // same remember and duplicate the memory. Reusing it also carries the
+    // remember-dedup set forward (and accumulates honest citations).
+    const toolbox = buildToolbox({ employee });
     for (let attempt = 0; attempt < 2; attempt++) {
-      const toolbox = buildToolbox({ employee });
       const res = await generateAgentic({
         system,
         user,

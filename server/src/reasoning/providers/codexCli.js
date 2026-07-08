@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../../config.js';
 import { resolveCli } from './resolveCli.js';
+import { runCli } from './cliRunner.js';
 
 function createSemaphore(max) {
   let active = 0;
@@ -89,22 +90,14 @@ export function createCodexCliProvider({ execFileImpl = execFile, _available } =
 
     await sem.acquire();
     try {
-      const stdout = await new Promise((resolve) => {
-        const child = execFileImpl(
-          resolvedCmd,
-          args,
-          {
-            timeout: cfg().timeoutSec * 1000,
-            maxBuffer: 32 * 1024 * 1024,
-            windowsHide: true,
-          },
-          (err, out) => resolve(err && !out ? null : String(out || '')),
-        );
-        // Mandatory stdin error handler — see claudeCli.js: a CLI that exits
-        // before draining a large prompt would otherwise crash the server.
-        child?.stdin?.on('error', () => {});
-        child?.stdin?.end(prompt);
-      });
+      // runCli feeds `prompt` on stdin and guards against a hung process tree
+      // that would otherwise leak this semaphore slot forever (see cliRunner.js).
+      const stdout = await runCli(
+        resolvedCmd,
+        args,
+        { timeoutMs: cfg().timeoutSec * 1000, execFileImpl },
+        prompt,
+      );
       if (!stdout) return null;
       const text = parseCodexJsonl(stdout);
       return text ? { text, functionCalls: [], raw: { stdout } } : null;

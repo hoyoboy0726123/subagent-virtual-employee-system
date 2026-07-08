@@ -98,7 +98,7 @@ def _pdf_tables_markdown(path):
         import pdfplumber
     except Exception:
         return ""
-    def credible(rows, strict):
+    def credible(rows, strict, page_text_len=0):
         """Filter out things that are not really tables (stray lines / prose)."""
         if len(rows) < 2 or max(len(r) for r in rows) < 2:
             return False
@@ -108,10 +108,18 @@ def _pdf_tables_markdown(path):
         # masquerade as a table. Demand a consistent rectangular grid with
         # mostly filled cells before we believe it.
         widths = {len(r) for r in rows}
-        if len(widths) != 1:
+        # A two-column page layout (academic papers etc.) is exactly a 2-wide,
+        # fully-filled "grid" — so require >=3 columns for a text-inferred table.
+        if len(widths) != 1 or max(widths) < 3:
             return False
         cells = [str(c or "").strip() for r in rows for c in r]
-        return sum(1 for c in cells if c) / len(cells) >= 0.75
+        if sum(1 for c in cells if c) / len(cells) < 0.75:
+            return False
+        # A real table is a small part of the page; if the "table" swallowed most
+        # of the page's text, it's the page's prose reflowed into columns.
+        if page_text_len and sum(len(c) for c in cells) > 0.6 * page_text_len:
+            return False
+        return True
 
     def to_block(rows, page_no):
         width = max(len(r) for r in rows)
@@ -148,10 +156,11 @@ def _pdf_tables_markdown(path):
                 # the grid from text alignment (expensive), only while there's
                 # ample time budget left.
                 if not found and (time.monotonic() - started) < TIME_BUDGET_S * 0.5:
+                    page_text_len = len(page.extract_text() or "")
                     settings = {"vertical_strategy": "text", "horizontal_strategy": "text"}
                     for table in page.extract_tables(settings) or []:
                         rows = [r for r in table if r and any(str(c or "").strip() for c in r)]
-                        if credible(rows, strict=True):
+                        if credible(rows, strict=True, page_text_len=page_text_len):
                             found.append(rows)
                 blocks += [to_block(rows, page_no) for rows in found]
                 page.flush_cache()
