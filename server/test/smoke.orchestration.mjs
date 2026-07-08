@@ -177,45 +177,53 @@ try {
     assert.notEqual(tasks[0].approach, tasks[1].approach, 'assignees get distinct approaches');
   });
 
-  // --- Phase 15: the manager agent chairs the meeting (dynamic speaking order) ---
-  const { pickNextSpeaker } = await import('../src/orchestration/MeetingChair.js');
+  // --- Phase 15 + C3: the manager agent orders the WHOLE round in one call ---
+  const { planRoundOrder } = await import('../src/orchestration/MeetingChair.js');
   await (async () => {
     const chairConvo = new ConversationState({ topic });
     chairConvo.add({ round: 1, speaker: 'Ada Lin', role: '資料科學家', text: '成本估算還沒人回答，這是最大風險。' });
     const roster = [analyst, designer];
 
-    // Offline: degrades to the deterministic order (previous behaviour, exactly).
-    const off = await pickNextSpeaker({
-      topic, roundTitle: '分析與風險', roundGoal: '深入分析', convo: chairConvo, remaining: roster,
+    // Offline: degrades to the deterministic input order (previous behaviour).
+    const off = await planRoundOrder({
+      topic, roundTitle: '分析與風險', roundGoal: '深入分析', convo: chairConvo, participants: roster,
     });
-    assert.equal(off.employee, analyst, 'no LLM → first remaining speaker (stable order)');
     assert.equal(off.live, false);
+    assert.deepEqual(off.order.map((o) => o.employee), roster, 'no LLM → input order preserved');
 
-    // Live: the chair routes to the right persona and attaches a follow-up.
+    // Live: ONE call orders the whole round + attaches a per-person follow-up.
     const prompts = [];
     const fakeGen = async ({ user }) => {
       prompts.push(user);
-      return { text: '{"next":"Bo Chen","question":"行動端的結帳流程你打算怎麼簡化？"}', functionCalls: [] };
+      return { text: '{"order":[{"name":"Bo Chen","question":"行動端的結帳流程你打算怎麼簡化？"},{"name":"Ada Lin","question":""}]}', functionCalls: [] };
     };
-    const live = await pickNextSpeaker({
-      topic, roundTitle: '分析與風險', roundGoal: '深入分析', convo: chairConvo, remaining: roster, _generate: fakeGen,
+    const live = await planRoundOrder({
+      topic, roundTitle: '分析與風險', roundGoal: '深入分析', convo: chairConvo, participants: roster, _generate: fakeGen,
     });
-    assert.equal(live.employee, designer, 'chair picked the named participant');
-    assert.equal(live.question, '行動端的結帳流程你打算怎麼簡化？');
     assert.equal(live.live, true);
-    assert.ok(prompts[0].includes('成本估算') && prompts[0].includes('Bo Chen'),
-      'chair sees the conversation and the remaining roster');
+    assert.equal(prompts.length, 1, 'C3: the whole round is planned in ONE chair call');
+    assert.deepEqual(live.order.map((o) => o.employee.name), ['Bo Chen', 'Ada Lin'], 'chair reordered the round');
+    assert.equal(live.order[0].question, '行動端的結帳流程你打算怎麼簡化？', 'per-person follow-up carried');
+    assert.equal(live.order[1].question, null, 'empty follow-up → null');
 
-    // A hallucinated name falls back safely.
-    const bogus = await pickNextSpeaker({
-      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, remaining: roster,
-      _generate: async () => ({ text: '{"next":"不存在的人","question":""}', functionCalls: [] }),
+    // Robust: a plan that omits someone still lets them speak (appended), and a
+    // pure-garbage plan falls back to the deterministic order.
+    const partial = await planRoundOrder({
+      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, participants: roster,
+      _generate: async () => ({ text: '{"order":[{"name":"Bo Chen"},{"name":"不存在的人"}]}', functionCalls: [] }),
     });
-    assert.equal(bogus.employee, analyst, 'invalid pick → deterministic fallback');
-    assert.equal(bogus.live, false);
+    assert.deepEqual(partial.order.map((o) => o.employee.name), ['Bo Chen', 'Ada Lin'],
+      'omitted participant appended; hallucinated name dropped; nobody silenced');
+
+    const garbage = await planRoundOrder({
+      topic, roundTitle: 'x', roundGoal: 'y', convo: chairConvo, participants: roster,
+      _generate: async () => ({ text: 'not json at all', functionCalls: [] }),
+    });
+    assert.equal(garbage.live, false);
+    assert.deepEqual(garbage.order.map((o) => o.employee), roster, 'unparseable plan → deterministic fallback');
 
     passed++;
-    console.log('  ✓ MeetingChair: dynamic speaker picking with safe deterministic fallback');
+    console.log('  ✓ MeetingChair: whole-round ordering in one call, robust fallbacks (C3)');
   })();
 
   // --- Milestone C2: an aborted signal stops the run at a round boundary ---

@@ -15,7 +15,7 @@
 import { ConversationState } from './ConversationState.js';
 import * as executor from './EmployeeAgentExecutor.js';
 import { synthesizeMeetingReport } from './ReportSynthesizer.js';
-import { pickNextSpeaker } from './MeetingChair.js';
+import { planRoundOrder } from './MeetingChair.js';
 import { groundingFor } from '../storage/retrieval.js';
 import * as engine from '../reasoning/engine.js';
 
@@ -119,19 +119,16 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
       const { title: roundTitle, goal: roundGoal } = plan[r] || DEEPEN_ROUND;
       emit({ type: 'round', round: roundNo, roundTitle, roundGoal });
 
-      // The manager agent chairs the round — it picks WHO speaks next (and may
-      // attach a follow-up question). Everyone still speaks once per round;
-      // offline this degrades to the deterministic order.
-      const remaining = [...participants];
-      while (remaining.length) {
+      // The manager agent chairs the round — ONE call plans the whole round's
+      // speaking order (+ optional per-person follow-ups); everyone still speaks
+      // exactly once. Offline this degrades to the deterministic input order.
+      const plannedRound = await planRoundOrder({ topic, roundTitle, roundGoal, convo, participants });
+      for (const pick of plannedRound.order) {
         if (signal?.aborted) break; // stop between speakers too, to save calls
         // The human manager's live interjections take the floor first.
         drainInterjections(runId, convo, roundNo, roundTitle, emit);
 
-        const pick = await pickNextSpeaker({ topic, roundTitle, roundGoal, convo, remaining });
         const emp = pick.employee;
-        remaining.splice(remaining.indexOf(emp), 1);
-
         const view = convo.contextFor(emp.name, { window: Math.max(participants.length, 4) });
         // Surface the manager's most recent interjection as a binding directive.
         const managerTurns = convo.turns.filter((t) => t.isManager);
@@ -163,7 +160,7 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
           text: turn.text,
           live: turn.live,
           toolCalls: turn.toolCalls || 0,
-          pickedBy: pick.live ? 'manager' : 'sequence',
+          pickedBy: plannedRound.live ? 'manager' : 'sequence',
           managerQuestion: pick.question || null,
           citations: turn.citations,
         });
