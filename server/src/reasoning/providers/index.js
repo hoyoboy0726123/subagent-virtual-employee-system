@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../../config.js';
 import { getSetting } from '../../storage/settings.repo.js';
+import { effectiveGeminiKey } from '../apiKeys.js';
 import { createClaudeCliProvider } from './claudeCli.js';
 import { createCodexCliProvider } from './codexCli.js';
 
@@ -67,13 +68,18 @@ function codexLoggedIn() {
  */
 export function listProviders() {
   const active = currentProviderName();
+  // Effective key = UI-saved (settings) || env var — must match llmEnabled(),
+  // otherwise the dropdown says「離線」while the status pill honestly says live.
+  const googleKey = effectiveGeminiKey();
   const google = {
     id: 'google',
     label: 'Google Gemini API',
     model: config.llm.model,
-    available: Boolean(config.llm.apiKey),
+    available: Boolean(googleKey),
     selectable: true,
-    detail: config.llm.apiKey ? `可用（${config.llm.model}）` : '未設定 GEMINI_API_KEY——選用時將以離線推理引擎執行',
+    detail: googleKey
+      ? `可用（${config.llm.model}）`
+      : '未設定金鑰——點頂欄 🔑 輸入 Gemini 金鑰（或設定 GEMINI_API_KEY）；未設定時以離線推理引擎執行',
   };
   const cli = ['claude-cli', 'codex-cli'].map((id) => {
     const p = instance(id);

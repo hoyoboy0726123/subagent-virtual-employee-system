@@ -496,19 +496,25 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
     } finally { setBusy(false); }
   };
 
-  const [ending, setEnding] = useState(false);
+  // Which close action is in flight: null | 'save' | 'discard'. Saving runs an
+  // LLM distillation server-side (10–30s) — the UI must show honest progress or
+  // the manager will assume the app hung.
+  const [ending, setEnding] = useState(null);
   const end = async (save) => {
     if (ending) return; // double-click guard
-    setEnding(true);
+    setEnding(save ? 'save' : 'discard');
+    setErr('');
     try {
       const res = await api.post(`/dialogues/${dialogue.id}/close`, { save });
       if (res.saved) onSaved();
       else onClose();
-    } catch (e) { setErr(e.message); setEnding(false); }
+    } catch (e) { setErr(e.message); setEnding(null); }
   };
 
   return (
-    <Modal title={`💬 與 ${employee.name} 的 1 on 1`} onClose={onClose} wide>
+    // While a close action runs, the modal must not be dismissable — the manager
+    // would lose the progress feedback and assume the save silently died.
+    <Modal title={`💬 與 ${employee.name} 的 1 on 1`} onClose={() => { if (!ending) onClose(); }} wide>
       <p className="muted sm">
         沒有輪數限制——談到你滿意為止。要他查資料就直接說（例如「幫我查一下…的最新現況」）。
       </p>
@@ -565,10 +571,20 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
       ) : (
         <div className="chat-controls">
           <p className="muted">要把這場面談的紀錄整理後存進 {employee.name} 的知識庫嗎？（存下來，他之後開會就記得這些結論。）</p>
+          {ending === 'save' && (
+            <div className="banner-ok sm">
+              💾 正在把面談整理成知識文件並建立索引（AI 整理約需 10–30 秒,請稍候）…
+            </div>
+          )}
+          {ending === 'discard' && <div className="banner-ok sm">正在結束面談…</div>}
           <div className="row end">
-            <button className="btn-ghost sm" onClick={() => setClosing(false)}>取消</button>
-            <button className="btn-ghost sm" onClick={() => end(false)}>不儲存，直接結束</button>
-            <button className="btn sm" onClick={() => end(true)}>💾 儲存到知識庫並結束</button>
+            <button className="btn-ghost sm" onClick={() => setClosing(false)} disabled={Boolean(ending)}>取消</button>
+            <button className="btn-ghost sm" onClick={() => end(false)} disabled={Boolean(ending)}>
+              {ending === 'discard' ? '結束中…' : '不儲存，直接結束'}
+            </button>
+            <button className="btn sm" onClick={() => end(true)} disabled={Boolean(ending)}>
+              {ending === 'save' ? '⏳ 整理紀錄中…' : '💾 儲存到知識庫並結束'}
+            </button>
           </div>
         </div>
       )}
