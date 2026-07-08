@@ -165,7 +165,17 @@ export async function executeTask(goalId, order) {
       .map((t) => `- ${t.assignee}（${t.role}）：${t.subtask}`)
       .join('\n');
 
-    const turn = await taskDeliverableTurn({ employee, goal, task, others });
+    // Feed the ALREADY-DELIVERED work from teammates so the assignee can RESPOND
+    // to hand-off requests aimed at them (instead of the manager chasing them).
+    // This makes cross-dependencies converge within the existing task set — a
+    // hand-off note is never auto-promoted to a new task, so nothing explodes.
+    const priorDeliverables = (goal.tasks || [])
+      .filter((t) => Number(t.order) !== Number(order) && t.deliverable)
+      .slice(0, 4)
+      .map((t) => `── ${t.assignee}（${t.role}）已交付 ──\n${String(t.deliverable).slice(0, 1400)}`)
+      .join('\n\n');
+
+    const turn = await taskDeliverableTurn({ employee, goal, task, others, priorDeliverables });
     if (!turn) throw badRequest('模型這次沒有產出交付物，請再試一次。');
 
     const tasks = goal.tasks.map((t, i) => (i === idx ? {

@@ -229,7 +229,7 @@ export async function goalTurn({ employee, grounding, context }) {
  * callers guard with llmEnabled().
  * @returns {Promise<{text, live, toolCalls, citations}|null>}
  */
-export async function taskDeliverableTurn({ employee, goal, task, others, grounding = [] }) {
+export async function taskDeliverableTurn({ employee, goal, task, others, priorDeliverables, grounding = [] }) {
   const expertise = asList(employee.expertise);
   const system = [
     `你是 ${employee.name}（${employee.roleTitle}），正在執行團隊目標中屬於你的任務，並產出最終交付物。`,
@@ -240,6 +240,8 @@ export async function taskDeliverableTurn({ employee, goal, task, others, ground
     '- 你要交付的是「成品本身」——不是計畫、不是承諾、不是待辦清單。',
     '- 需要外部事實（新聞、市場、法規、技術現況）時，先用 web_search 查證再寫；引用一律附來源名稱與 URL。',
     '- 查不到就誠實說查不到、據實交付查得到的部分，絕不可杜撰來源或數據。',
+    '- 若同事已交付的內容中有「交接／對接」事項點名你，請在你的交付物中直接回應或吸收，讓相依關係在這一輪就收斂。',
+    '- 交接說明只列「真正需要對方配合、且落在對方任務範圍內」的關鍵事項，力求收斂；不要替別人開新工作、不要無限延伸，能自己吸收的就別往外拋。',
     '- 以繁體中文輸出 Markdown 交付物全文，只輸出交付物本身，不要前言或旁白。',
   ].filter(Boolean).join('\n');
 
@@ -250,6 +252,7 @@ export async function taskDeliverableTurn({ employee, goal, task, others, ground
     `【你的子任務】${task.subtask}`,
     task.approach ? `【你先前承諾的做法】\n${task.approach}` : '',
     others ? `【其他負責人的分工（避免重複、注意交接）】\n${others}` : '',
+    priorDeliverables ? `【同事已交付的內容——若其中點名你，請在你的交付物裡回應；避免重複他們已做的】\n${priorDeliverables}` : '',
     '',
     '請現在完成這個子任務，輸出完整交付物。',
   ].filter(Boolean).join('\n');
