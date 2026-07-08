@@ -243,8 +243,10 @@ export default function MeetingsPage({ refreshKey, onChange }) {
 }
 
 // A single transcript turn — shared by the live meeting room and the archive
-// view. Manager (human) turns render distinctly from employee agents.
-function TurnRow({ t }) {
+// view. Manager (human) turns render distinctly from employee agents. Memoized
+// (C5): in a long/streaming transcript, already-rendered turns keep a stable
+// `t` reference, so they skip re-render when the room's input state changes.
+const TurnRow = React.memo(function TurnRow({ t }) {
   if (t.isManager) {
     return (
       <div className="turn turn-manager">
@@ -279,7 +281,7 @@ function TurnRow({ t }) {
       </div>
     </div>
   );
-}
+});
 
 // Phase 16 — the meeting room. The discussion never ends on its own: the
 // MANAGER (the user) interjects to steer, continues for more rounds, and

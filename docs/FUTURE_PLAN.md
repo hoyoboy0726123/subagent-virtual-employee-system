@@ -40,19 +40,18 @@ CONTRIBUTING/SECURITY、跨平台 `setup:markitdown`、user-first README + CHANG
 `res.on('close')` 的 AbortSignal 穿透到 orchestrator,回合/發言邊界檢查後提前收束並
 持久化已完成回合。commit `3e0f253`。
 
-### C3【高】會議 R×P 序列 LLM 呼叫的牆鐘時間
-- 3 輪×4 人 ≈ 24+ 次模型呼叫、Gemini 1.5–4 分鐘、CLI provider 5–15 分鐘;
-  `research` 是非串流 JSON 卻可能跑數分鐘(瀏覽器必超時)。
-- **修法**:主持人一次呼叫排出整輪順序(P 次挑人併成 1 次);下一位發言者的
-  grounding/挑人與當前發言並行預取;`research` 改 SSE。
+### C3 ✅【高】會議主席批次排序（已完成)
+主席改為每輪一次排出整輪順序 + 每人追問(P 次挑人 → 1 次),移除每輪 P−1 次序列
+LLM 往返;robust fallback。commit `bdcfed7`。（未做:grounding 並行預取、research
+改 SSE —— 留待後續。)
 
-### C4【中】大檔上傳/刪除阻塞 event loop
-- 15MiB 上傳 → ~3.6 萬 chunk × 2 INSERT 同步跑,凍結 event loop 數秒。限制單文件
-  chunk 數、分批交易 + `setImmediate` 讓出。`deleteDocument` 逐 chunk DELETE →
-  改一句 IN 子查詢。`listDocuments` 加 `WHERE employee_id=?`、列表不含 content。
+### C4 ✅【中】大檔上傳/刪除不阻塞 event loop（已完成)
+`MAX_CHUNKS_PER_DOC` 上限(預設 2000,超出丟棄並記錄);deleteDocument 單句 IN 子
+查詢;listDocuments count 加 `WHERE employee_id`。commit `e73ed31`。
 
-### C5【中】前端大 transcript 渲染
-- `React.memo(TurnRow)` + 穩定 key;超長對話再虛擬化。1on1 無上限輪數下尤其重要。
+### C5 ✅【中】前端大 transcript 渲染（已完成)
+`React.memo(TurnRow)` + `React.memo(Markdown)` —— keystroke 不再重繪/重解析已渲染
+發言。超長對話虛擬化留待需要時再做。
 
 ---
 

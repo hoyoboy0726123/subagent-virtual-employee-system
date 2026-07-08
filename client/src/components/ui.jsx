@@ -20,8 +20,10 @@ export function ExportButtons({ path, compact = false }) {
 }
 
 // Minimal, dependency-free markdown renderer — good enough for the reports the
-// engine produces (headings, bold, list items, paragraphs).
-export function Markdown({ text = '' }) {
+// engine produces (headings, bold, list items, paragraphs). Memoized (C5): the
+// parse is O(text); in a growing meeting/1on1 transcript, unchanged rows must
+// not re-parse on every keystroke in a sibling input.
+function MarkdownImpl({ text = '' }) {
   const lines = String(text).split('\n');
   const blocks = [];
   let list = null;
@@ -62,6 +64,8 @@ export function Markdown({ text = '' }) {
   flush();
   return <div className="markdown">{blocks}</div>;
 }
+
+export const Markdown = React.memo(MarkdownImpl);
 
 export function Modal({ title, children, onClose, wide }) {
   return (
