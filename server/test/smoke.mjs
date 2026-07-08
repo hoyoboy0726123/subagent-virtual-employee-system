@@ -687,6 +687,21 @@ try {
     assert.equal(json.totalPages, 1);
   });
 
+  await step('meetings list rows are LIGHTWEIGHT (C1): no transcript/grounding blobs, counts as numbers', async () => {
+    const { json } = await api('GET', '/api/meetings?pageSize=1');
+    const row = json.items[0];
+    assert.ok(row, 'has a row');
+    assert.equal(row.transcript, undefined, 'no transcript blob in the list row');
+    assert.equal(row.minutes, undefined, 'no minutes blob');
+    assert.equal(row.grounding, undefined, 'no grounding blob');
+    assert.equal(row.report, undefined, 'no report body');
+    assert.equal(typeof row.groundingCount, 'number', 'groundingCount is a number from SQL');
+    assert.ok(Array.isArray(row.participants), 'participants (names) kept for the list');
+    // Clicking still gets the full record via GET /:id.
+    const { json: full } = await api('GET', `/api/meetings/${row.id}`);
+    assert.ok(Array.isArray(full.transcript), 'detail fetch has the full transcript');
+  });
+
   await step('goals list supports search/filter/sort/pagination', async () => {
     const { status, json } = await api('GET', `/api/goals?q=beta&assigneeId=${empId}&status=in-progress&sort=title-asc&page=1&pageSize=1`);
     assert.equal(status, 200);
@@ -695,6 +710,18 @@ try {
     assert.equal(json.items[0].id, goalId);
     assert.equal(json.pageSize, 1);
     assert.equal(json.totalPages, 1);
+  });
+
+  await step('goals list rows are LIGHTWEIGHT (C1): no tasks/output blobs, taskCount as number', async () => {
+    const { json } = await api('GET', '/api/goals?pageSize=1');
+    const row = json.items[0];
+    assert.ok(row, 'has a row');
+    assert.equal(row.tasks, undefined, 'no tasks blob in the list row');
+    assert.equal(row.output, undefined, 'no output body');
+    assert.equal(row.grounding, undefined, 'no grounding blob');
+    assert.equal(typeof row.taskCount, 'number', 'taskCount is a number from SQL');
+    const { json: full } = await api('GET', `/api/goals/${row.id}`);
+    assert.ok(Array.isArray(full.tasks), 'detail fetch has the full tasks');
   });
 
   console.log(`\n  All ${passed} smoke checks passed ✅\n`);

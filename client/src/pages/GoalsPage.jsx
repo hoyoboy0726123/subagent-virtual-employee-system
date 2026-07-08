@@ -63,9 +63,16 @@ export default function GoalsPage({ refreshKey, onChange }) {
     } catch (e) { setErr(e.message); } finally { setBusy(false); setProgress(null); }
   };
 
+  // List rows are lightweight (no tasks/output/grounding) — fetch the full
+  // record on click to open the detail modal.
+  const openGoal = async (goal) => {
+    try { setOpen(await api.get(`/goals/${goal.id}`)); } catch (e) { setErr(e.message); }
+  };
+
   const setStatus = async (goal, status) => {
     const updated = await api.put(`/goals/${goal.id}`, { status });
-    setGoalData((data) => ({ ...data, items: data.items.map((g) => (g.id === goal.id ? updated : g)) }));
+    // Patch only the status so the lightweight list row keeps its shape.
+    setGoalData((data) => ({ ...data, items: data.items.map((g) => (g.id === goal.id ? { ...g, status: updated.status } : g)) }));
     if (open?.id === goal.id) setOpen(updated);
   };
 
@@ -154,9 +161,9 @@ export default function GoalsPage({ refreshKey, onChange }) {
           <div className="list">
             {goals.map((g) => (
               <div key={g.id} className="list-item">
-                <button className="list-main" onClick={() => setOpen(g)}>
+                <button className="list-main" onClick={() => openGoal(g)}>
                   <strong>{g.title}</strong>
-                  <span className="muted">{(g.assignees || []).map((p) => p.name).join('、')} · {g.tasks?.length || 0} 項任務</span>
+                  <span className="muted">{(g.assignees || []).map((p) => p.name).join('、')} · {g.taskCount ?? g.tasks?.length ?? 0} 項任務</span>
                 </button>
                 <select value={g.status} onChange={(e) => setStatus(g, e.target.value)} className={`status status-${g.status}`}>
                   {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}

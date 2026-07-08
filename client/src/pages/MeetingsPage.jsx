@@ -117,10 +117,17 @@ export default function MeetingsPage({ refreshKey, onChange }) {
     }
   };
 
-  // Re-open a still-discussing meeting from the list.
-  const reopenRoom = (m) => setRoom({
-    meetingId: m.id, topic: m.topic, transcript: m.transcript, runId: null, streaming: false, phase: null,
-  });
+  // List rows are lightweight (no transcript/report) — fetch the full record on
+  // click, either into the read-only view or back into the meeting room.
+  const openMeeting = async (m) => {
+    try { setOpen(await api.get(`/meetings/${m.id}`)); } catch (e) { setErr(e.message); }
+  };
+  const reopenRoom = async (m) => {
+    try {
+      const full = await api.get(`/meetings/${m.id}`);
+      setRoom({ meetingId: full.id, topic: full.topic, transcript: full.transcript, runId: null, streaming: false, phase: null });
+    } catch (e) { setErr(e.message); }
+  };
 
   const del = async (id) => { await api.del(`/meetings/${id}`); onChange?.(); };
   const patchFilters = (patch) => setFilters((f) => ({ ...f, ...patch, page: patch.page ?? 1 }));
@@ -210,7 +217,7 @@ export default function MeetingsPage({ refreshKey, onChange }) {
               <div key={m.id} className="list-item">
                 <button
                   className="list-main"
-                  onClick={() => (m.status === 'discussing' ? reopenRoom(m) : setOpen(m))}
+                  onClick={() => (m.status === 'discussing' ? reopenRoom(m) : openMeeting(m))}
                 >
                   <strong>
                     {m.status === 'discussing' && <span className="tag tag-live">🟢 討論中</span>}
@@ -218,7 +225,7 @@ export default function MeetingsPage({ refreshKey, onChange }) {
                   </strong>
                   <span className="muted">
                     {(m.participants || []).map((p) => p.name).join('、')} · {new Date(m.createdAt).toLocaleString('zh-Hant')}
-                    {m.grounding?.length ? ` · 📚 ${m.grounding.length} 筆知識依據` : ''}
+                    {m.groundingCount ? ` · 📚 ${m.groundingCount} 筆知識依據` : ''}
                   </span>
                 </button>
                 {m.status !== 'discussing' && <ExportButtons path={`/meetings/${m.id}`} compact />}

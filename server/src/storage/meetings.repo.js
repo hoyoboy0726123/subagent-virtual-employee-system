@@ -23,66 +23,61 @@ function rowToMeeting(row) {
   };
 }
 
-function matchesText(meeting, q = '') {
-  const needle = String(q || '').trim().toLowerCase();
-  if (!needle) return true;
-  const haystack = [
-    meeting.topic,
-    ...(meeting.participants || []).flatMap((p) => [p.name, p.roleTitle]),
-    meeting.report,
-  ].join(' ').toLowerCase();
-  return haystack.includes(needle);
+// Lightweight list row (C1): only what the list UI shows — no transcript/
+// minutes/grounding blobs are parsed. `groundingCount` comes from SQL.
+function rowToMeetingLite(row) {
+  return {
+    id: row.id,
+    topic: row.topic,
+    participants: j(row.participants, []),
+    status: row.status || 'concluded',
+    groundingCount: row.groundingCount || 0,
+    runtime: j(row.runtime, {}),
+    createdAt: row.created_at,
+  };
 }
 
-function matchesParticipant(meeting, participantId = '') {
-  if (!participantId) return true;
-  return (meeting.participantIds || []).includes(participantId);
-}
-
-function matchesRuntime(meeting, runtime = '') {
-  if (!runtime) return true;
-  return meeting.runtime?.mode === runtime || meeting.runtime?.engine === runtime;
-}
-
-function matchesLive(meeting, live = '') {
-  if (live === '' || live === undefined || live === null) return true;
-  const truthy = String(live) === 'true';
-  return Boolean(meeting.runtime?.live && !meeting.runtime?.fallback) === truthy;
-}
-
-function sortMeetings(items, sort = 'newest') {
-  const list = [...items];
-  switch (sort) {
-    case 'oldest':
-      return list.sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
-    case 'topic-asc':
-      return list.sort((a, b) => String(a.topic).localeCompare(String(b.topic), 'zh-Hant'));
-    case 'topic-desc':
-      return list.sort((a, b) => String(b.topic).localeCompare(String(a.topic), 'zh-Hant'));
-    case 'newest':
-    default:
-      return list.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+function meetingWhere(opts) {
+  const where = [];
+  const params = [];
+  if (opts.q && String(opts.q).trim()) {
+    const like = `%${String(opts.q).trim()}%`;
+    where.push('(topic LIKE ? OR report LIKE ? OR participants LIKE ?)');
+    params.push(like, like, like);
   }
+  if (opts.participantId) { where.push('participant_ids LIKE ?'); params.push(`%"${opts.participantId}"%`); }
+  if (opts.runtime) {
+    where.push("(json_extract(runtime,'$.mode') = ? OR json_extract(runtime,'$.engine') = ?)");
+    params.push(opts.runtime, opts.runtime);
+  }
+  if (opts.live === 'true' || opts.live === true) {
+    where.push("(json_extract(runtime,'$.live') = 1 AND coalesce(json_extract(runtime,'$.fallback'),0) = 0)");
+  } else if (opts.live === 'false' || opts.live === false) {
+    where.push("NOT (json_extract(runtime,'$.live') = 1 AND coalesce(json_extract(runtime,'$.fallback'),0) = 0)");
+  }
+  return { sql: where.length ? `WHERE ${where.join(' AND ')}` : '', params };
 }
+
+const MEETING_ORDER = {
+  oldest: 'created_at ASC',
+  'topic-asc': 'topic ASC',
+  'topic-desc': 'topic DESC',
+  newest: 'created_at DESC',
+};
 
 export function listMeetings(opts = {}) {
-  const all = getDb()
-    .prepare('SELECT * FROM meetings ORDER BY created_at DESC')
-    .all()
-    .map(rowToMeeting);
-
-  const filtered = sortMeetings(all.filter((meeting) => (
-    matchesText(meeting, opts.q)
-    && matchesParticipant(meeting, opts.participantId)
-    && matchesRuntime(meeting, opts.runtime)
-    && matchesLive(meeting, opts.live)
-  )), opts.sort);
-
+  const db = getDb();
+  const { sql: whereSql, params } = meetingWhere(opts);
+  const order = MEETING_ORDER[opts.sort] || MEETING_ORDER.newest;
   const pageSize = Math.min(Math.max(Number(opts.pageSize) || 10, 1), 100);
   const page = Math.max(Number(opts.page) || 1, 1);
-  const total = filtered.length;
-  const start = (page - 1) * pageSize;
-  const items = filtered.slice(start, start + pageSize);
+
+  const total = db.prepare(`SELECT COUNT(*) AS n FROM meetings ${whereSql}`).get(...params).n;
+  const items = db.prepare(
+    `SELECT id, topic, participants, status, runtime, created_at,
+            json_array_length(grounding) AS groundingCount
+     FROM meetings ${whereSql} ORDER BY ${order} LIMIT ? OFFSET ?`,
+  ).all(...params, pageSize, (page - 1) * pageSize).map(rowToMeetingLite);
 
   return {
     items,
@@ -90,7 +85,7 @@ export function listMeetings(opts = {}) {
     pageSize,
     total,
     totalPages: Math.max(Math.ceil(total / pageSize), 1),
-    hasMore: start + pageSize < total,
+    hasMore: page * pageSize < total,
     filters: {
       q: opts.q || '',
       participantId: opts.participantId || '',
@@ -101,8 +96,17 @@ export function listMeetings(opts = {}) {
   };
 }
 
-export function listAllMeetings() {
-  return listMeetings({ page: 1, pageSize: 1000000 }).items;
+// Aggregate run stats for the dashboard — computed in SQL, no full-table load.
+export function meetingStats() {
+  const db = getDb();
+  const total = db.prepare('SELECT COUNT(*) AS n FROM meetings').get().n;
+  const live = db.prepare(
+    "SELECT COUNT(*) AS n FROM meetings WHERE json_extract(runtime,'$.live') = 1 AND coalesce(json_extract(runtime,'$.fallback'),0) = 0",
+  ).get().n;
+  const turns = db.prepare(
+    "SELECT coalesce(SUM(json_extract(runtime,'$.totalTurns')),0) AS total, coalesce(SUM(json_extract(runtime,'$.liveTurns')),0) AS live FROM meetings",
+  ).get();
+  return { total, live, totalTurns: turns.total, liveTurns: turns.live };
 }
 
 export function getMeeting(meetingId) {
