@@ -177,6 +177,44 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
 }
 
 /**
+ * Run ONE turn for a specific employee the human manager called on ("點名").
+ * Rebuilds the conversation view from the stored transcript, retrieves that
+ * employee's grounding, and asks them to answer — the manager's question (or a
+ * generic "you were called on") lands as a binding directive, so they respond
+ * directly. Returns the raw turn; the caller appends + persists it.
+ */
+export async function directedTurn({ topic, participants, priorTranscript = [], employeeId, question }) {
+  const emp = participants.find((p) => p.id === employeeId);
+  if (!emp) throw new Error('該員工不在這場會議中');
+
+  const { byEmployee } = await groundingFor({ query: question || topic, employees: participants });
+  const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
+
+  const convo = new ConversationState({ topic, participants });
+  for (const t of priorTranscript) convo.add(t);
+  const round = priorTranscript.reduce((m, t) => Math.max(m, t.round || 0), 0) || 1;
+  const managerTurns = convo.turns.filter((t) => t.isManager);
+  const managerDirective = managerTurns.length ? managerTurns[managerTurns.length - 1].text : null;
+
+  const turn = await executor.meetingTurn({
+    employee: emp,
+    grounding: byEmployee[emp.id] || [],
+    context: {
+      topic,
+      round,
+      roundTitle: '主管點名',
+      roundGoal: '回應主管的直接點名',
+      participantList,
+      managerQuestion: question || '主管直接點名你發言，請針對目前的討論給出你的專業意見與立場。',
+      managerDirective,
+      convo: convo.contextFor(emp.name, { window: Math.max(participants.length, 4) }),
+      priorSpeakers: convo.priorSpeakers().filter((n) => n !== emp.name),
+    },
+  });
+  return { employee: emp, turn };
+}
+
+/**
  * Conclude a meeting (Phase 16): the MANAGER decided the discussion is done —
  * only now are the minutes/report synthesized from the full transcript.
  * @param {object} req  { topic, participants, transcript, grounding?, onEvent? }

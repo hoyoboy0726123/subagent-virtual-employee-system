@@ -106,6 +106,14 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
     }
   };
 
+  // Call on ONE employee to speak next (optional question). Runs a real turn;
+  // the returned turn is appended to the room.
+  const callOn = async (employeeId, question) => {
+    if (!room?.meetingId) return;
+    const res = await api.post(`/meetings/${room.meetingId}/call-on`, { employeeId, question });
+    if (res.turn) setRoom((r) => ({ ...r, transcript: [...r.transcript, res.turn] }));
+  };
+
   const conclude = async () => {
     if (!room?.meetingId) return;
     setErr('');
@@ -184,6 +192,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
           employees={employees}
           selectedIds={selected}
           onInterject={interject}
+          onCallOn={callOn}
           onContinue={continueRounds}
           onConclude={conclude}
           onLeave={() => setRoom(null)}
@@ -300,9 +309,12 @@ const TurnRow = React.memo(function TurnRow({ t }) {
 // Phase 16 — the meeting room. The discussion never ends on its own: the
 // MANAGER (the user) interjects to steer, continues for more rounds, and
 // decides when to conclude into minutes + report.
-function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onContinue, onConclude, onLeave }) {
+function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCallOn, onContinue, onConclude, onLeave }) {
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
+  const [callTarget, setCallTarget] = useState('');
+  const [callQuestion, setCallQuestion] = useState('');
+  const [calling, setCalling] = useState(false);
   const endRef = React.useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [room.transcript.length]);
 
@@ -325,10 +337,24 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCo
     return { speakerId: last.speakerId, tool: last.toolCalls > 0 ? '查資料' : null, task: (last.text || '').slice(0, 60) };
   }, [room.streaming, room.transcript]);
 
+  // Colleagues NOT in this meeting — the office picks 2–3 of them to wander in
+  // the background so the room stays alive while participants sit.
+  const wanderPool = useMemo(() => {
+    const inMeeting = new Set(participants.map((p) => p.id));
+    return employees.filter((e) => !inMeeting.has(e.id)).map((e) => ({ id: e.id, name: e.name }));
+  }, [employees, participants]);
+
   const send = async () => {
     if (!note.trim() || sending) return;
     setSending(true);
     try { await onInterject(note); setNote(''); } finally { setSending(false); }
+  };
+
+  const callOn = async () => {
+    if (!callTarget || calling) return;
+    setCalling(true);
+    try { await onCallOn(callTarget, callQuestion.trim()); setCallQuestion(''); }
+    finally { setCalling(false); }
   };
 
   return (
@@ -343,7 +369,7 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCo
         )}
       </div>
 
-      <PixelOffice participants={participants} active={active} />
+      <PixelOffice participants={participants} wanderPool={wanderPool} active={active} />
 
       <div className="live-progress meeting-room-transcript">
         {room.transcript.length === 0 && <p className="muted">（尚無發言）</p>}
@@ -355,6 +381,23 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCo
       </div>
 
       <div className="meeting-room-controls">
+        <div className="callon-row">
+          <select value={callTarget} onChange={(e) => setCallTarget(e.target.value)} disabled={calling || room.streaming}>
+            <option value="">👉 點名某位員工發言…</option>
+            {participants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <input
+            placeholder="（可留空）想問他的問題…"
+            value={callQuestion}
+            onChange={(e) => setCallQuestion(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') callOn(); }}
+            disabled={calling || room.streaming}
+          />
+          <button className="btn sm" onClick={callOn} disabled={calling || room.streaming || !callTarget}>
+            {calling ? '請他發言中…' : '📢 點名發言'}
+          </button>
+        </div>
+        {calling && <ProgressBar label="被點名的員工正在思考回應…" />}
         <div className="interject-row">
           <input
             placeholder="以主管身分插話——員工會把這視為最高優先的討論方向…"

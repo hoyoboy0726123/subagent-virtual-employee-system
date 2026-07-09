@@ -55,6 +55,12 @@ meetingsRouter.post('/meetings/interject', asyncHandler(async (req, res) => {
   res.json(meetings.addInterjection(meetingId, rest));
 }));
 
+// Manager "點名": call on one specific employee to speak next (optional question).
+meetingsRouter.post('/meetings/:id/call-on', asyncHandler(async (req, res) => {
+  const { employeeId, question } = req.body || {};
+  res.json(await meetings.callOnEmployee(req.params.id, { employeeId, question }));
+}));
+
 // The manager concludes the meeting: minutes + report + memory distillation.
 meetingsRouter.post('/meetings/:id/conclude/stream', asyncHandler(async (req, res) => {
   await streamRun(req, res, (send) => meetings.concludeDiscussion(req.params.id, send), 'meeting');

@@ -7,35 +7,51 @@
 // the React lifecycle: it loads sprites once, builds an OfficeState, runs a
 // requestAnimationFrame loop (update + renderFrame), and on every meeting-state
 // change maps our turns → the engine's AgentActivity[] via syncAgentsToOffice.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { OfficeState } from '../pixel-office/engine/officeState';
 import { renderFrame } from '../pixel-office/engine/renderer';
 import { startGameLoop } from '../pixel-office/engine/gameLoop';
 import { loadCharacterPNGs, loadWallPNG } from '../pixel-office/sprites/pngLoader';
 import { syncAgentsToOffice } from '../pixel-office/agentBridge';
 
-const ZOOM = 2;
+const TILE = 16;      // engine tile size
+const MAX_ZOOM = 3;   // don't upscale past this (keeps pixels crisp)
+const MAX_HEIGHT = 460; // cap the office panel height so the transcript stays visible
+const PAD = 22;       // breathing room so name labels above top-row characters aren't clipped
 
 // Map a meeting's participants + who's currently speaking → the engine's
 // AgentActivity[]. The active speaker "works" (types, shows its tool); everyone
-// else sits idle. When the meeting isn't streaming, nobody is working.
-function buildActivities(participants, active) {
+// meeting → AgentActivity[]. The engine has two behaviours: 'working' (sit at a
+// desk) and everything-else (wander the office). Meeting participants are all
+// 'working' so they stay SEATED — the current speaker gets a speech bubble (turn
+// text) and a tool tag when that turn used one. To keep the office alive, a few
+// colleagues who AREN'T in this meeting are added as 'idle' so they wander in the
+// background.
+function buildActivities(participants, wanderers, active) {
   const now = Date.now();
-  return participants.map((p) => {
-    const isActive = active && active.speakerId === p.id;
+  const seated = participants.map((p) => {
+    const isSpeaking = active && active.speakerId === p.id;
     return {
       agentId: p.id,
       name: p.name,
       emoji: '🧑‍💼',
-      state: isActive ? 'working' : 'idle',
-      currentTool: isActive && active.tool ? active.tool : undefined,
+      state: 'working', // seated at their desk — no wandering during a meeting
+      currentTool: isSpeaking && active.tool ? active.tool : undefined,
       lastActive: now,
-      lastTask: isActive ? active.task : undefined,
+      lastTask: isSpeaking ? active.task : undefined, // → speech bubble over the speaker
     };
   });
+  const roaming = wanderers.map((w) => ({
+    agentId: w.id,
+    name: w.name,
+    emoji: '🧑‍💼',
+    state: 'idle', // not in this meeting → mills around the office
+    lastActive: now,
+  }));
+  return [...seated, ...roaming];
 }
 
-export default function PixelOffice({ participants = [], active = null, height = 380 }) {
+export default function PixelOffice({ participants = [], wanderPool = [], active = null, height = 380 }) {
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const officeRef = useRef(null);
@@ -53,14 +69,9 @@ export default function PixelOffice({ participants = [], active = null, height =
         await Promise.all([loadCharacterPNGs(), loadWallPNG()]);
         if (disposed) return;
         const office = new OfficeState(undefined, 'zh-TW');
-        // The upstream engine spawns a "值班工程師" (gateway SRE) character that
-        // belongs to OpenClaw's monitoring dashboard, not our meetings — it has a
-        // human label and would read as a mystery participant. Suppress it (the
-        // constructor + update() both call ensureGatewaySre) without touching the
-        // vendored code, and drop the one already spawned. The unlabeled cat /
-        // lobster easter eggs stay — they're just ambient office life.
-        office.ensureGatewaySre = () => {};
-        office.removeAgent(-9996);
+        // The engine's default "值班工程師" (on-duty engineer) + cat / lobster
+        // easter eggs are kept as ambient office life — they wander in the
+        // background alongside the meeting participants.
         officeRef.current = office;
         setReady(true);
 
@@ -70,21 +81,37 @@ export default function PixelOffice({ participants = [], active = null, height =
           render: (ctx) => {
             const wrap = wrapRef.current;
             if (!wrap) return;
-            const width = wrap.clientWidth;
-            const h = wrap.clientHeight;
+            const avail = wrap.clientWidth;
+            if (!avail) return;
+            const cols = office.layout.cols;
+            const rows = office.layout.rows;
+            // Fit the WHOLE office (both dimensions) — never crop. Size the canvas
+            // to exactly the office so it sits as a crisp centred block, and cap
+            // both the zoom and the height so it doesn't dominate the room.
+            const zoom = Math.min(
+              MAX_ZOOM,
+              (avail - 2 * PAD) / (cols * TILE),
+              (MAX_HEIGHT - 2 * PAD) / (rows * TILE),
+            );
+            const ow = Math.round(cols * TILE * zoom);
+            const oh = Math.round(rows * TILE * zoom);
+            // Canvas is the office + a PAD frame; renderFrame centres the map, so
+            // the padding lands on every side — room for the top row's labels.
+            const cw = ow + 2 * PAD;
+            const chh = oh + 2 * PAD;
             const dpr = window.devicePixelRatio || 1;
-            if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(h * dpr)) {
-              canvas.width = Math.floor(width * dpr);
-              canvas.height = Math.floor(h * dpr);
-              canvas.style.width = `${width}px`;
-              canvas.style.height = `${h}px`;
+            if (canvas.width !== Math.round(cw * dpr) || canvas.height !== Math.round(chh * dpr)) {
+              canvas.width = Math.round(cw * dpr);
+              canvas.height = Math.round(chh * dpr);
+              canvas.style.width = `${cw}px`;
+              canvas.style.height = `${chh}px`;
             }
             ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
             ctx.imageSmoothingEnabled = false;
             renderFrame(
-              ctx, width, h,
+              ctx, cw, chh,
               office.tileMap, office.furniture, office.getCharacters(),
-              ZOOM, 0, 0,
+              zoom, 0, 0,
               { selectedAgentId: null, hoveredAgentId: null, hoveredTile: null, seats: office.seats, characters: office.characters },
               undefined, office.layout.tileColors, office.layout.cols, office.layout.rows,
               office.getBugs(),
@@ -99,18 +126,39 @@ export default function PixelOffice({ participants = [], active = null, height =
     return () => { disposed = true; stop(); officeRef.current = null; agentIdMap.current = new Map(); nextId.current = { current: 0 }; };
   }, []);
 
-  // Sync meeting state → office characters whenever participants or the active
-  // speaker changes.
+  // Pick a STABLE 2–3 background wanderers from the non-participant pool. Stable
+  // so they don't churn (re-picking every render would make them repeatedly walk
+  // in from the door). Re-picks only if the pool's membership changes.
+  const poolKey = wanderPool.map((e) => e.id).sort().join(',');
+  const wanderers = useMemo(() => {
+    const pool = wanderPool.slice();
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, Math.min(pool.length, 2 + Math.floor(Math.random() * 2))); // 2–3
+  }, [poolKey]);
+
+  // Sync meeting state → office characters whenever participants, the speaker, or
+  // the wanderer set changes.
   useEffect(() => {
     const office = officeRef.current;
     if (!office || !ready) return;
-    syncAgentsToOffice(buildActivities(participants, active), office, agentIdMap.current, nextId.current);
-  }, [ready, participants, active]);
+    syncAgentsToOffice(buildActivities(participants, wanderers, active), office, agentIdMap.current, nextId.current);
+    // The engine labels agents as "Name (agentId)"; our agentId is the raw
+    // emp_… DB id, which is ugly over a character's head. Relabel to just the
+    // display name after each sync (sync rewrites labels, so this must follow).
+    for (const p of [...participants, ...wanderers]) {
+      const charId = agentIdMap.current.get(p.id);
+      const ch = charId != null && office.characters.get(charId);
+      if (ch) ch.label = p.name;
+    }
+  }, [ready, participants, wanderers, active]);
 
   if (failed) return null; // graceful: no office, meeting still fully usable
 
   return (
-    <div className="pixel-office" ref={wrapRef} style={{ height }}>
+    <div className="pixel-office" ref={wrapRef} style={{ minHeight: ready ? undefined : Math.min(height, MAX_HEIGHT) }}>
       <canvas ref={canvasRef} className="pixel-office-canvas" />
       {!ready && <div className="pixel-office-loading">載入辦公室…</div>}
     </div>

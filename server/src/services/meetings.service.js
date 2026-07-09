@@ -4,7 +4,7 @@ import * as repo from '../storage/meetings.repo.js';
 import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { distillMeetingMemories } from '../orchestration/MemoryDistiller.js';
-import { interject as interjectLive } from '../orchestration/MeetingOrchestrator.js';
+import { interject as interjectLive, directedTurn } from '../orchestration/MeetingOrchestrator.js';
 import { badRequest, notFound } from '../util/http.js';
 import { id as newId } from '../util/ids.js';
 import { withLock } from '../util/locks.js';
@@ -196,6 +196,53 @@ export function addInterjection(meetingId, { text, runId } = {}) {
   };
   repo.updateMeeting(meetingId, { transcript: [...meeting.transcript, turn] });
   return { ok: true, delivery: 'stored', turn };
+}
+
+/**
+ * Manager "點名": call on ONE specific employee to speak next, with an optional
+ * question. Runs a real directed turn (they answer the question / the call),
+ * appends it to the transcript, and returns the turn so the room appends it.
+ * Serialized with the meeting lock so it never races a continue/conclude run.
+ */
+export async function callOnEmployee(meetingId, { employeeId, question } = {}) {
+  if (!employeeId) throw badRequest('請選擇要點名的員工');
+  return withLock(mkey(meetingId), async () => {
+    const meeting = repo.getMeeting(meetingId);
+    if (!meeting) throw notFound('找不到該會議');
+    if (meeting.status !== 'discussing') throw badRequest('這場會議已經結束。請先「重啟討論」再點名。');
+    const participants = getEmployees(meeting.participantIds);
+    if (!participants.some((p) => p.id === employeeId)) throw badRequest('該員工不在這場會議中');
+
+    requireInteractiveRuntime(); // directed turns need the in-app multi-agent engine
+    const q = String(question || '').trim();
+    const { employee, turn } = await directedTurn({
+      topic: meeting.topic,
+      participants,
+      priorTranscript: meeting.transcript,
+      employeeId,
+      question: q || undefined,
+    });
+
+    const lastRound = meeting.transcript.reduce((m, t) => Math.max(m, t.round || 0), 0);
+    const added = {
+      round: lastRound || 1,
+      roundTitle: '主管點名',
+      speaker: employee.name,
+      role: employee.roleTitle,
+      speakerId: employee.id,
+      text: turn.text,
+      live: turn.live,
+      toolCalls: turn.toolCalls || 0,
+      pickedBy: 'manager',
+      calledByManager: true,
+      managerQuestion: q || null,
+      citations: turn.citations || [],
+    };
+    // Re-read so a concurrent interjection isn't clobbered.
+    const fresh = repo.getMeeting(meetingId) || meeting;
+    repo.updateMeeting(meetingId, { transcript: [...fresh.transcript, added] });
+    return { ok: true, turn: added, live: turn.live };
+  });
 }
 
 /**
