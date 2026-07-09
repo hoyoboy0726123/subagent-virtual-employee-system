@@ -409,6 +409,7 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 
 /* Pixel office (live meeting room) — vendored canvas engine from
    xmanrui/OpenClaw-bot-review (MIT). See client/src/pixel-office/. */
+.office-toggle-bar { display: flex; justify-content: flex-end; margin: 0 0 6px; }
 .pixel-office {
   position: relative;
   width: 100%;

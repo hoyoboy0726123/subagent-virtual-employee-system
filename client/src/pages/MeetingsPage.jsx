@@ -332,6 +332,16 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCa
   const [callTarget, setCallTarget] = useState('');
   const [callQuestion, setCallQuestion] = useState('');
   const [calling, setCalling] = useState(false);
+  // Pixel office: shown by default, collapsible for users who want to focus on
+  // the transcript. Preference persists across meetings.
+  const [showOffice, setShowOffice] = useState(() => {
+    try { return localStorage.getItem('veemp.showOffice') !== '0'; } catch { return true; }
+  });
+  const toggleOffice = () => setShowOffice((v) => {
+    const next = !v;
+    try { localStorage.setItem('veemp.showOffice', next ? '1' : '0'); } catch { /* ignore */ }
+    return next;
+  });
   const endRef = React.useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [room.transcript.length]);
 
@@ -386,7 +396,12 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCa
         )}
       </div>
 
-      <PixelOffice participants={participants} wanderPool={wanderPool} active={active} />
+      <div className="office-toggle-bar">
+        <button className="btn-ghost sm" onClick={toggleOffice}>
+          {showOffice ? '▾ 收折像素辦公室' : '▸ 展開像素辦公室'}
+        </button>
+      </div>
+      {showOffice && <PixelOffice participants={participants} wanderPool={wanderPool} active={active} />}
 
       <div className="live-progress meeting-room-transcript">
         {room.transcript.length === 0 && <p className="muted">（尚無發言）</p>}
