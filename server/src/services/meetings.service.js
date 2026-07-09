@@ -4,7 +4,7 @@ import * as repo from '../storage/meetings.repo.js';
 import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { distillMeetingMemories } from '../orchestration/MemoryDistiller.js';
-import { interject as interjectLive, directedTurn } from '../orchestration/MeetingOrchestrator.js';
+import { interject as interjectLive, directedTurn, planConvergeRounds } from '../orchestration/MeetingOrchestrator.js';
 import { badRequest, notFound } from '../util/http.js';
 import { id as newId } from '../util/ids.js';
 import { withLock } from '../util/locks.js';
@@ -261,6 +261,48 @@ export function reopenDiscussion(meetingId) {
     if (!updated) throw badRequest('這場會議的狀態已變更，請重新整理。');
     return updated;
   });
+}
+
+/**
+ * Force convergence: run up to `rounds` (≤3) narrowing rounds whose plan pushes
+ * the agents to make decisions + action items (not open new threads), then
+ * conclude automatically — minutes + report + memory. One SSE stream: the
+ * rounds' turns, then the synthesis phase. Prevents an endless discussion.
+ */
+export async function convergeAndConclude(meetingId, { rounds } = {}, onEvent, signal) {
+  const n = Math.min(Math.max(Number(rounds) || 3, 1), 3);
+  await withLock(mkey(meetingId), async () => {
+    const meeting = repo.getMeeting(meetingId);
+    if (!meeting) throw notFound('找不到該會議');
+    if (meeting.status !== 'discussing') throw badRequest('這場會議已經結束。');
+    const participants = getEmployees(meeting.participantIds);
+    if (!participants.length) throw badRequest('與會者已不存在');
+
+    const runtime = requireInteractiveRuntime();
+    const runId = newId('run');
+    const result = await runtime.runMeetingRounds({
+      topic: meeting.topic,
+      participants,
+      rounds: n,
+      priorTranscript: meeting.transcript,
+      roundPlan: planConvergeRounds(n), // forced-convergence round goals
+      runId,
+      onEvent,
+      signal,
+    });
+
+    const fresh = repo.getMeeting(meetingId) || meeting;
+    const updated = repo.updateMeeting(meetingId, {
+      rounds: fresh.rounds + n,
+      transcript: result.transcript,
+      grounding: dedupeGrounding([...(fresh.grounding || []), ...(result.grounding || [])]),
+      runtime: mergeRuntime(fresh.runtime, result.runtime),
+    });
+    if (!updated) throw notFound('會議在討論期間已被刪除');
+  });
+  // concludeDiscussion takes no lock of its own, so this runs cleanly after the
+  // rounds are persisted — synthesize the report + distill memories.
+  return concludeDiscussion(meetingId, onEvent);
 }
 
 /** The manager concludes: synthesize minutes + report, distill memories. */

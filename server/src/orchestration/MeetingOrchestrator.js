@@ -29,6 +29,17 @@ const ROUND_LIBRARY = [
 ];
 const DEEPEN_ROUND = { title: '深化與整合', goal: '深化尚未解決的爭點，提出能整合各方的方案' };
 const CLOSE_ROUND = { title: '收斂與定案', goal: '對齊最終定案、負責人與檢查點時間' };
+// Forced-convergence plan (the "限時收斂結束" button): a few narrowing rounds
+// that MUST stop opening new threads, ending in a decisive close. Prevents an
+// open-ended discussion from never converging.
+const CONVERGE_ROUND = { title: '收斂中', goal: '收斂尚未定案的爭點，把能拍板的先拍板；不要開啟新議題，聚焦在做決定' };
+const FINAL_CLOSE_ROUND = { title: '定案與待辦', goal: '產出最終決議、每項待辦的負責人與檢查點時間；只講可執行的結論，不再延伸新議題' };
+
+/** N rounds that force convergence: (N-1) narrowing rounds + 1 decisive close. */
+export function planConvergeRounds(n) {
+  const rounds = Math.min(Math.max(Number(n) || 3, 1), 3);
+  return [...Array.from({ length: rounds - 1 }, () => CONVERGE_ROUND), FINAL_CLOSE_ROUND];
+}
 
 // Build a round plan of exactly `rounds` entries that always opens with a
 // position round and ends on a decision/close round (the arc that makes a
@@ -91,7 +102,7 @@ function drainInterjections(runId, convo, roundNo, roundTitle, emit) {
  *   instead of burning the rest of the LLM calls into a dead socket.
  * @returns {Promise<{transcript, grounding, stats}>}
  */
-export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], runId, onEvent, signal }) {
+export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], roundPlan = null, runId, onEvent, signal }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   // Register the interjection mailbox SYNCHRONOUSLY, before the run event is
   // emitted — so a manager who interjects the instant they receive the runId
@@ -109,7 +120,9 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
 
   // First segment gets the open→analyse→decide arc; continuation segments are
   // all deepening — the MANAGER decides when the meeting actually closes.
-  const plan = startRound === 0 ? planRounds(rounds) : Array.from({ length: rounds }, () => DEEPEN_ROUND);
+  // An explicit roundPlan (e.g. forced convergence) wins; otherwise a first
+  // segment gets the open→analyse→decide arc, continuations deepen.
+  const plan = roundPlan || (startRound === 0 ? planRounds(rounds) : Array.from({ length: rounds }, () => DEEPEN_ROUND));
   const stats = newStats();
 
   try {

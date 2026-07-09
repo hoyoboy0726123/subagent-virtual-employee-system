@@ -129,6 +129,22 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
     }
   };
 
+  // Force convergence: up to 3 decision-focused rounds, then auto-conclude.
+  const convergeConclude = async (rounds = 3) => {
+    if (!room?.meetingId) return;
+    setErr('');
+    setRoom((r) => ({ ...r, streaming: true, phase: `限時收斂：最多 ${rounds} 輪內做出決議與待辦…` }));
+    try {
+      const { meeting } = await api.stream(`/meetings/${room.meetingId}/converge/stream`, { rounds }, roomEvents);
+      setRoom(null);
+      onChange?.();
+      setOpen(meeting);
+    } catch (e) {
+      setErr(e.message);
+      setRoom((r) => (r ? { ...r, streaming: false, phase: null } : r));
+    }
+  };
+
   // List rows are lightweight (no transcript/report) — fetch the full record on
   // click, either into the read-only view or back into the meeting room.
   const openMeeting = async (m) => {
@@ -194,6 +210,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
           onInterject={interject}
           onCallOn={callOn}
           onContinue={continueRounds}
+          onConverge={convergeConclude}
           onConclude={conclude}
           onLeave={() => setRoom(null)}
         />
@@ -309,7 +326,7 @@ const TurnRow = React.memo(function TurnRow({ t }) {
 // Phase 16 — the meeting room. The discussion never ends on its own: the
 // MANAGER (the user) interjects to steer, continues for more rounds, and
 // decides when to conclude into minutes + report.
-function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCallOn, onContinue, onConclude, onLeave }) {
+function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCallOn, onContinue, onConverge, onConclude, onLeave }) {
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const [callTarget, setCallTarget] = useState('');
@@ -414,8 +431,16 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCa
             <button className="btn-ghost" onClick={onContinue} disabled={!room.meetingId}>
               ▶ 繼續討論 1 輪
             </button>
+            <button
+              className="btn-ghost"
+              onClick={() => onConverge(3)}
+              disabled={!room.meetingId}
+              title="讓代理在最多 3 輪內收斂出決議與待辦，然後自動結束——避免無限發散"
+            >
+              🏁 3 輪內收斂並結束
+            </button>
             <button className="btn" onClick={onConclude} disabled={!room.meetingId}>
-              ✅ 結束會議，產出決議與報告
+              ✅ 直接結束，產出決議與報告
             </button>
           </div>
         )}

@@ -66,6 +66,12 @@ meetingsRouter.post('/meetings/:id/conclude/stream', asyncHandler(async (req, re
   await streamRun(req, res, (send) => meetings.concludeDiscussion(req.params.id, send), 'meeting');
 }));
 
+// Force convergence: up to N (≤3) decision-focused rounds, then auto-conclude.
+meetingsRouter.post('/meetings/:id/converge/stream', asyncHandler(async (req, res) => {
+  const rounds = req.body?.rounds;
+  await streamRun(req, res, (send, signal) => meetings.convergeAndConclude(req.params.id, { rounds }, send, signal), 'meeting');
+}));
+
 // Reopen a CONCLUDED meeting — the discussion continues on the same transcript
 // (the next 作結 replaces the minutes/report and re-distills memories).
 meetingsRouter.post('/meetings/:id/reopen', asyncHandler(async (req, res) => {
