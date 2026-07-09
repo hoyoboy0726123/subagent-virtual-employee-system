@@ -19,7 +19,10 @@
 2. 下載本專案（`git clone` 或 GitHub「Download ZIP」解壓）
 3. **雙擊 `start.bat`** — 完成！
 
-第一次執行會自動：安裝依賴（1–3 分鐘）→ 建置網頁介面 → 建立**預設團隊（9 位 AI 員工＋每人的專業背景知識）**→ 開啟瀏覽器。之後再雙擊會跳過已完成的步驟、直接啟動，**你的員工與資料都會保留**。
+第一次執行會自動：安裝依賴（1–3 分鐘）→ 建置網頁介面 → 建立**預設團隊（9 位 AI
+員工＋每人的專業背景知識）**→ 設定 PDF/DOCX 解析（若電腦有 Python 則自動裝好，
+沒有則略過、不影響啟動）→ 開啟瀏覽器。之後再雙擊會跳過已完成的步驟、直接啟動，
+**你的員工與資料都會保留**。
 
 ### Windows：單一 .exe（免裝 Node）
 
@@ -42,8 +45,9 @@ npm run build:exe    # → dist-exe/虛擬員工系統.exe（約 95 MB，內含 
 git clone https://github.com/hoyoboy0726123/subagent-virtual-employee-system.git
 cd subagent-virtual-employee-system
 npm install
-npm run seed     # 建立預設團隊（首次；會重置資料庫）
-npm run serve    # 建置 + 啟動 → http://localhost:3001
+npm run seed                 # 建立預設團隊（首次；會重置資料庫）
+npm run setup:markitdown     # 選用：PDF/DOCX 解析（需 Python 3.11–3.13）
+npm run serve                # 建置 + 啟動 → http://localhost:3001
 ```
 
 ### Docker
@@ -96,9 +100,11 @@ docker run -p 3001:3001 -v veemp-data:/app/server/data veemp
 
 ### 2. 員工與知識庫
 
-點任何員工卡片：編輯人設、貼筆記、**上傳文件**（PDF/DOCX/PPTX/XLSX/CSV 需先執行
-`npm run setup:markitdown`；TXT/MD/HTML 免安裝）。每份文件會被切塊並建立全文索引，
-員工在所有場合都以**自己的知識**為依據發言，並附引用標籤（🌐 網路來源可點開新分頁）。
+點任何員工卡片：編輯人設、貼筆記、**上傳文件**。TXT/MD/HTML 免安裝即可上傳；
+PDF/DOCX/PPTX/XLSX/CSV 需要 PDF/DOCX 解析元件（Windows 一鍵 `start.bat` 與 exe 版
+會在有 Python 時自動裝好，其他情況執行 `npm run setup:markitdown`）。每份文件會被
+切塊並建立全文索引，員工在所有場合都以**自己的知識**為依據發言，並附引用標籤
+（🌐 網路來源可點開新分頁）。
 
 ### 3. 會議（主管主持）
 
