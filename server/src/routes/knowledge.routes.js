@@ -18,6 +18,14 @@ knowledgeRouter.get('/knowledge/:id', asyncHandler(async (req, res) => {
   res.json(knowledge.getDocumentWithChunks(req.params.id));
 }));
 
+// Edit a document's title / content (re-chunks + re-indexes on content change).
+knowledgeRouter.put('/knowledge/:id', asyncHandler(async (req, res) => {
+  res.json(knowledge.editDocument(req.params.id, {
+    title: req.body?.title,
+    content: req.body?.content,
+  }));
+}));
+
 knowledgeRouter.delete('/knowledge/:id', asyncHandler(async (req, res) => {
   res.json(knowledge.removeDocument(req.params.id));
 }));

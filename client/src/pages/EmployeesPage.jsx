@@ -442,7 +442,13 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
         </section>
       </div>
 
-      {viewDoc && <DocViewer doc={viewDoc} onClose={() => setViewDoc(null)} />}
+      {viewDoc && (
+        <DocViewer
+          doc={viewDoc}
+          onClose={() => setViewDoc(null)}
+          onSaved={(updated) => { setViewDoc(updated); onChange(); }}
+        />
+      )}
 
       <div className="modal-actions between">
         <button className="btn-danger" onClick={remove}>刪除員工</button>
@@ -641,44 +647,107 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
 
 // Knowledge viewer: the FULL document plus its retrievable chunks — the exact
 // slices the FTS index serves to agents during grounding and search_knowledge.
-function DocViewer({ doc, onClose }) {
+function DocViewer({ doc, onClose, onSaved }) {
   const [view, setView] = useState('content');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({ title: doc.title, content: doc.content });
+  const [save, setSave] = useState({ busy: false, err: '' });
   const SOURCE_LABELS = { note: '手動筆記', file: '上傳文件', memory: '會議／自主記憶', research: '核准的研究報告', dialogue: '1 on 1 面談紀錄' };
+
+  const startEdit = () => {
+    setDraft({ title: doc.title, content: doc.content });
+    setSave({ busy: false, err: '' });
+    setView('content');
+    setEditing(true);
+  };
+
+  const commit = async () => {
+    if (!draft.content.trim()) { setSave({ busy: false, err: '內容不可為空' }); return; }
+    setSave({ busy: true, err: '' });
+    try {
+      const updated = await api.put(`/knowledge/${doc.id}`, {
+        title: draft.title.trim() || doc.title,
+        content: draft.content,
+      });
+      setEditing(false);
+      onSaved?.(updated); // refreshes the modal's doc + the card's chunk count
+    } catch (e) {
+      setSave({ busy: false, err: e.message || '儲存失敗' });
+    }
+  };
+
   return (
-    <Modal title={`📄 ${doc.title}`} onClose={onClose} wide>
+    <Modal title={editing ? `✏️ 編輯：${doc.title}` : `📄 ${doc.title}`} onClose={onClose} wide>
       <div className="detail-meta">
         <span className="tag">{SOURCE_LABELS[doc.source] || doc.source}</span>
         {(doc.tags || []).map((t) => <span key={t} className="tag">{TYPE_LABELS[t] || t}</span>)}
         <span className="muted sm">建立於 {new Date(doc.createdAt).toLocaleString('zh-Hant')}</span>
-      </div>
-      <div className="subtabs">
-        <button className={view === 'content' ? 'subtab on' : 'subtab'} onClick={() => setView('content')}>完整內容</button>
-        <button className={view === 'chunks' ? 'subtab on' : 'subtab'} onClick={() => setView('chunks')}>
-          檢索片段（{doc.chunks?.length || 0}）
-        </button>
+        {!editing && (
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>✏️ 編輯</button>
+        )}
       </div>
 
-      {view === 'content' && (
-        <div className="profile-box doc-viewer-body"><Markdown text={doc.content} /></div>
-      )}
-
-      {view === 'chunks' && (
+      {editing ? (
         <div className="doc-viewer-body">
-          <p className="muted sm">
-            這些是文件切割後的檢索片段——員工代理在會議、目標與自主研究中，
-            透過知識檢索實際「讀到」的就是這些原文。
-          </p>
-          <ul className="notes">
-            {(doc.chunks || []).map((c) => (
-              <li key={c.id} className="note">
-                <div>
-                  <strong className="muted">片段 #{c.chunkIndex + 1}</strong>
-                  <p className="chunk-text">{c.content}</p>
-                </div>
-              </li>
-            ))}
-          </ul>
+          <label className="field">
+            <span className="field-label">標題</span>
+            <input
+              className="input"
+              value={draft.title}
+              onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+            />
+          </label>
+          <label className="field">
+            <span className="field-label">內容（支援 Markdown）</span>
+            <textarea
+              className="input"
+              style={{ minHeight: '46vh', fontFamily: 'var(--mono, monospace)', lineHeight: 1.6 }}
+              value={draft.content}
+              onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
+            />
+          </label>
+          <p className="muted sm">儲存後會依新內容重新切割檢索片段，員工立即依更新後的知識發言。</p>
+          {save.err && <p className="err sm">{save.err}</p>}
+          <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn" onClick={() => setEditing(false)} disabled={save.busy}>取消</button>
+            <button className="btn btn-primary" onClick={commit} disabled={save.busy}>
+              {save.busy ? '儲存中…' : '💾 儲存'}
+            </button>
+          </div>
         </div>
+      ) : (
+        <>
+          <div className="subtabs">
+            <button className={view === 'content' ? 'subtab on' : 'subtab'} onClick={() => setView('content')}>完整內容</button>
+            <button className={view === 'chunks' ? 'subtab on' : 'subtab'} onClick={() => setView('chunks')}>
+              檢索片段（{doc.chunks?.length || 0}）
+            </button>
+          </div>
+
+          {view === 'content' && (
+            <div className="profile-box doc-viewer-body"><Markdown text={doc.content} /></div>
+          )}
+
+          {view === 'chunks' && (
+            <div className="doc-viewer-body">
+              <p className="muted sm">
+                這些是文件切割後的檢索片段——員工代理在會議、目標與自主研究中，
+                透過知識檢索實際「讀到」的就是這些原文。要修改請按上方「✏️ 編輯」改內容，
+                片段會自動重新切割。
+              </p>
+              <ul className="notes">
+                {(doc.chunks || []).map((c) => (
+                  <li key={c.id} className="note">
+                    <div>
+                      <strong className="muted">片段 #{c.chunkIndex + 1}</strong>
+                      <p className="chunk-text">{c.content}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
       )}
     </Modal>
   );

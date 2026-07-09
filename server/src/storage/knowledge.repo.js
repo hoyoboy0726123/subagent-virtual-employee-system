@@ -126,6 +126,39 @@ export function listChunks(documentId) {
     .all(documentId);
 }
 
+// Chunk `content`, cap it (C4), and write the chunk rows + FTS mirror for one
+// document. Must run inside a transaction. Returns the truncation accounting so
+// the caller can stamp metadata. Shared by insertDocument and updateDocument so
+// the chunk/cap/segment logic never diverges between create and edit.
+function indexDocumentChunks(db, { documentId, employeeId, content, format, createdAt }) {
+  const allChunks = chunkText(content, { format });
+  const max = config.retrieval.maxChunksPerDoc;
+  const chunks = allChunks.length > max ? allChunks.slice(0, max) : allChunks;
+
+  const insChunk = db.prepare(`INSERT INTO chunks
+      (id, document_id, employee_id, chunk_index, content, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`);
+  const insFts = db.prepare(
+    'INSERT INTO chunks_fts (content, chunk_id, employee_id) VALUES (?, ?, ?)',
+  );
+  chunks.forEach((c, i) => {
+    const chunkId = id('chk');
+    insChunk.run(chunkId, documentId, employeeId, i, c, createdAt);
+    // FTS side stores CJK-segmented text (each character a token) so Chinese
+    // substring queries can match; `chunks.content` keeps the original text.
+    insFts.run(segmentForFts(c), chunkId, employeeId);
+  });
+  return { indexed: chunks.length, total: allChunks.length };
+}
+
+// Structured sources (uploads, memory, research, dialogue) are canonical
+// Markdown → chunk section-aware; hand-typed notes use the plain sentence
+// packer. Persisted docs don't store `format`, so infer it from `source` when
+// re-chunking on edit — mirrors what the ingestion path passed at insert time.
+function formatForSource(source) {
+  return source === 'note' ? undefined : 'markdown';
+}
+
 export function insertDocument(employeeId, data) {
   const db = getDb();
   const doc = {
@@ -139,18 +172,7 @@ export function insertDocument(employeeId, data) {
     createdAt: now(),
   };
 
-  // Uploaded documents arrive as canonical Markdown → chunk section-aware; pasted
-  // notes stay on the plain sentence packer. `format` is set by the ingestion path.
-  const allChunks = chunkText(doc.content, { format: data.format });
-  // Cap chunks per document (C4) so a giant upload can't freeze the event loop
-  // with tens of thousands of synchronous INSERTs; note truncation, don't hide it.
-  const max = config.retrieval.maxChunksPerDoc;
-  const chunks = allChunks.length > max ? allChunks.slice(0, max) : allChunks;
-  if (chunks.length < allChunks.length) {
-    doc.metadata = { ...doc.metadata, truncatedChunks: true, totalChunks: allChunks.length, indexedChunks: chunks.length };
-    console.warn(`[knowledge] document "${doc.title}" produced ${allChunks.length} chunks; indexed first ${max} (MAX_CHUNKS_PER_DOC).`);
-  }
-
+  let chunkCount = 0;
   withTx(db, () => {
     db.prepare(`INSERT INTO documents
         (id, employee_id, title, content, source, tags, metadata, created_at)
@@ -160,23 +182,67 @@ export function insertDocument(employeeId, data) {
         JSON.stringify(doc.tags), JSON.stringify(doc.metadata), doc.createdAt,
       );
 
-    const insChunk = db.prepare(`INSERT INTO chunks
-        (id, document_id, employee_id, chunk_index, content, created_at)
-        VALUES (?, ?, ?, ?, ?, ?)`);
-    const insFts = db.prepare(
-      'INSERT INTO chunks_fts (content, chunk_id, employee_id) VALUES (?, ?, ?)',
-    );
-
-    chunks.forEach((content, i) => {
-      const chunkId = id('chk');
-      insChunk.run(chunkId, doc.id, doc.employeeId, i, content, doc.createdAt);
-      // FTS side stores CJK-segmented text (each character a token) so Chinese
-      // substring queries can match; `chunks.content` keeps the original text.
-      insFts.run(segmentForFts(content), chunkId, doc.employeeId);
+    // Uploaded documents arrive with an explicit `format`; otherwise infer it.
+    const format = data.format || formatForSource(doc.source);
+    const { indexed, total } = indexDocumentChunks(db, {
+      documentId: doc.id, employeeId, content: doc.content, format, createdAt: doc.createdAt,
     });
+    chunkCount = indexed;
+    if (indexed < total) {
+      // Cap hit (C4): note truncation in metadata, don't hide it.
+      doc.metadata = { ...doc.metadata, truncatedChunks: true, totalChunks: total, indexedChunks: indexed };
+      db.prepare('UPDATE documents SET metadata = ? WHERE id = ?').run(JSON.stringify(doc.metadata), doc.id);
+      console.warn(`[knowledge] document "${doc.title}" produced ${total} chunks; indexed first ${config.retrieval.maxChunksPerDoc} (MAX_CHUNKS_PER_DOC).`);
+    }
   });
 
-  return { ...doc, chunkCount: chunks.length };
+  return { ...doc, chunkCount };
+}
+
+/**
+ * Edit a document's title and/or content (manual knowledge editing). When the
+ * content changes we re-chunk and re-index from scratch — chunks are a derived
+ * view of the content, so the retrievable slices stay in sync automatically.
+ * Editing an archived doc (D3 consolidated-away original) revives it: fresh
+ * chunks are indexed and the `archived` flag is cleared. Returns the updated
+ * document, or null if it doesn't exist.
+ */
+export function updateDocument(documentId, patch = {}) {
+  const db = getDb();
+  const existing = getDocument(documentId);
+  if (!existing) return null;
+
+  const title = patch.title != null && String(patch.title).trim()
+    ? String(patch.title).trim() : existing.title;
+  const content = patch.content != null ? String(patch.content) : existing.content;
+  const contentChanged = patch.content != null && content !== existing.content;
+
+  return withTx(db, () => {
+    const metadata = { ...(existing.metadata || {}) };
+    if (contentChanged) {
+      // Wipe the old chunks + FTS mirror, then re-index the new content.
+      db.prepare('DELETE FROM chunks_fts WHERE chunk_id IN (SELECT id FROM chunks WHERE document_id = ?)').run(documentId);
+      db.prepare('DELETE FROM chunks WHERE document_id = ?').run(documentId);
+      // A fresh index invalidates prior truncation/archive bookkeeping.
+      delete metadata.archived;
+      delete metadata.truncatedChunks;
+      delete metadata.totalChunks;
+      delete metadata.indexedChunks;
+      const { indexed, total } = indexDocumentChunks(db, {
+        documentId, employeeId: existing.employeeId, content,
+        format: formatForSource(existing.source), createdAt: existing.createdAt,
+      });
+      if (indexed < total) {
+        metadata.truncatedChunks = true; metadata.totalChunks = total; metadata.indexedChunks = indexed;
+      }
+      metadata.editedAt = now();
+    } else if (title !== existing.title) {
+      metadata.editedAt = now();
+    }
+    db.prepare('UPDATE documents SET title = ?, content = ?, metadata = ? WHERE id = ?')
+      .run(title, content, JSON.stringify(metadata), documentId);
+    return getDocument(documentId);
+  });
 }
 
 export function deleteDocument(documentId) {

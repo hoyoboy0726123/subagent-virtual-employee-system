@@ -37,6 +37,25 @@ export function removeDocument(documentId) {
 }
 
 /**
+ * Edit a document's title and/or content. Re-chunks + re-indexes when the
+ * content changes so retrieval stays in sync. Returns the updated document with
+ * its fresh chunks.
+ */
+export function editDocument(documentId, patch = {}) {
+  const hasTitle = patch.title != null;
+  const hasContent = patch.content != null;
+  if (!hasTitle && !hasContent) throw badRequest('沒有要更新的欄位');
+  if (hasContent && !String(patch.content).trim()) throw badRequest('內容不可為空');
+  const updated = docs.updateDocument(documentId, {
+    ...(hasTitle ? { title: patch.title } : {}),
+    ...(hasContent ? { content: patch.content } : {}),
+  });
+  if (!updated) throw notFound('找不到該文件');
+  scheduleEmbedding(); // fire-and-forget; no-op unless embeddings are enabled
+  return getDocumentWithChunks(documentId);
+}
+
+/**
  * Manually consolidate an employee's accumulated memory documents (D3). `force`
  * bypasses the auto-trigger threshold — a manual request should run even with a
  * modest backlog. Returns the consolidation result (or a `skipped` reason).
