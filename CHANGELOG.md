@@ -1,8 +1,7 @@
 # Changelog
 
-Development is organized into phases. The full phase log and forward-looking
-plan live in [`ROADMAP.md`](./ROADMAP.md) and [`docs/FUTURE_PLAN.md`](./docs/FUTURE_PLAN.md);
-this file summarizes shipped milestones.
+Development is organized into phases. The full phase log lives in
+[`ROADMAP.md`](./ROADMAP.md); this file summarizes shipped milestones.
 
 ## Shipped
 

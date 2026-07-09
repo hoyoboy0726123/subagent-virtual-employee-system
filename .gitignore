@@ -19,3 +19,6 @@ server/data/demo-live.db*
 # exe packaging artifacts (scripts/build-exe.mjs)
 build/
 dist-exe/
+
+# Internal roadmap — kept local, not published
+docs/FUTURE_PLAN.md

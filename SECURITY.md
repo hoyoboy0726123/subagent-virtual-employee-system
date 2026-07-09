@@ -16,8 +16,9 @@ If a stranger can reach your instance, they can:
   usage).
 
 **Before exposing it beyond your own machine**, put it behind a reverse proxy
-with authentication, restrict `CORS`, and add rate limiting. Hardening steps are
-tracked in [`docs/FUTURE_PLAN.md`](./docs/FUTURE_PLAN.md) (Milestone B).
+with authentication, restrict `CORS`, and add rate limiting. The planned
+public-deploy hardening is a loopback bind, an `AUTH_TOKEN`, a `CORS`
+allow-list, rate limiting, and `helmet`.
 
 ## Subscription providers (claude-cli / codex-cli)
 
@@ -35,8 +36,8 @@ parameterized, the FTS `MATCH` builder neutralizes operators, there is no
 `dangerouslySetInnerHTML` (the Markdown renderer emits text nodes only, so
 model/web content can't inject script), subprocesses use `execFile` (no shell),
 upload temp files are constrained and always deleted, and API keys are never
-returned in HTTP responses. See the audit findings and remaining hardening items
-in `docs/FUTURE_PLAN.md`.
+returned in HTTP responses. The remaining hardening item is the public-deploy
+work described above.
 
 ## Reporting a vulnerability
 

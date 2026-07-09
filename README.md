@@ -39,6 +39,29 @@ npm run build:exe    # → dist-exe/虛擬員工系統.exe（約 95 MB，內含 
 - **訂閱大腦**（claude/codex CLI）：該電腦裝了 CLI 一樣可用
 - 本地向量檢索（選配）屬原始碼安裝功能，exe 版自動退回純全文檢索
 
+### Windows：傳統手動安裝（命令列）
+
+想自己掌控每個步驟、或要做開發，可用命令列安裝（PowerShell 或 CMD 皆可）。
+先裝好 [Node.js 22.5+](https://nodejs.org/)（開發 PDF/DOCX 解析另需
+[Python 3.11–3.13](https://www.python.org/)）：
+
+```powershell
+git clone https://github.com/hoyoboy0726123/subagent-virtual-employee-system.git
+cd subagent-virtual-employee-system
+npm install
+npm run seed                 # 建立預設團隊（首次；會重置資料庫）
+npm run setup:markitdown     # 選用：PDF/DOCX 解析（需 Python 3.11–3.13）
+
+# 正式模式：建置前端 + 啟動單一伺服器 → http://localhost:3001
+npm run serve
+
+# 或開發模式：API 在 :3001、前端熱重載在 :5173
+npm run dev
+```
+
+> 沒有 git 也可以：在 GitHub 頁面按「Code → Download ZIP」解壓後，在資料夾內開
+> PowerShell 從 `npm install` 那行開始即可。
+
 ### macOS / Linux
 
 ```bash
@@ -229,7 +252,7 @@ npm run build
 
 ## 🗺️ Roadmap 與貢獻
 
-- 未來計畫：[`docs/FUTURE_PLAN.md`](./docs/FUTURE_PLAN.md) · 歷程：[`ROADMAP.md`](./ROADMAP.md) · [`CHANGELOG.md`](./CHANGELOG.md)
+- 開發歷程：[`ROADMAP.md`](./ROADMAP.md) · [`CHANGELOG.md`](./CHANGELOG.md)
 - 貢獻指南：[`CONTRIBUTING.md`](./CONTRIBUTING.md) · 安全政策：[`SECURITY.md`](./SECURITY.md)
 
 ## 📄 License

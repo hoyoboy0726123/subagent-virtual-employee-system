@@ -52,7 +52,7 @@ npm run build     # client must build
 | HTTP routes / services | `server/src/routes/`, `server/src/services/` |
 | Document ingestion | `server/src/ingest/` |
 | React client | `client/src/` |
-| Roadmap / future work | `docs/FUTURE_PLAN.md` |
+| Phase history | `ROADMAP.md`, `CHANGELOG.md` |
 
 ## Reporting bugs / security issues
 
