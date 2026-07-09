@@ -67,6 +67,26 @@ if not exist "server\data\app.db" (
   echo   [OK] Database exists - your employees and data are kept
 )
 
+REM ---- 4b) First run: PDF/DOCX parsing (optional, needs Python) -
+REM  MarkItDown is optional - NO goto :fail here. If Python is missing
+REM  or the install fails, we just skip it and still launch the app
+REM  (TXT/MD/HTML upload works regardless). Same graceful degrade as
+REM  the packaged exe's auto-setup.
+if not exist ".venv" (
+  echo   [..] Setting up PDF/DOCX parsing - optional, needs Python 3.11-3.13...
+  call npm run setup:markitdown
+  if errorlevel 1 (
+    echo   [!] Skipped PDF/DOCX parsing ^(no compatible Python found^).
+    echo       Install Python from https://www.python.org/ then run:
+    echo       npm run setup:markitdown
+    echo       TXT/MD/HTML upload works without it.
+  ) else (
+    echo   [OK] PDF/DOCX parsing ready
+  )
+) else (
+  echo   [OK] PDF/DOCX parsing configured
+)
+
 REM ---- 5) Start the server and open the browser ----------------
 echo.
 echo   [..] Starting...  http://localhost:3001

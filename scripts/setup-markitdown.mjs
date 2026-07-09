@@ -11,7 +11,10 @@ import path from 'node:path';
 
 const isWin = process.platform === 'win32';
 const VENV = '.venv';
-const venvPip = path.join(VENV, isWin ? 'Scripts' : 'bin', isWin ? 'pip.exe' : 'pip');
+// Drive pip through `python -m pip`, never the pip.exe shim: modern pip (26+)
+// refuses to modify itself via the shim ("To modify pip, please run:
+// python -m pip …"), which used to break `--upgrade pip` on fresh venvs.
+const venvPython = path.join(VENV, isWin ? 'Scripts' : 'bin', isWin ? 'python.exe' : 'python');
 
 // MarkItDown 0.1.6 needs Python >=3.8,<3.13 for its optional deps on Windows;
 // 3.13 works on POSIX. Try a few interpreters, newest-compatible first.
@@ -40,8 +43,12 @@ try {
     execFileSync(cmd, [...pre, '-m', 'venv', VENV], { stdio: 'inherit' });
   }
   console.log('→ 安裝 markitdown[all]==0.1.6 + pdfplumber …');
-  execFileSync(venvPip, ['install', '--upgrade', 'pip'], { stdio: 'inherit' });
-  execFileSync(venvPip, ['install', 'markitdown[all]==0.1.6', 'pdfplumber'], { stdio: 'inherit' });
+  // Upgrading pip is a nice-to-have, not a requirement — never fail the whole
+  // setup over it (some environments pin/lock pip).
+  try {
+    execFileSync(venvPython, ['-m', 'pip', 'install', '--upgrade', 'pip'], { stdio: 'inherit' });
+  } catch { console.log('  （略過 pip 自我升級，繼續安裝套件）'); }
+  execFileSync(venvPython, ['-m', 'pip', 'install', 'markitdown[all]==0.1.6', 'pdfplumber'], { stdio: 'inherit' });
   console.log('\n✓ 完成。重啟伺服器後即可上傳 PDF / DOCX / PPTX / XLSX / CSV。');
 } catch (err) {
   console.error(`✗ 安裝失敗：${err.message}`);
