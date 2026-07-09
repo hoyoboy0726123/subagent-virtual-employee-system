@@ -12,19 +12,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config } from '../config.js';
+import { isPackaged, exeDir, extractHelperPy } from '../util/portable.js';
+import { getSetupStatus } from './setupStatus.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const HELPER = path.join(__dirname, 'markitdown_helper.py');
+// Packaged exe: the source tree doesn't exist — the helper script is embedded
+// in the bundle and extracted next to the exe's data at first use.
+const HELPER = isPackaged()
+  ? extractHelperPy()
+  : path.join(__dirname, 'markitdown_helper.py');
 // server/src/ingest → project root is three levels up.
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..');
 
 // Candidate interpreters, most-specific first. An explicit env override wins;
-// then a project-local virtualenv (the documented setup); then a bare python3.
+// then the local virtualenv (project .venv in a source checkout, or the
+// auto-setup venv living beside the exe — see ingest/autoSetup.js); then a
+// bare python3.
 function candidatePythons() {
   const list = [];
   if (config.ingest.python) list.push(config.ingest.python);
+  const venvRoot = isPackaged() ? path.join(exeDir(), 'veemp-data') : PROJECT_ROOT;
   const venvPython = path.join(
-    PROJECT_ROOT,
+    venvRoot,
     '.venv',
     process.platform === 'win32' ? 'Scripts' : 'bin',
     process.platform === 'win32' ? 'python.exe' : 'python',
@@ -100,6 +109,18 @@ export async function probe({ refresh = false } = {}) {
 export async function convert(filePath, { timeoutSec } = {}) {
   const info = await probe();
   if (!info.available || !info.python) {
+    // Packaged exe: the auto-setup status makes this actionable instead of
+    // a dead end (「正在裝，等一下」／「去裝 Python，重啟就好」).
+    const st = getSetupStatus();
+    if (st.state === 'installing') {
+      return { ok: false, error: 'PDF/DOCX 解析元件正在背景安裝（首次啟動約 1–3 分鐘），請稍後再試。' };
+    }
+    if (st.state === 'no-python') {
+      return { ok: false, error: '此電腦沒有 Python。請到 python.org 安裝 3.11–3.13，重新啟動本程式後將自動完成設定。' };
+    }
+    if (st.state === 'failed') {
+      return { ok: false, error: `PDF/DOCX 解析元件自動安裝失敗（${st.detail || '原因不明'}）。TXT/MD/HTML 上傳不受影響。` };
+    }
     return { ok: false, error: 'MarkItDown 尚未安裝（找不到含 markitdown 套件的 Python）。' };
   }
   const timeoutMs = (timeoutSec || config.ingest.timeoutSec) * 1000;

@@ -35,6 +35,14 @@ const isMain = isPackaged()
 // (Node SEA requires a CJS entry), and CJS has no TLA.
 if (isMain) (async () => {
   await seedIfFresh();
+  // Packaged exe: bootstrap PDF/DOCX parsing in the background (finds Python,
+  // builds a venv beside the exe, pip-installs MarkItDown). Fire-and-forget —
+  // boot never waits, failures degrade to TXT/MD/HTML-only upload.
+  if (isPackaged()) {
+    import('./ingest/autoSetup.js')
+      .then(({ ensureMarkitdown }) => ensureMarkitdown())
+      .catch(() => { /* optional capability — never block boot */ });
+  }
   app.listen(config.port, () => {
     const url = `http://localhost:${config.port}`;
     console.log(`\n  🧑‍💼 Virtual Employee System API on ${url}`);

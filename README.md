@@ -29,9 +29,12 @@ npm run build:exe    # → dist-exe/虛擬員工系統.exe（約 95 MB，內含 
 
 把這顆 exe 複製到任何 Windows 電腦雙擊即用：首次啟動自動建立預設團隊並開啟瀏覽器，
 資料存在 exe 旁的 `veemp-data\` 資料夾（備份＝複製該資料夾）。
-限制：PDF/DOCX 上傳解析與本地向量檢索屬原始碼安裝的加值功能，exe 版自動降級
-（TXT/MD/HTML 上傳與全文檢索照常）；訂閱大腦（claude/codex CLI）只要該電腦裝了
-CLI 一樣可用。
+
+- **PDF/DOCX 解析**：只要電腦裝有 Python（3.11–3.13），exe 首次啟動會**自動在背景
+  完成安裝**（約 1–3 分鐘），之後即可上傳 PDF/DOCX/PPTX/XLSX；沒有 Python 時上傳
+  會明確指引（裝好 Python 重啟 exe 即自動完成），TXT/MD/HTML 上傳永遠可用
+- **訂閱大腦**（claude/codex CLI）：該電腦裝了 CLI 一樣可用
+- 本地向量檢索（選配）屬原始碼安裝功能，exe 版自動退回純全文檢索
 
 ### macOS / Linux
 

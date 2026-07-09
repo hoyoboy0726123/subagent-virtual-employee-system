@@ -138,8 +138,12 @@ export async function ingestUpload(employeeId, file) {
  */
 export async function ingestCapability() {
   const md = await markitdown.probe();
+  const { getSetupStatus } = await import('../ingest/setupStatus.js');
   return {
     markitdown: { available: md.available, version: md.version || null },
+    // Packaged-exe auto-setup progress (idle in a source checkout) — lets the
+    // UI/health say「正在背景安裝」instead of a bare unavailable.
+    autoSetup: getSetupStatus(),
     supportedTypes: Object.keys(SUPPORTED_TYPES),
     supportedExtensions: SUPPORTED_EXTENSIONS,
     maxBytes: config.ingest.maxBytes,
