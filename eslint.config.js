@@ -21,7 +21,7 @@ const browserGlobals = {
 };
 
 export default [
-  { ignores: ['client/dist/**', 'node_modules/**', '.venv/**', 'server/data/**', 'build/**', 'dist-exe/**'] },
+  { ignores: ['client/dist/**', 'node_modules/**', '.venv/**', 'server/data/**', 'build/**', 'dist-exe/**', 'client/src/pixel-office/**'] },
   {
     files: ['**/*.{js,mjs,jsx}'],
     languageOptions: {

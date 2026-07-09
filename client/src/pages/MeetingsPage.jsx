@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
+import PixelOffice from '../components/PixelOffice.jsx';
 
 const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
 
@@ -180,6 +181,8 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
       {room && (
         <MeetingRoom
           room={room}
+          employees={employees}
+          selectedIds={selected}
           onInterject={interject}
           onContinue={continueRounds}
           onConclude={conclude}
@@ -297,11 +300,30 @@ const TurnRow = React.memo(function TurnRow({ t }) {
 // Phase 16 — the meeting room. The discussion never ends on its own: the
 // MANAGER (the user) interjects to steer, continues for more rounds, and
 // decides when to conclude into minutes + report.
-function MeetingRoom({ room, onInterject, onContinue, onConclude, onLeave }) {
+function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onContinue, onConclude, onLeave }) {
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const endRef = React.useRef(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'nearest' }); }, [room.transcript.length]);
+
+  // Who sits in the pixel office: everyone invited (new meeting) plus anyone
+  // who has actually spoken (covers opened/reopened meetings without `selected`).
+  const participants = useMemo(() => {
+    const map = new Map();
+    const byId = new Map(employees.map((e) => [e.id, e.name]));
+    for (const id of selectedIds) if (byId.has(id)) map.set(id, byId.get(id));
+    for (const t of room.transcript) if (t.speakerId && t.speakerId !== 'manager') map.set(t.speakerId, t.speaker);
+    return [...map].map(([id, name]) => ({ id, name }));
+  }, [employees, selectedIds, room.transcript]);
+
+  // The current typist: the most recent non-manager speaker, but only while the
+  // discussion is streaming — otherwise everyone just sits.
+  const active = useMemo(() => {
+    if (!room.streaming) return null;
+    const last = [...room.transcript].reverse().find((t) => t.speakerId && t.speakerId !== 'manager');
+    if (!last) return null;
+    return { speakerId: last.speakerId, tool: last.toolCalls > 0 ? '查資料' : null, task: (last.text || '').slice(0, 60) };
+  }, [room.streaming, room.transcript]);
 
   const send = async () => {
     if (!note.trim() || sending) return;
@@ -320,6 +342,8 @@ function MeetingRoom({ room, onInterject, onContinue, onConclude, onLeave }) {
           <button className="btn-ghost sm" onClick={onLeave} title="先離開，稍後可從過往會議列表回來繼續">離開會議室</button>
         )}
       </div>
+
+      <PixelOffice participants={participants} active={active} />
 
       <div className="live-progress meeting-room-transcript">
         {room.transcript.length === 0 && <p className="muted">（尚無發言）</p>}
