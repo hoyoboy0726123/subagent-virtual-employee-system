@@ -2,8 +2,15 @@
 // friction-free locally (sensible defaults) while remaining deployable.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isPackaged, exeDir } from './util/portable.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Packaged exe (Node SEA): there is no source tree — keep the database in a
+// visible folder NEXT TO the exe so it is portable and trivially backed up.
+const defaultDbFile = isPackaged()
+  ? path.join(exeDir(), 'veemp-data', 'app.db')
+  : path.join(__dirname, '..', 'data', 'app.db');
 
 export const config = {
   port: Number(process.env.PORT) || 3001,
@@ -15,7 +22,7 @@ export const config = {
       ? (process.env.DB_FILE === ':memory:'
           ? ':memory:'
           : path.resolve(process.env.DB_FILE))
-      : path.join(__dirname, '..', 'data', 'app.db'),
+      : defaultDbFile,
 
   // Agent-execution runtime. The built-in standalone multi-agent orchestration
   // is the only runtime (the optional OpenClaw integration was removed in

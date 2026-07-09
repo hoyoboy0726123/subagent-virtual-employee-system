@@ -15,3 +15,7 @@ __pycache__/
 # Local preview config
 .claude/
 server/data/demo-live.db*
+
+# exe packaging artifacts (scripts/build-exe.mjs)
+build/
+dist-exe/

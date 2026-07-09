@@ -203,10 +203,20 @@ export async function seed() {
   return { employees: employees.length, documents: docs.length, meetings: 1, preserved: Object.keys(preserved).length };
 }
 
-// Run when invoked directly.
+// Run when invoked directly. (Async IIFE, not top-level await — the exe build
+// bundles everything to CommonJS, which has no TLA.)
+//
+// isPackaged() guard: under a SEA exe, argv[1] IS the exe path and the bundled
+// import.meta.url is shimmed to the same path, so this "am I the main script?"
+// check would fire for EVERY module carrying it — when index.js dynamically
+// imports this module to first-boot-seed, the tail would launch a SECOND,
+// concurrent seed (observed: a fresh exe DB with two identical demo meetings).
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
-  const counts = await seed();
-  console.log(`已建立 ${counts.employees} 位員工、${counts.documents} 份知識文件、${counts.meetings} 場會議（保留 ${counts.preserved} 項設定）。`);
+import { isPackaged } from '../util/portable.js';
+if (!isPackaged() && process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  (async () => {
+    const counts = await seed();
+    console.log(`已建立 ${counts.employees} 位員工、${counts.documents} 份知識文件、${counts.meetings} 場會議（保留 ${counts.preserved} 項設定）。`);
+  })();
 }

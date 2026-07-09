@@ -21,7 +21,7 @@ const browserGlobals = {
 };
 
 export default [
-  { ignores: ['client/dist/**', 'node_modules/**', '.venv/**', 'server/data/**'] },
+  { ignores: ['client/dist/**', 'node_modules/**', '.venv/**', 'server/data/**', 'build/**', 'dist-exe/**'] },
   {
     files: ['**/*.{js,mjs,jsx}'],
     languageOptions: {

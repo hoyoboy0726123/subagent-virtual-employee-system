@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { getDb } from './db/connection.js';
+import { getEmbeddedAssets } from './util/portable.js';
 import { healthRouter } from './routes/health.routes.js';
 import { dashboardRouter } from './routes/dashboard.routes.js';
 import { employeesRouter } from './routes/employees.routes.js';
@@ -38,11 +39,21 @@ export function createApp() {
   app.use('/api', researchRouter);
   app.use('/api', dialoguesRouter);
 
-  // Serve the built client in production (single-server mode).
-  const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
-  if (fs.existsSync(clientDist)) {
-    app.use(express.static(clientDist));
-    app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+  // Serve the built client. Packaged exe (Node SEA): from the embedded asset
+  // map — there is no dist folder on disk. Source checkout: express.static.
+  const embedded = getEmbeddedAssets();
+  if (embedded) {
+    app.get(/^\/(?!api\/).*/, (req, res) => {
+      const key = req.path === '/' ? '/index.html' : req.path;
+      const asset = embedded[key] || embedded['/index.html']; // SPA fallback
+      res.type(asset.type).send(Buffer.from(asset.b64, 'base64'));
+    });
+  } else {
+    const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
+    if (fs.existsSync(clientDist)) {
+      app.use(express.static(clientDist));
+      app.get(/^\/(?!api\/).*/, (_req, res) => res.sendFile(path.join(clientDist, 'index.html')));
+    }
   }
 
   // Unknown API route → 404 JSON.
