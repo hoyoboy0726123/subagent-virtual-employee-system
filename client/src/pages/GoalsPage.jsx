@@ -21,6 +21,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   const [rerunNote, setRerunNote] = useState('');
   const [rerunning, setRerunning] = useState(false);
   const [executing, setExecuting] = useState(null); // task order being executed
+  const [executingAll, setExecutingAll] = useState(false); // batch run in progress
   // Tell the shell a goal run is streaming — dot on the tab; page stays mounted
   // across tab switches so the run isn't dropped.
   useEffect(() => { onActivity?.(busy || rerunning || executing !== null); }, [busy, rerunning, executing, onActivity]);
@@ -113,7 +114,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   // EXECUTE one task (Phase 20): the assignee actually does the work — web
   // research + citations — and the deliverable lands on the task card.
   const executeTask = async (task) => {
-    if (!open || executing !== null) return;
+    if (!open || executing !== null || executingAll) return;
     setErr('');
     setExecuting(task.order);
     try {
@@ -121,6 +122,29 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
       setOpen(updated);
       onChange?.();
     } catch (e) { setErr(e.message); } finally { setExecuting(null); }
+  };
+
+  // Run every not-yet-delivered task IN ORDER, so each assignee's deliverable
+  // feeds the next (priorDeliverables). One click instead of returning to press
+  // ▶ 執行交付 on each task.
+  const executeAll = async () => {
+    if (!open || executing !== null || executingAll) return;
+    setErr('');
+    setExecutingAll(true);
+    const pending = open.tasks.filter((t) => t.status !== 'done' && !t.deliverable).map((t) => t.order);
+    let current = open;
+    let failures = 0;
+    try {
+      for (const order of pending) {
+        setExecuting(order);
+        try {
+          current = await api.post(`/goals/${current.id}/tasks/${order}/execute`);
+          setOpen(current);
+        } catch (e) { failures += 1; setErr(`任務 #${order} 執行失敗：${e.message}（已略過，繼續其餘）`); }
+      }
+      onChange?.();
+      if (!failures) setErr('');
+    } finally { setExecuting(null); setExecutingAll(false); }
   };
 
   const del = async (id) => { await api.del(`/goals/${id}`); onChange?.(); };
@@ -263,7 +287,15 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
             {err && <div className="banner-err sm">{err}</div>}
           </div>
 
-          <h4>任務拆解</h4>
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+            <h4 style={{ margin: 0 }}>任務拆解</h4>
+            {open.tasks.some((t) => t.status !== 'done' && !t.deliverable) && (
+              <button className="btn sm" onClick={executeAll} disabled={executing !== null || executingAll}>
+                {executingAll ? `⏳ 依序執行中…（#${executing}）` : '▶ 依序執行全部交付'}
+              </button>
+            )}
+          </div>
+          {executingAll && <ProgressBar label={`正在依序執行交付（目前 #${executing}）——完成後自動接續下一位`} />}
           <div className="tasks">
             {open.tasks.map((t, i) => (
               <div key={i} className="task">
