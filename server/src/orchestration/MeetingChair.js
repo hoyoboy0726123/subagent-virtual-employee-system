@@ -56,14 +56,29 @@ const STYLE_LINES = {
   strict: '你的主持風格直接而嚴格：追問必須逼出具體數字、期限與可驗收的承諾，對含糊、場面話式的回答毫不留情地點破。',
 };
 
-function chairSystem(cfg) {
+function chairSystem(cfg, converge = false) {
+  // Convergence mode: the chair is a FACILITATOR driving consensus, not a
+  // Socratic interrogator. Its follow-ups (if any) must push people to commit /
+  // align / conclude — never open new threads or ask them to dig deeper.
+  const followLine = !cfg.followUps
+    ? '不要附加任何追問，question 一律輸出空字串。'
+    : converge
+      ? [
+        '你現在的任務是「促成共識、收斂到結論」，不是把討論挖得更深。',
+        '追問（只在真的有助收斂時才加，能不加就不加，question 留空）只能用來：請對方明確表態「同意／反對＋一句理由」、',
+        '請他把前面的爭點收成一個具體決定、或請他在既有選項中二選一。',
+        '嚴禁提出會讓討論岔開、擴大範圍、或要求更多分析的新問題。',
+      ].join('\n')
+      : STYLE_LINES[cfg.style] || STYLE_LINES.standard;
   return [
-    '你是這場虛擬員工會議的主持人（主管代理）。你的工作是讓這一輪討論高效向前：',
+    converge
+      ? '你是這場虛擬員工會議的主持人（主管代理）。你的工作是引導這一輪「快速收斂到共識與結論」：'
+      : '你是這場虛擬員工會議的主持人（主管代理）。你的工作是讓這一輪討論高效向前：',
     '根據目前的對話，為「這一輪所有尚未發言的人」安排最有生產力的發言順序——',
-    '誰的專業正好對上懸而未決的問題、誰被點名了、誰的立場還沒被檢驗，就讓誰先講。',
-    cfg.followUps
-      ? STYLE_LINES[cfg.style] || STYLE_LINES.standard
-      : '不要附加任何追問，question 一律輸出空字串。',
+    converge
+      ? '讓還沒表態的人先講、讓能拍板的人收尾，把分歧引導向一個決定。'
+      : '誰的專業正好對上懸而未決的問題、誰被點名了、誰的立場還沒被檢驗，就讓誰先講。',
+    followLine,
     '只輸出 JSON：{"order":[{"name":"姓名","question":"追問或空字串"}, ...]}，',
     '名單必須涵蓋下面每一個人剛好一次，不要任何其他文字。',
   ].join('\n');
@@ -108,7 +123,7 @@ function parseOrder(text, participants) {
  * @param {object}  [opts._chairConfig] injectable chair config (hermetic tests)
  * @returns {Promise<{order: Array<{employee, question}>, live: boolean}>}
  */
-export async function planRoundOrder({ topic, roundTitle, roundGoal, convo, participants, _generate, _chairConfig }) {
+export async function planRoundOrder({ topic, roundTitle, roundGoal, convo, participants, converge = false, _generate, _chairConfig }) {
   const cfg = _chairConfig ? sanitizeChairConfig(_chairConfig) : getChairConfig();
   const deterministic = participants.map((p) => ({ employee: p, question: null }));
   if (participants.length <= 1) return { order: deterministic, live: false };
@@ -134,7 +149,7 @@ export async function planRoundOrder({ topic, roundTitle, roundGoal, convo, part
   ].join('\n');
 
   const res = await gen({
-    system: chairSystem(cfg), user, maxTokens: 500, temperature: 0.3,
+    system: chairSystem(cfg, converge), user, maxTokens: 500, temperature: 0.3,
     ...(cfg.model ? { model: cfg.model } : {}), // chair-only model override
   });
   const order = res?.text ? parseOrder(res.text, participants) : null;

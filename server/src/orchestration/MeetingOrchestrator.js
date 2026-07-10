@@ -145,7 +145,11 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
       // The manager agent chairs the round — ONE call plans the whole round's
       // speaking order (+ optional per-person follow-ups); everyone still speaks
       // exactly once. Offline this degrades to the deterministic input order.
-      const plannedRound = await planRoundOrder({ topic, roundTitle, roundGoal, convo, participants });
+      // Convergence mode: the chair facilitates consensus (no deep-dive
+      // follow-ups) when the meeting is quick, conclusion-only, or on a
+      // narrowing/closing round (by title).
+      const converge = quick || outputMode === 'conclusion' || /收斂|定案|收束|結論/.test(roundTitle);
+      const plannedRound = await planRoundOrder({ topic, roundTitle, roundGoal, convo, participants, converge });
       for (const pick of plannedRound.order) {
         if (signal?.aborted) break; // stop between speakers too, to save calls
         // The human manager's live interjections take the floor first.
