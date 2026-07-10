@@ -182,9 +182,6 @@ PDF/DOCX/PPTX/XLSX/CSV 需要 PDF/DOCX 解析元件（Windows 一鍵 `start.bat`
 > **訂閱大腦限單一使用者、本機使用。** 把你的訂閱憑證路由給其他使用者違反供應商
 > 條款。本系統會從 CLI 子行程剝除計費金鑰環境變數並隔離回合，詳見
 > [SECURITY.md](./SECURITY.md)。
->
-> 📖 想在你自己的專案用這套「訂閱當大腦」模式？完整教學（headless 呼叫、六大坑、
-> 可複製程式碼）在 [docs/SUBSCRIPTION_BRAINS.md](./docs/SUBSCRIPTION_BRAINS.md)。
 
 ---
 

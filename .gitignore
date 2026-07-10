@@ -22,3 +22,6 @@ dist-exe/
 
 # Internal roadmap — kept local, not published
 docs/FUTURE_PLAN.md
+
+# Internal docs — kept local, not published
+docs/
