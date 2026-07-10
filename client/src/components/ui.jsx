@@ -57,12 +57,17 @@ function MarkdownImpl({ text = '' }) {
   const blocks = [];
   let list = null;
 
-  const inline = (s) =>
-    s.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
+  const inline = (raw) => {
+    // Models often emit an UNCLOSED bold marker ("- **是否…。" with no trailing
+    // **), which would otherwise show the literal "**". Balance an odd count by
+    // closing at end-of-line, so the intended label renders bold.
+    const s = ((String(raw).match(/\*\*/g) || []).length % 2 === 1) ? `${raw}**` : String(raw);
+    return s.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
       if (part.startsWith('**') && part.endsWith('**')) return <strong key={i}>{part.slice(2, -2)}</strong>;
       if (part.length > 1 && part.startsWith('`') && part.endsWith('`')) return <code key={i}>{part.slice(1, -1)}</code>;
       return <React.Fragment key={i}>{part}</React.Fragment>;
     });
+  };
 
   const flush = () => {
     if (list) {
