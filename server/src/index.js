@@ -1,5 +1,6 @@
 // Entry point. Builds the app and listens; exports `app` for the smoke test.
 import path from 'node:path';
+import readline from 'node:readline';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
@@ -31,27 +32,60 @@ async function seedIfFresh() {
 const isMain = isPackaged()
   || (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]));
 
+// Bind the first free port at/above `startPort`. A double-clicked exe must NOT
+// crash just because 3001 is already taken (another copy, a dev server, …) —
+// that was surfacing as the console window flashing shut.
+function listenWithFallback(startPort, tries = 15) {
+  return new Promise((resolve, reject) => {
+    let port = startPort;
+    const attempt = () => {
+      const server = app.listen(port);
+      server.once('listening', () => resolve({ server, port }));
+      server.once('error', (err) => {
+        if (err.code === 'EADDRINUSE' && port < startPort + tries) { port += 1; attempt(); }
+        else reject(err);
+      });
+    };
+    attempt();
+  });
+}
+
+// Keep a double-clicked console window open on a fatal error so the user can
+// read it (otherwise it flashes shut). No-op in a source checkout / non-TTY.
+function pauseThenExit(code) {
+  if (!isPackaged() || !process.stdin.isTTY) { process.exit(code); return; }
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  rl.question('\n按 Enter 鍵關閉此視窗…', () => { rl.close(); process.exit(code); });
+}
+
 // Async IIFE instead of top-level await: the exe build bundles to CommonJS
 // (Node SEA requires a CJS entry), and CJS has no TLA.
 if (isMain) (async () => {
-  await seedIfFresh();
-  // Packaged exe: bootstrap PDF/DOCX parsing in the background (finds Python,
-  // builds a venv beside the exe, pip-installs MarkItDown). Fire-and-forget —
-  // boot never waits, failures degrade to TXT/MD/HTML-only upload.
-  if (isPackaged()) {
-    import('./ingest/autoSetup.js')
-      .then(({ ensureMarkitdown }) => ensureMarkitdown())
-      .catch(() => { /* optional capability — never block boot */ });
-  }
-  app.listen(config.port, () => {
-    const url = `http://localhost:${config.port}`;
+  try {
+    await seedIfFresh();
+    // Packaged exe: bootstrap PDF/DOCX parsing in the background (finds Python,
+    // builds a venv beside the exe, pip-installs MarkItDown). Fire-and-forget —
+    // boot never waits, failures degrade to TXT/MD/HTML-only upload.
+    if (isPackaged()) {
+      import('./ingest/autoSetup.js')
+        .then(({ ensureMarkitdown }) => ensureMarkitdown())
+        .catch(() => { /* optional capability — never block boot */ });
+    }
+    const { port } = await listenWithFallback(config.port);
+    const url = `http://localhost:${port}`;
     console.log(`\n  🧑‍💼 Virtual Employee System API on ${url}`);
     console.log(`  Storage : SQLite (${config.dbFile})`);
     console.log('  Runtime : standalone（內建多代理）');
-    console.log(`  LLM     : ${llmEnabled() ? `live (${activeModelInfo().label})` : 'off (deterministic engine)'}\n`);
+    console.log(`  LLM     : ${llmEnabled() ? `live (${activeModelInfo().label})` : 'off (deterministic engine)'}`);
+    if (port !== config.port) console.log(`  （埠 ${config.port} 已被佔用，改用 ${port}）`);
+    console.log('');
     // Packaged exe: open the browser for the double-click user (best-effort).
     if (isPackaged() && process.platform === 'win32') {
       try { spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref(); } catch { /* ignore */ }
     }
-  });
+  } catch (err) {
+    console.error('\n  ✗ 啟動失敗：', err?.message || err);
+    console.error('  請截圖上方訊息回報。');
+    pauseThenExit(1);
+  }
 })();
