@@ -108,16 +108,17 @@ export function remove(id) {
 // ---------------------------------------------------------------------------
 
 /** Start a discussion: run the first rounds, persist as status 'discussing'. */
-export async function startDiscussion({ topic, participantIds, rounds } = {}, onEvent, signal) {
+export async function startDiscussion({ topic, participantIds, rounds, outputMode } = {}, onEvent, signal) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
     throw badRequest('主題與至少一位與會者為必填');
   }
+  const mode = outputMode === 'conclusion' ? 'conclusion' : 'full';
   const runtime = requireInteractiveRuntime();
   const runId = newId('run'); // the orchestrator registers the mailbox + emits 'run'
 
   const result = await runtime.runMeetingRounds({
-    topic, participants, rounds: boundRounds(rounds), runId, onEvent, signal,
+    topic, participants, rounds: boundRounds(rounds), outputMode: mode, runId, onEvent, signal,
   });
 
   return repo.insertMeeting({
@@ -129,6 +130,7 @@ export async function startDiscussion({ topic, participantIds, rounds } = {}, on
     grounding: result.grounding || [],
     runtime: result.runtime || {},
     status: 'discussing',
+    outputMode: mode,
   });
 }
 
@@ -150,6 +152,7 @@ export async function continueDiscussion(meetingId, { rounds } = {}, onEvent, si
       participants,
       rounds: more,
       priorTranscript: meeting.transcript,
+      outputMode: meeting.outputMode,
       runId,
       onEvent,
       signal,
@@ -286,6 +289,7 @@ export async function convergeAndConclude(meetingId, { rounds } = {}, onEvent, s
       rounds: n,
       priorTranscript: meeting.transcript,
       roundPlan: planConvergeRounds(n), // forced-convergence round goals
+      outputMode: meeting.outputMode,
       runId,
       onEvent,
       signal,
@@ -319,6 +323,7 @@ export async function concludeDiscussion(meetingId, onEvent) {
     participants,
     transcript: meeting.transcript,
     grounding: meeting.grounding,
+    outputMode: meeting.outputMode,
     onEvent,
   });
 

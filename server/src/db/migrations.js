@@ -205,6 +205,14 @@ const MIGRATIONS = [
       CREATE INDEX idx_chunk_emb_employee ON chunk_embeddings(employee_id);
     `);
   },
+
+  // v8 — per-meeting output mode. 'full' (default) = decisions + action items
+  // (spinnable into goals); 'conclusion' = the team converges to a final
+  // decision/recommendation only, with NO action items — chosen at meeting
+  // creation to keep the discussion focused and the report todo-free.
+  (db) => {
+    db.exec("ALTER TABLE meetings ADD COLUMN output_mode TEXT NOT NULL DEFAULT 'full';");
+  },
 ];
 
 export function migrate(db) {

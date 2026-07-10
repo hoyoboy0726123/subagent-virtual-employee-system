@@ -19,6 +19,7 @@ function rowToMeeting(row) {
     grounding: j(row.grounding, []),
     runtime: j(row.runtime, {}),
     status: row.status || 'concluded',
+    outputMode: row.output_mode || 'full',
     createdAt: row.created_at,
   };
 }
@@ -126,18 +127,19 @@ export function insertMeeting(data) {
     grounding: data.grounding || [],
     runtime: data.runtime || {},
     status: data.status || 'concluded',
+    outputMode: data.outputMode === 'conclusion' ? 'conclusion' : 'full',
     createdAt: now(),
   };
   getDb()
     .prepare(`INSERT INTO meetings
-      (id, topic, participant_ids, participants, rounds, transcript, minutes, report, grounding, runtime, status, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, topic, participant_ids, participants, rounds, transcript, minutes, report, grounding, runtime, status, output_mode, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       meeting.id, meeting.topic, JSON.stringify(meeting.participantIds),
       JSON.stringify(meeting.participants), meeting.rounds,
       JSON.stringify(meeting.transcript), JSON.stringify(meeting.minutes),
       meeting.report, JSON.stringify(meeting.grounding),
-      JSON.stringify(meeting.runtime), meeting.status, meeting.createdAt,
+      JSON.stringify(meeting.runtime), meeting.status, meeting.outputMode, meeting.createdAt,
     );
   return meeting;
 }

@@ -346,7 +346,9 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 .meeting-room-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .meeting-room-head h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .tag-live { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
-.meeting-room-transcript { max-height: 420px; overflow-y: auto; margin: 10px 0; }
+.meeting-room-transcript { max-height: 420px; overflow-y: auto; margin: 10px 0; transition: max-height 0.2s ease; }
+/* Office collapsed → reclaim its vertical space for the transcript. */
+.meeting-room-transcript.office-collapsed { max-height: 72vh; }
 .meeting-room-controls .interject-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .meeting-room-controls .interject-row input { flex: 1; }
 .meeting-room-controls .callon-row { display: flex; gap: 8px; margin-bottom: 8px; }

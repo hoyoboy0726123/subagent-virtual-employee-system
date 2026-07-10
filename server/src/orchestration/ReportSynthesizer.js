@@ -36,9 +36,26 @@ const groundingBlock = (grounding = []) =>
  * Synthesize a manager-level meeting report from the real transcript.
  * @returns {Promise<{text:string, live:boolean}>}
  */
-export async function synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding = [] }) {
+export async function synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding = [], outputMode = 'full' }) {
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
   const body = transcript.map((t) => `第${t.round}輪 · ${t.speaker}（${t.role}）：${t.text}`).join('\n');
+  // Conclusion mode: a decision-only report — no action items / owners / due
+  // dates, just the team's final call. Keeps quick discussions todo-free.
+  const sections = outputMode === 'conclusion'
+    ? [
+      '「## 執行摘要」：3–5 句，寫出會議的核心結論與最終方向，讓沒參加的人也讀得懂。',
+      '「## 討論脈絡」：3–6 個要點，呈現主要論點如何交鋒與收斂（誰主張什麼、誰反對或補充），去除重複。',
+      '「## 最終結論／方案」：把團隊收斂出的最終決定或建議清楚寫成條列或短段落；若仍有分歧，明說採用哪個方案與理由。這是報告的重點。',
+      '「## 風險與待解問題」：條列尚未解決的爭點、風險或需要更多資訊之處；沒有就寫「無重大未解問題」。',
+      '注意：這是「結論模式」——不要輸出「行動項目」「待辦」「負責人指派」「期限」這類章節或內容，只聚焦在最終結論。',
+    ]
+    : [
+      '「## 執行摘要」：3–5 句，寫出會議的核心結論與方向，讓沒參加的人也讀得懂，不要流水帳。',
+      '「## 討論脈絡」：3–6 個要點，呈現主要論點如何交鋒與收斂（誰主張什麼、誰提出反對或補充），去除重複。',
+      '「## 決議」：條列已達成的決定，每條標明負責人；若某議題未定案，明說「未定案」與卡在哪。',
+      '「## 行動項目」：每條為「- 負責人 — 具體行動（期限：…）」，行動要可執行、可驗收。',
+      '「## 風險與待解問題」：條列尚未解決的爭點、風險或需要更多資訊之處；沒有就寫「無重大未解問題」。',
+    ];
   const user = [
     '以下是各虛擬員工代理在這場會議中的真實逐字發言。請把它統整成一份主管級會議報告。',
     '',
@@ -50,11 +67,7 @@ export async function synthesizeMeetingReport({ topic, participants, transcript,
     body,
     '',
     '請以繁體中文輸出一份 Markdown 報告，只輸出報告本身，嚴格使用下列章節與順序：',
-    '「## 執行摘要」：3–5 句，寫出會議的核心結論與方向，讓沒參加的人也讀得懂，不要流水帳。',
-    '「## 討論脈絡」：3–6 個要點，呈現主要論點如何交鋒與收斂（誰主張什麼、誰提出反對或補充），去除重複。',
-    '「## 決議」：條列已達成的決定，每條標明負責人；若某議題未定案，明說「未定案」與卡在哪。',
-    '「## 行動項目」：每條為「- 負責人 — 具體行動（期限：…）」，行動要可執行、可驗收。',
-    '「## 風險與待解問題」：條列尚未解決的爭點、風險或需要更多資訊之處；沒有就寫「無重大未解問題」。',
+    ...sections,
     '不要在報告裡加入這些以外的章節或前言。',
   ].filter(Boolean).join('\n');
 

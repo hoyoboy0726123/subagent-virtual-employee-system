@@ -11,6 +11,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   const [open, setOpen] = useState(null); // meeting being viewed
   const [topic, setTopic] = useState('');
   const [rounds, setRounds] = useState(3);
+  const [outputMode, setOutputMode] = useState('full'); // 'full' | 'conclusion'
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -64,7 +65,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
     try {
       const { meeting } = await api.stream(
         '/meetings/discuss/stream',
-        { topic, participantIds: selected, rounds: Number(rounds) },
+        { topic, participantIds: selected, rounds: Number(rounds), outputMode },
         roomEvents,
       );
       setTopic(''); setSelected([]);
@@ -133,7 +134,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   const convergeConclude = async (rounds = 3) => {
     if (!room?.meetingId) return;
     setErr('');
-    setRoom((r) => ({ ...r, streaming: true, phase: `限時收斂：最多 ${rounds} 輪內做出決議與待辦…` }));
+    setRoom((r) => ({ ...r, streaming: true, phase: `限時收斂：最多 ${rounds} 輪內收斂出結論並結束…` }));
     try {
       const { meeting } = await api.stream(`/meetings/${room.meetingId}/converge/stream`, { rounds }, roomEvents);
       setRoom(null);
@@ -193,6 +194,13 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
           <label className="inline">輪數
             <select value={rounds} onChange={(e) => setRounds(e.target.value)}>
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
+          <label className="inline" title="完整＝決議＋可派成目標的待辦；結論＝只收斂出最終方案、不產待辦，討論也更聚焦不發散">
+            產出
+            <select value={outputMode} onChange={(e) => setOutputMode(e.target.value)}>
+              <option value="full">完整（決議＋待辦）</option>
+              <option value="conclusion">結論（只給方案，不產待辦）</option>
             </select>
           </label>
           <button className="btn" onClick={run} disabled={busy || Boolean(room)} title={room ? '請先結束目前開著的會議室' : ''}>
@@ -403,7 +411,7 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCa
       </div>
       {showOffice && <PixelOffice participants={participants} wanderPool={wanderPool} active={active} />}
 
-      <div className="live-progress meeting-room-transcript">
+      <div className={`live-progress meeting-room-transcript${showOffice ? '' : ' office-collapsed'}`}>
         {room.transcript.length === 0 && <p className="muted">（尚無發言）</p>}
         <div className="live-progress-turns">
           {room.transcript.map((t, i) => <TurnRow key={i} t={t} />)}
