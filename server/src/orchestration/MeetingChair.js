@@ -60,6 +60,11 @@ function chairSystem(cfg, converge = false) {
   // Convergence mode: the chair is a FACILITATOR driving consensus, not a
   // Socratic interrogator. Its follow-ups (if any) must push people to commit /
   // align / conclude — never open new threads or ask them to dig deeper.
+  const CONVERGE_TONE = {
+    gentle: '語氣溫和：用邀請的方式促成共識（「我們是不是可以先在…上取得共識？」）。',
+    standard: '語氣直接：明確請對方表態或收成決定。',
+    strict: '語氣嚴格：不接受繼續發散或含糊，直接要求二選一或給出承諾。',
+  };
   const followLine = !cfg.followUps
     ? '不要附加任何追問，question 一律輸出空字串。'
     : converge
@@ -68,6 +73,7 @@ function chairSystem(cfg, converge = false) {
         '追問（只在真的有助收斂時才加，能不加就不加，question 留空）只能用來：請對方明確表態「同意／反對＋一句理由」、',
         '請他把前面的爭點收成一個具體決定、或請他在既有選項中二選一。',
         '嚴禁提出會讓討論岔開、擴大範圍、或要求更多分析的新問題。',
+        CONVERGE_TONE[cfg.style] || CONVERGE_TONE.standard,
       ].join('\n')
       : STYLE_LINES[cfg.style] || STYLE_LINES.standard;
   return [
