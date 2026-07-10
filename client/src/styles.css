@@ -274,14 +274,20 @@ textarea { resize: vertical; }
 /* Indeterminate progress indicator (ProgressBar) — model-is-working feedback. */
 .progress-wrap { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; width: 100%; }
 .progress-label { font-size: 12.5px; color: var(--muted); }
+/* Calm indeterminate: a soft-edged light glides slowly, left→right — much
+   gentler than the old fast racing block. */
 .progress-bar { height: 4px; border-radius: 4px; background: var(--panel-2); overflow: hidden; position: relative; }
 .progress-bar::before {
-  content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 35%;
-  border-radius: 4px; background: var(--brand); animation: progress-slide 1.15s ease-in-out infinite;
+  content: ''; position: absolute; top: 0; bottom: 0; left: -45%; width: 45%;
+  border-radius: 4px; opacity: 0.65;
+  background: linear-gradient(90deg, transparent 0%, var(--brand) 50%, transparent 100%);
+  animation: progress-slide 2.8s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 @keyframes progress-slide {
-  0% { left: -35%; } 60% { left: 100%; } 100% { left: 100%; }
+  0% { left: -45%; } 100% { left: 100%; }
 }
+.progress-label { animation: progress-breathe 2.8s ease-in-out infinite; }
+@keyframes progress-breathe { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
 
 .footer { margin-top: 40px; text-align: center; color: var(--muted); font-size: 12px; }
 .footer code { background: var(--panel-2); padding: 1px 6px; border-radius: 5px; }
@@ -343,9 +349,12 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 @keyframes turn-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 /* Phase 16 — manager-chaired meeting room */
-.meeting-room-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-.meeting-room-head h3 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.meeting-room-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.meeting-room-title h3 { margin: 0 0 8px; }
+.meeting-status-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.meeting-round-line { margin-top: 6px; font-size: 16px; font-weight: 600; color: var(--text); letter-spacing: 0.01em; }
 .tag-live { background: rgba(46, 204, 113, 0.15); color: #2ecc71; }
+.tag-wait { background: rgba(244, 182, 74, 0.16); color: var(--amber); }
 .meeting-room-transcript { max-height: 420px; overflow-y: auto; margin: 10px 0; transition: max-height 0.2s ease; }
 /* Office collapsed → reclaim its vertical space for the transcript. */
 .meeting-room-transcript.office-collapsed { max-height: 72vh; }
@@ -382,6 +391,7 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 [data-theme='light'] .pill-live { background: rgba(66, 119, 69, 0.1); }
 [data-theme='light'] .pill-sim { background: rgba(201, 100, 66, 0.1); }
 [data-theme='light'] .tag-live { background: rgba(66, 119, 69, 0.12); color: #427745; }
+[data-theme='light'] .tag-wait { background: rgba(180, 120, 20, 0.12); color: #9a6b12; }
 .theme-toggle { font-size: 17px; }
 
 [data-theme='light'] h1, [data-theme='light'] h2, [data-theme='light'] h3,

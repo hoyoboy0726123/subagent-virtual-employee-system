@@ -51,7 +51,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   // Shared SSE event handler: every segment (start / continue) feeds the room.
   const roomEvents = (evt) => {
     if (evt.type === 'run') setRoom((r) => ({ ...r, runId: evt.runId }));
-    else if (evt.type === 'round') setRoom((r) => ({ ...r, phase: `第 ${evt.round} 輪 — ${evt.roundTitle}` }));
+    else if (evt.type === 'round') setRoom((r) => ({ ...r, phase: `第 ${evt.round} 輪 — ${evt.roundTitle}`, roundNo: evt.round, roundTitle: evt.roundTitle }));
     else if (evt.type === 'turn') setRoom((r) => ({ ...r, transcript: [...(r?.transcript || []), evt.turn] }));
     else if (evt.type === 'synthesizing') setRoom((r) => ({ ...r, phase: '主管代理正在統整決議與報告…' }));
     else if (evt.type === 'memory') setRoom((r) => ({ ...r, phase: '正在為每位員工沉澱會議記憶…' }));
@@ -469,10 +469,21 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCa
   return (
     <div className="panel meeting-room">
       <div className="meeting-room-head">
-        <h3>
-          🗣️ 會議室：{room.topic}
-          <span className="tag tag-live">{room.streaming ? '🟢 進行中' : '⏸ 等待主管指示'}</span>
-        </h3>
+        <div className="meeting-room-title">
+          <h3>🗣️ 會議室：{room.topic}</h3>
+          <div className="meeting-status-row">
+            {room.streaming
+              ? <span className="tag tag-live">🟢 進行中</span>
+              : <span className="tag tag-wait">🟡 討論暫停 · 等待主管指示</span>}
+          </div>
+          <div className="meeting-round-line">
+            {room.streaming
+              ? (room.roundNo != null
+                  ? `📍 第 ${room.roundNo} 輪${room.roundTitle ? ` · ${room.roundTitle}` : ''}`
+                  : `📍 ${room.phase || '準備中…'}`)
+              : '⏸ 討論到一段落——你可以繼續討論、收斂結束，或直接結束產出報告。'}
+          </div>
+        </div>
         {!room.streaming && (
           <button className="btn-ghost sm" onClick={onLeave} title="先離開，稍後可從過往會議列表回來繼續">離開會議室</button>
         )}
@@ -491,7 +502,6 @@ function MeetingRoom({ room, employees = [], selectedIds = [], onInterject, onCa
           {room.transcript.map((t, i) => <TurnRow key={i} t={t} />)}
           <div ref={endRef} />
         </div>
-        {room.streaming && <ProgressBar label={room.phase || '討論進行中…'} />}
       </div>
 
       <div className="meeting-room-controls">
