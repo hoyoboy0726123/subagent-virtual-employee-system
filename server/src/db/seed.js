@@ -109,8 +109,33 @@ export async function seed() {
     objectives: '負責財務分析師的職責，並透過財務建模協助團隊達成目標。',
     communicationStyle: '以數字為先且保守',
   });
+  // Software / AI roles.
+  const fe = make({
+    name: '沈昀',
+    roleTitle: 'UI/UX 與前端工程師',
+    personality: '以使用者為中心、對互動細節與一致性龜毛，重視無障礙與效能，不接受「先能動再說」的粗糙介面。',
+    expertise: ['前端框架（React／Vue）', '設計系統與元件庫', '可用性與無障礙（a11y）', '互動設計與原型', '前端效能優化'],
+    objectives: '打造直覺、一致、可用且無障礙的介面，讓好功能不被爛體驗埋沒；在美感、效能與可維護性之間找到落地的平衡。',
+    communicationStyle: '以使用者流程、實際畫面與可用性數據說話，常用原型與範例佐證',
+  });
+  const be = make({
+    name: '高梓睿',
+    roleTitle: '資料庫與後端工程師',
+    personality: '對資料正確性、一致性與可擴充性一絲不苟，對 schema 變更保守；先想清楚契約與失敗情境才動手。',
+    expertise: ['資料庫設計與正規化', 'API 與服務契約設計', '交易與一致性', '索引與查詢效能', '可擴充性與可靠度'],
+    objectives: '打造資料正確、穩定、可擴充的後端與資料層，讓上層功能有可信的地基；在效能、成本與可維護性間做出可驗收的取捨。',
+    communicationStyle: '以資料模型、API 契約、效能數據與失敗情境說話',
+  });
+  const ai = make({
+    name: '唐立言',
+    roleTitle: 'AI 架構設計師',
+    personality: '系統性思考、對模型取捨務實、對炒作存疑；凡事看評測、成本與延遲，不追新只求可靠。',
+    expertise: ['LLM 應用架構', 'RAG 與檢索設計', '多代理編排', '模型選型與評測', '成本與延遲最佳化', 'prompt 與工具設計'],
+    objectives: '設計可靠、可評測、成本與延遲可控的 AI 系統，把不確定的模型變成可交付的產品。',
+    communicationStyle: '以架構圖、取捨矩陣與評測指標（品質／成本／延遲）說話',
+  });
 
-  const employees = [pm, id, ee, me, fw, sc, mkt, qa, fin];
+  const employees = [pm, id, ee, me, fw, sc, mkt, qa, fin, fe, be, ai];
 
   // ── Professional background knowledge — grounded in 2025–2026 web research,
   //    each doc carries its sources so agents can cite them. [emp, title, body, tags]
@@ -172,6 +197,16 @@ export async function seed() {
     [qa, '可靠度驗證關卡與認證標準',
       '品保是量產前的獨立簽核。硬體開發依 EVT（工程驗證）→DVT（設計驗證）→PVT（量產驗證）關卡推進，每關對電性、機構、散熱、系統做嚴格測試；PC OEM 的測試程序常達數萬步驟。可靠度以 MIL-STD-810H 為基準（約 28 項極端溫濕度、震動、落摔），加上環境測試、HTOL 高溫壽命與熱衝擊。無障礙硬體須對生理、感官、動作、認知障礙實測。原則：不合格就不放行——含糊、未達門檻的項目一律擋下，這是對品質底線的最後把關。\n來源：ToughRuggedLaptops（MIL-STD）、HP MIL-STD-810 白皮書、HWE.design（EVT/DVT）。',
       ['品保', '認證']],
+
+    [fe, '前端與設計系統實務（2025–2026）',
+      '現代前端以元件化框架（React、Vue、Svelte）搭配設計系統（Design System）為主流：以 design token 統一色彩、間距、字體，元件庫（如 Radix、shadcn 風格）確保跨頁一致與無障礙。可用性底線：符合 WCAG 2.2 AA（對比、鍵盤操作、focus 可見、螢幕閱讀器語意），互動元件用語意化 HTML 與 ARIA。效能以 Core Web Vitals 為指標——LCP < 2.5s、INP < 200ms、CLS < 0.1；手段包含程式碼分割、圖片延遲載入與尺寸標註、避免主執行緒長任務。狀態管理傾向就近（server state 用 TanStack Query 之類，client state 最小化）。設計交付重視原型與真實資料驗證，避免「happy path」假象。方法：先流程與空／錯／載入三態，再談視覺；任何動畫或特效都要問對可用性與效能的代價。\n來源：WCAG 2.2、web.dev Core Web Vitals、業界設計系統實務。',
+      ['前端', '設計系統']],
+    [be, '後端與資料庫實務（2025–2026）',
+      '資料層設計先問一致性需求：OLTP 以關聯式資料庫（PostgreSQL 為主流）＋正確的正規化與外鍵約束為底，交易用 ACID 保證，避免用應用層「口頭一致」。索引依查詢樣態設計（覆蓋索引、複合索引順序、避免對可空欄位過度索引），用 EXPLAIN 看實際計畫而非猜。擴充順序：先垂直（加資源、調參）、加讀取副本與快取（Redis），真的到瓶頸再談分片；跨服務一致性用 outbox／saga 而非分散式交易。API 契約優先（OpenAPI／schema），破壞性變更走灰度。可靠度：冪等設計、重試加退避、超時與熔斷、可觀測性（結構化日誌＋指標＋追蹤）。遷移一律可回復、分階段，schema 變更與程式碼部署解耦（先加欄位再切流量）。\n來源：PostgreSQL 文件、Designing Data-Intensive Applications、業界 SRE 實務。',
+      ['後端', '資料庫']],
+    [ai, 'LLM 應用架構實務（2025–2026）',
+      'LLM 產品架構的核心是「把不確定變可控」：先定義評測（eval）——用固定資料集量測品質、成本、延遲，任何 prompt／模型／檢索改動都跑一次，避免憑感覺調。檢索（RAG）勝過硬塞長 context：切塊＋向量／關鍵字混合檢索（RRF 融合）＋重排序，來源附引用可稽核；資料新鮮度與版本對齊是常見地雷。多代理／工具用明確工具契約（function calling）與有界步數預算避免發散，能單次完成就不要多輪。模型選型分層：便宜快的小模型做分類／判斷／格式化，貴的大模型只給難推理步驟；訂閱／CLI 大腦有固定啟動成本，適合少次大呼叫、不適合高頻小呼叫。可靠度：一律設計離線／降級路徑、逾時與重試上限、對 429／5xx 指數退避，並如實標示哪些回合是即時模型、哪些是備援。成本與延遲要當一等公民量測。\n來源：業界 LLMOps 實務、RAG／eval 方法、模型供應商文件。',
+      ['AI 架構', 'LLM']],
   ];
   for (const [emp, title, content, tags] of docs) {
     insertDocument(emp.id, { title, content, tags, source: 'note' });
