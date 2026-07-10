@@ -440,3 +440,8 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 }
 .chat-images { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .chat-images img { max-height: 180px; max-width: 100%; border-radius: 6px; }
+
+/* Segmented control (meeting type: deep / quick) */
+.seg { display: inline-flex; background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; padding: 2px; gap: 2px; }
+.seg-btn { background: none; border: none; color: var(--muted); padding: 6px 12px; font-size: 13px; font-weight: 600; border-radius: 7px; cursor: pointer; }
+.seg-btn.on { background: var(--brand); color: #fff; }

@@ -19,7 +19,7 @@
 // (network/quota/empty), the executor degrades *per turn* to the deterministic
 // engine and marks that turn `live: false` — so the orchestration is real either
 // way, and the runtime metadata can report exactly how much ran live.
-import { generateAgentic, generateVision, geminiKeyPresent, llmEnabled, activeModelInfo } from '../reasoning/llm.js';
+import { generate, generateAgentic, generateVision, geminiKeyPresent, llmEnabled, activeModelInfo } from '../reasoning/llm.js';
 import { buildToolbox } from '../reasoning/tools.js';
 import * as engine from '../reasoning/engine.js';
 import { polishUtterance } from './output.js';
@@ -122,12 +122,32 @@ function citationsFor(grounding) {
  * @returns {Promise<{text:string, live:boolean, citations:Array}>}
  */
 export async function meetingTurn({ employee, grounding, context }) {
-  const { topic, agenda, rounds, round, roundTitle, roundGoal, participantList, convo } = context;
+  const { topic, agenda, quick, rounds, round, roundTitle, roundGoal, participantList, convo } = context;
   const view = convo || {};
   const stance = roundStance(round, rounds);
   const agendaBlock = String(agenda || '').trim()
     ? `\n本次會議的待討論事項（請針對這些逐一收斂，不要偏題）：\n${String(agenda).trim()}`
     : '';
+
+  // Quick meeting room: a fast, shallow take from the agent's ROLE — no deep
+  // knowledge dive, no tools, short. The whole point is a rapid preliminary read.
+  if (quick) {
+    const prev = view.previousSpeaker
+      ? `\n前一位 ${view.previousSpeaker.name} 說：「${view.previousSpeaker.text}」，你可以簡短呼應或補一個不同角度。`
+      : '';
+    const quickUser = [
+      `這是一場「快速會議」，主題：「${topic}」。與會者：${participantList}。`,
+      agendaBlock,
+      `請你純粹以「${employee.roleTitle}」的角色身分與常識，快速給出你的看法或初步判斷——不用查資料、不用長篇分析。`,
+      prev,
+      '只輸出 2–3 句、口語、直接的看法。',
+    ].filter(Boolean).join('\n');
+    const turn = await runOrFallback({
+      employee, grounding: [], user: quickUser, quick: true,
+      fallback: () => engine.speak(employee, topic, round, context.priorSpeakers || [], []),
+    });
+    return withCitations(turn, []);
+  }
 
   // Trailing two-phase instruction: models weight the last lines most, so the
   // "check facts with your tools FIRST" step must come after the stance — and
@@ -404,7 +424,25 @@ function withCitations(turn, grounding) {
 //                  nudge (0.72–0.87) so distinct personas also phrase distinctly
 //   maxToolCalls — this agent's per-turn tool budget
 //   webSearch    — false forbids web_search for this agent (enforced in toolbox)
-async function runOrFallback({ employee, grounding, user, fallback }) {
+async function runOrFallback({ employee, grounding, user, fallback, quick = false }) {
+  // Quick meeting: a single plain generate — no tools, no deep grounding, short.
+  // The agent gives a fast role-based view instead of a researched analysis.
+  if (quick) {
+    if (llmEnabled()) {
+      const agentCfg = employee.agentConfig || {};
+      const system = personaSystem(employee, []); // role only — no KB grounding
+      const res = await generate({
+        system,
+        user,
+        maxTokens: Math.min(config.llm.output.turn, 500),
+        temperature: 0.7,
+        ...(agentCfg.model ? { model: agentCfg.model } : {}),
+      });
+      const t = polishUtterance(res?.text || '');
+      if (t) return { text: t, live: true, toolCalls: 0, toolHits: [], webSources: [] };
+    }
+    return { text: polishUtterance(fallback()), live: false, toolCalls: 0, toolHits: [], webSources: [] };
+  }
   if (llmEnabled()) {
     const agentCfg = employee.agentConfig || {};
     const system = personaSystem(employee, grounding);

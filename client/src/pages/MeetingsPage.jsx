@@ -16,6 +16,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   const [agenda, setAgenda] = useState('');
   const [agendaImages, setAgendaImages] = useState([]); // whiteboard photos to parse
   const [organizing, setOrganizing] = useState(false);
+  const [quickMode, setQuickMode] = useState(false); // ⚡ quick meeting room
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -91,7 +92,10 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
     try {
       const { meeting } = await api.stream(
         '/meetings/discuss/stream',
-        { topic, participantIds: selected, rounds: Number(rounds), outputMode, agenda },
+        {
+          topic, participantIds: selected, rounds: Number(rounds),
+          outputMode: quickMode ? 'conclusion' : outputMode, agenda, quick: quickMode,
+        },
         roomEvents,
       );
       setTopic(''); setSelected([]); setAgenda('');
@@ -206,7 +210,18 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
       <div className="page-head"><div><h2>會議</h2><p className="muted">召集員工、設定主題並展開討論。你會得到逐字紀錄、會議記錄與報告。</p></div></div>
 
       <div className="panel">
-        <h3>召開會議</h3>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 0 }}>
+          <h3 style={{ margin: 0 }}>召開會議</h3>
+          <div className="seg">
+            <button className={`seg-btn${!quickMode ? ' on' : ''}`} onClick={() => setQuickMode(false)}>🧠 深度討論</button>
+            <button className={`seg-btn${quickMode ? ' on' : ''}`} onClick={() => setQuickMode(true)}>⚡ 快速會議室</button>
+          </div>
+        </div>
+        {quickMode && (
+          <p className="muted sm" style={{ margin: '8px 0 0' }}>
+            快速會議：員工只用角色身分快速給看法（不深入知識庫、不查資料），主管代理產出<strong>初步結論</strong>，不產待辦。適合先要一個方向。
+          </p>
+        )}
         {err && <div className="banner-err">{err}</div>}
         <label className="block">主題
           <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如：第三季路線圖的取捨" />
@@ -253,13 +268,15 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
               {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </label>
-          <label className="inline" title="完整＝決議＋可派成目標的待辦；結論＝只收斂出最終方案、不產待辦，討論也更聚焦不發散">
-            產出
-            <select value={outputMode} onChange={(e) => setOutputMode(e.target.value)}>
-              <option value="full">完整（決議＋待辦）</option>
-              <option value="conclusion">結論（只給方案，不產待辦）</option>
-            </select>
-          </label>
+          {!quickMode && (
+            <label className="inline" title="完整＝決議＋可派成目標的待辦；結論＝只收斂出最終方案、不產待辦，討論也更聚焦不發散">
+              產出
+              <select value={outputMode} onChange={(e) => setOutputMode(e.target.value)}>
+                <option value="full">完整（決議＋待辦）</option>
+                <option value="conclusion">結論（只給方案，不產待辦）</option>
+              </select>
+            </label>
+          )}
           <button className="btn" onClick={run} disabled={busy || Boolean(room)} title={room ? '請先結束目前開著的會議室' : ''}>
             {busy ? '開場中…' : '▶ 開始會議'}
           </button>

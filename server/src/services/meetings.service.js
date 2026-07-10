@@ -121,18 +121,20 @@ export async function organizeAgenda({ text, topic, images } = {}) {
 }
 
 /** Start a discussion: run the first rounds, persist as status 'discussing'. */
-export async function startDiscussion({ topic, participantIds, rounds, outputMode, agenda } = {}, onEvent, signal) {
+export async function startDiscussion({ topic, participantIds, rounds, outputMode, agenda, quick } = {}, onEvent, signal) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
     throw badRequest('主題與至少一位與會者為必填');
   }
-  const mode = outputMode === 'conclusion' ? 'conclusion' : 'full';
+  const isQuick = Boolean(quick);
+  // Quick meetings are conclusion-only by definition (fast preliminary read).
+  const mode = (isQuick || outputMode === 'conclusion') ? 'conclusion' : 'full';
   const agendaText = String(agenda || '').trim();
   const runtime = requireInteractiveRuntime();
   const runId = newId('run'); // the orchestrator registers the mailbox + emits 'run'
 
   const result = await runtime.runMeetingRounds({
-    topic, participants, rounds: boundRounds(rounds), outputMode: mode, agenda: agendaText, runId, onEvent, signal,
+    topic, participants, rounds: boundRounds(rounds), outputMode: mode, agenda: agendaText, quick: isQuick, runId, onEvent, signal,
   });
 
   return repo.insertMeeting({
@@ -146,6 +148,7 @@ export async function startDiscussion({ topic, participantIds, rounds, outputMod
     status: 'discussing',
     outputMode: mode,
     agenda: agendaText,
+    quick: isQuick,
   });
 }
 
@@ -169,6 +172,7 @@ export async function continueDiscussion(meetingId, { rounds } = {}, onEvent, si
       priorTranscript: meeting.transcript,
       outputMode: meeting.outputMode,
       agenda: meeting.agenda,
+      quick: meeting.quick,
       runId,
       onEvent,
       signal,
@@ -307,6 +311,7 @@ export async function convergeAndConclude(meetingId, { rounds } = {}, onEvent, s
       roundPlan: planConvergeRounds(n), // forced-convergence round goals
       outputMode: meeting.outputMode,
       agenda: meeting.agenda,
+      quick: meeting.quick,
       runId,
       onEvent,
       signal,

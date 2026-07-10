@@ -102,7 +102,7 @@ function drainInterjections(runId, convo, roundNo, roundTitle, emit) {
  *   instead of burning the rest of the LLM calls into a dead socket.
  * @returns {Promise<{transcript, grounding, stats}>}
  */
-export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], roundPlan = null, outputMode = 'full', agenda = '', runId, onEvent, signal }) {
+export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], roundPlan = null, outputMode = 'full', agenda = '', quick = false, runId, onEvent, signal }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   // Register the interjection mailbox SYNCHRONOUSLY, before the run event is
   // emitted — so a manager who interjects the instant they receive the runId
@@ -111,7 +111,11 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
     interjectionQueues.set(runId, []);
     emit({ type: 'run', runId });
   }
-  const { byEmployee, flat } = await groundingFor({ query: topic, employees: participants });
+  // Quick meeting: agents speak from ROLE only — skip the knowledge-base
+  // retrieval entirely (faster, shallower, by design).
+  const { byEmployee, flat } = quick
+    ? { byEmployee: {}, flat: [] }
+    : await groundingFor({ query: topic, employees: participants });
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
 
   const convo = new ConversationState({ topic, participants });
@@ -159,6 +163,7 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
           context: {
             topic,
             agenda,
+            quick,
             rounds: startRound + rounds,
             round: roundNo - 1,
             roundTitle,

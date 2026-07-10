@@ -21,6 +21,7 @@ function rowToMeeting(row) {
     status: row.status || 'concluded',
     outputMode: row.output_mode || 'full',
     agenda: row.agenda || '',
+    quick: Boolean(row.quick),
     createdAt: row.created_at,
   };
 }
@@ -130,18 +131,20 @@ export function insertMeeting(data) {
     status: data.status || 'concluded',
     outputMode: data.outputMode === 'conclusion' ? 'conclusion' : 'full',
     agenda: typeof data.agenda === 'string' ? data.agenda : '',
+    quick: Boolean(data.quick),
     createdAt: now(),
   };
   getDb()
     .prepare(`INSERT INTO meetings
-      (id, topic, participant_ids, participants, rounds, transcript, minutes, report, grounding, runtime, status, output_mode, agenda, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, topic, participant_ids, participants, rounds, transcript, minutes, report, grounding, runtime, status, output_mode, agenda, quick, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       meeting.id, meeting.topic, JSON.stringify(meeting.participantIds),
       JSON.stringify(meeting.participants), meeting.rounds,
       JSON.stringify(meeting.transcript), JSON.stringify(meeting.minutes),
       meeting.report, JSON.stringify(meeting.grounding),
-      JSON.stringify(meeting.runtime), meeting.status, meeting.outputMode, meeting.agenda, meeting.createdAt,
+      JSON.stringify(meeting.runtime), meeting.status, meeting.outputMode, meeting.agenda,
+      meeting.quick ? 1 : 0, meeting.createdAt,
     );
   return meeting;
 }

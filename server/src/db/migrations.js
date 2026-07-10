@@ -220,6 +220,13 @@ const MIGRATIONS = [
   (db) => {
     db.exec("ALTER TABLE meetings ADD COLUMN agenda TEXT NOT NULL DEFAULT '';");
   },
+
+  // v10 — quick meeting room. quick=1 means a fast, shallow session: agents give
+  // a brief view from their ROLE (no deep knowledge-base grounding, no tools),
+  // and the manager agent produces a preliminary conclusion with no action items.
+  (db) => {
+    db.exec('ALTER TABLE meetings ADD COLUMN quick INTEGER NOT NULL DEFAULT 0;');
+  },
 ];
 
 export function migrate(db) {
