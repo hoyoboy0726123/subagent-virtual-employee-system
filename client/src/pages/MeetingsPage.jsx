@@ -218,7 +218,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
               className="btn-ghost sm"
               onClick={organizeAgenda}
               disabled={organizing || (!agenda.trim() && !agendaImages.length)}
-              title="把雜亂貼上的文字、或白板/筆記照片，用主管代理整理成條列式待討論事項（圖片辨識需 Gemini 金鑰）"
+              title="把雜亂貼上的文字，或任意截圖／照片／文件影像，用主管代理整理成條列式待討論事項（圖片辨識需 Gemini 金鑰）"
             >
               {organizing ? '⏳ 整理中…' : '✨ 整理成條列'}
             </button>
@@ -238,7 +238,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
               rows={4}
               value={agenda}
               onChange={(e) => setAgenda(e.target.value)}
-              placeholder="貼上雜亂的文字、片段訊息，或直接貼上/拖入白板照片…按「✨ 整理成條列」讓主管代理整理成待討論事項。會議會針對這些逐項收斂。"
+              placeholder="貼上雜亂的文字、片段訊息，或直接貼上/拖入任意截圖、照片、白板、文件影像…按「✨ 整理成條列」讓主管代理整理成待討論事項。會議會針對這些逐項收斂。"
             />
           </div>
         </label>
