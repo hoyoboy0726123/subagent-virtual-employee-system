@@ -35,12 +35,14 @@ const LATEX_CMD = {
   leftarrow: '←', Leftarrow: '⇐', leftrightarrow: '↔',
   ge: '≥', geq: '≥', le: '≤', leq: '≤', neq: '≠', ne: '≠',
   times: '×', div: '÷', cdot: '·', pm: '±', approx: '≈', equiv: '≡',
-  infty: '∞', sim: '∼', ldots: '…', dots: '…', deg: '°', bullet: '•',
+  infty: '∞', sim: '∼', ldots: '…', dots: '…', deg: '°', circ: '°', bullet: '•',
   alpha: 'α', beta: 'β', mu: 'µ', pi: 'π', delta: 'δ',
 };
 const convertLatex = (inner) => String(inner)
+  .replace(/\^\s*\{?\s*\\circ\s*\}?/g, '°') // 60^\circ C → 60°C
   .replace(/\\(?:text|textbf|textit|mathrm|mathbf|mathit|operatorname)\s*\{([^{}]*)\}/g, '$1')
   .replace(/\\([a-zA-Z]+)/g, (m, cmd) => (LATEX_CMD[cmd] ?? m))
+  .replace(/[_^]\s*\{([^{}]*)\}/g, '$1') // x^{2} → x2
   .replace(/\\([%&_#{}$])/g, '$1');
 function stripLatexMath(text) {
   let s = String(text);

@@ -36,13 +36,18 @@ const LATEX_CMD = {
   ge: '≥', geq: '≥', le: '≤', leq: '≤', neq: '≠', ne: '≠', ll: '≪', gg: '≫',
   times: '×', div: '÷', cdot: '·', pm: '±', mp: '∓', ast: '＊',
   approx: '≈', equiv: '≡', propto: '∝', infty: '∞', sim: '∼', simeq: '≃',
-  ldots: '…', dots: '…', cdots: '⋯', deg: '°', bullet: '•', checkmark: '✓',
+  ldots: '…', dots: '…', cdots: '⋯', deg: '°', circ: '°', bullet: '•', checkmark: '✓',
   alpha: 'α', beta: 'β', gamma: 'γ', delta: 'δ', theta: 'θ', lambda: 'λ',
   mu: 'µ', pi: 'π', sigma: 'σ', Omega: 'Ω', Delta: 'Δ', Sigma: 'Σ',
 };
 const convertLatex = (inner) => String(inner)
+  // Superscript degree ("60^\circ C" / "60^{\circ}C" → "60°C") — handle before
+  // the generic command pass so the caret is consumed too.
+  .replace(/\^\s*\{?\s*\\circ\s*\}?/g, '°')
   .replace(/\\(?:text|textbf|textit|textrm|mathrm|mathbf|mathit|mathsf|operatorname)\s*\{([^{}]*)\}/g, '$1')
   .replace(/\\([a-zA-Z]+)/g, (m, cmd) => (Object.prototype.hasOwnProperty.call(LATEX_CMD, cmd) ? LATEX_CMD[cmd] : m))
+  // Strip leftover super/subscript braces that carry no command ("x^{2}" → "x2").
+  .replace(/[_^]\s*\{([^{}]*)\}/g, '$1')
   .replace(/\\([%&_#{}$])/g, '$1');
 
 export function stripLatexMath(text = '') {
