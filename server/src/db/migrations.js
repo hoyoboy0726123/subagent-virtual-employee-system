@@ -213,6 +213,13 @@ const MIGRATIONS = [
   (db) => {
     db.exec("ALTER TABLE meetings ADD COLUMN output_mode TEXT NOT NULL DEFAULT 'full';");
   },
+
+  // v9 — meeting agenda (待討論事項). Optional bulleted list of the specific
+  // items the meeting must resolve; agents address them during discussion and
+  // the report (especially in conclusion mode) gives a clear answer per item.
+  (db) => {
+    db.exec("ALTER TABLE meetings ADD COLUMN agenda TEXT NOT NULL DEFAULT '';");
+  },
 ];
 
 export function migrate(db) {

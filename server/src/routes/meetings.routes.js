@@ -55,6 +55,11 @@ meetingsRouter.post('/meetings/interject', asyncHandler(async (req, res) => {
   res.json(meetings.addInterjection(meetingId, rest));
 }));
 
+// Manager agent tidies a messy paste into a bulleted 待討論事項 list.
+meetingsRouter.post('/meetings/organize-agenda', asyncHandler(async (req, res) => {
+  res.json(await meetings.organizeAgenda(req.body || {}));
+}));
+
 // Manager "點名": call on one specific employee to speak next (optional question).
 meetingsRouter.post('/meetings/:id/call-on', asyncHandler(async (req, res) => {
   const { employeeId, question } = req.body || {};

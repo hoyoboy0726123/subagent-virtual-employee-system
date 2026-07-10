@@ -102,7 +102,7 @@ function drainInterjections(runId, convo, roundNo, roundTitle, emit) {
  *   instead of burning the rest of the LLM calls into a dead socket.
  * @returns {Promise<{transcript, grounding, stats}>}
  */
-export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], roundPlan = null, outputMode = 'full', runId, onEvent, signal }) {
+export async function runMeetingRounds({ topic, participants, rounds, priorTranscript = [], roundPlan = null, outputMode = 'full', agenda = '', runId, onEvent, signal }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* streaming must not break the run */ } };
   // Register the interjection mailbox SYNCHRONOUSLY, before the run event is
   // emitted — so a manager who interjects the instant they receive the runId
@@ -158,6 +158,7 @@ export async function runMeetingRounds({ topic, participants, rounds, priorTrans
           grounding: byEmployee[emp.id] || [],
           context: {
             topic,
+            agenda,
             rounds: startRound + rounds,
             round: roundNo - 1,
             roundTitle,
@@ -239,7 +240,7 @@ export async function directedTurn({ topic, participants, priorTranscript = [], 
  * @param {object} req  { topic, participants, transcript, grounding?, onEvent? }
  * @returns {Promise<{minutes, report, stats}>}
  */
-export async function concludeMeeting({ topic, participants, transcript, grounding = [], onEvent, outputMode = 'full' }) {
+export async function concludeMeeting({ topic, participants, transcript, grounding = [], onEvent, outputMode = 'full', agenda = '' }) {
   const emit = (e) => { try { onEvent?.(e); } catch { /* ignore */ } };
   emit({ type: 'synthesizing' });
   const stats = newStats();
@@ -247,7 +248,7 @@ export async function concludeMeeting({ topic, participants, transcript, groundi
   // Conclusion mode: the meeting produces a final decision/recommendation only —
   // drop action items so nothing spins into goals and the fallback stays todo-free.
   if (outputMode === 'conclusion') minutes.actionItems = [];
-  const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding, outputMode });
+  const report = await synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding, outputMode, agenda });
   record(stats, report.live);
   return { minutes, report: report.text, stats };
 }

@@ -12,6 +12,8 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   const [topic, setTopic] = useState('');
   const [rounds, setRounds] = useState(3);
   const [outputMode, setOutputMode] = useState('full'); // 'full' | 'conclusion'
+  const [agenda, setAgenda] = useState('');
+  const [organizing, setOrganizing] = useState(false);
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -54,6 +56,17 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
 
   // Phase 16: start a DISCUSSION — it stops after the rounds and waits for the
   // manager (you) to continue / interject / conclude.
+  // Manager agent tidies the pasted mess into a bulleted agenda.
+  const organizeAgenda = async () => {
+    if (!agenda.trim() || organizing) return;
+    setErr('');
+    setOrganizing(true);
+    try {
+      const res = await api.post('/meetings/organize-agenda', { text: agenda, topic });
+      if (res.agenda) setAgenda(res.agenda);
+    } catch (e) { setErr(e.message); } finally { setOrganizing(false); }
+  };
+
   const run = async () => {
     setErr('');
     if (!topic.trim() || selected.length === 0) {
@@ -65,10 +78,10 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
     try {
       const { meeting } = await api.stream(
         '/meetings/discuss/stream',
-        { topic, participantIds: selected, rounds: Number(rounds), outputMode },
+        { topic, participantIds: selected, rounds: Number(rounds), outputMode, agenda },
         roomEvents,
       );
-      setTopic(''); setSelected([]);
+      setTopic(''); setSelected([]); setAgenda('');
       setRoom((r) => ({
         ...r, meetingId: meeting.id, transcript: meeting.transcript, streaming: false, runId: null, phase: null,
       }));
@@ -184,6 +197,25 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
         {err && <div className="banner-err">{err}</div>}
         <label className="block">主題
           <input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder="例如：第三季路線圖的取捨" />
+        </label>
+        <label className="block">
+          <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+            <span>待討論事項（選填）</span>
+            <button
+              className="btn-ghost sm"
+              onClick={organizeAgenda}
+              disabled={organizing || !agenda.trim()}
+              title="把雜亂貼上的文字與片段，用主管代理整理成條列式待討論事項"
+            >
+              {organizing ? '⏳ 整理中…' : '✨ 整理成條列'}
+            </button>
+          </div>
+          <textarea
+            rows={4}
+            value={agenda}
+            onChange={(e) => setAgenda(e.target.value)}
+            placeholder="貼上雜亂的文字、片段訊息…按「✨ 整理成條列」讓主管代理整理成待討論事項，或自己直接條列。會議會針對這些逐項收斂。"
+          />
         </label>
         <label className="block">與會者
           {employees.length === 0

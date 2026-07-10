@@ -36,23 +36,29 @@ const groundingBlock = (grounding = []) =>
  * Synthesize a manager-level meeting report from the real transcript.
  * @returns {Promise<{text:string, live:boolean}>}
  */
-export async function synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding = [], outputMode = 'full' }) {
+export async function synthesizeMeetingReport({ topic, participants, transcript, minutes, grounding = [], outputMode = 'full', agenda = '' }) {
   const participantList = participants.map((p) => `${p.name}（${p.roleTitle}）`).join('、');
   const body = transcript.map((t) => `第${t.round}輪 · ${t.speaker}（${t.role}）：${t.text}`).join('\n');
+  const agendaText = String(agenda || '').trim();
+  const agendaBlock = agendaText ? ['', '本次會議的待討論事項（報告必須逐項回應）：', agendaText].join('\n') : '';
   // Conclusion mode: a decision-only report — no action items / owners / due
-  // dates, just the team's final call. Keeps quick discussions todo-free.
+  // dates, just the team's final call. When an agenda exists it must answer
+  // every item explicitly.
+  const conclusionHeading = agendaText
+    ? '「## 最終結論／方案」：逐一針對上面「待討論事項」的每一條，給出明確的最終方案或決定（可用小標或條列對應每一項）；若某項仍有分歧，明說採用哪個方案與理由。這是報告的重點。'
+    : '「## 最終結論／方案」：把團隊收斂出的最終決定或建議清楚寫成條列或短段落；若仍有分歧，明說採用哪個方案與理由。這是報告的重點。';
   const sections = outputMode === 'conclusion'
     ? [
       '「## 執行摘要」：3–5 句，寫出會議的核心結論與最終方向，讓沒參加的人也讀得懂。',
       '「## 討論脈絡」：3–6 個要點，呈現主要論點如何交鋒與收斂（誰主張什麼、誰反對或補充），去除重複。',
-      '「## 最終結論／方案」：把團隊收斂出的最終決定或建議清楚寫成條列或短段落；若仍有分歧，明說採用哪個方案與理由。這是報告的重點。',
+      conclusionHeading,
       '「## 風險與待解問題」：條列尚未解決的爭點、風險或需要更多資訊之處；沒有就寫「無重大未解問題」。',
-      '注意：這是「結論模式」——不要輸出「行動項目」「待辦」「負責人指派」「期限」這類章節或內容，只聚焦在最終結論。',
+      '注意：這是「結論模式」——不要輸出「行動項目」「待辦」「負責人指派」「期限」這類章節或內容，只聚焦在針對每個待討論事項的最終方案。',
     ]
     : [
       '「## 執行摘要」：3–5 句，寫出會議的核心結論與方向，讓沒參加的人也讀得懂，不要流水帳。',
       '「## 討論脈絡」：3–6 個要點，呈現主要論點如何交鋒與收斂（誰主張什麼、誰提出反對或補充），去除重複。',
-      '「## 決議」：條列已達成的決定，每條標明負責人；若某議題未定案，明說「未定案」與卡在哪。',
+      agendaText ? '「## 決議」：逐一針對上面「待討論事項」的每一條標明結論與負責人；若某項未定案，明說「未定案」與卡在哪。' : '「## 決議」：條列已達成的決定，每條標明負責人；若某議題未定案，明說「未定案」與卡在哪。',
       '「## 行動項目」：每條為「- 負責人 — 具體行動（期限：…）」，行動要可執行、可驗收。',
       '「## 風險與待解問題」：條列尚未解決的爭點、風險或需要更多資訊之處；沒有就寫「無重大未解問題」。',
     ];
@@ -61,6 +67,7 @@ export async function synthesizeMeetingReport({ topic, participants, transcript,
     '',
     `主題：${topic}`,
     `與會者：${participantList}`,
+    agendaBlock,
     groundingBlock(grounding),
     '',
     '逐字紀錄：',
@@ -104,6 +111,34 @@ export async function synthesizeGoalOutput({ title, description, assignees, task
   const live = await run(user);
   if (live) return { text: polishArtifact(live), live: true };
   return { text: polishArtifact(engine.buildCollaborationOutput({ title, description, tasks, assignees })), live: false };
+}
+
+/**
+ * Turn a manager's messy paste (fragments, chat snippets, half-thoughts) into a
+ * clean bulleted 待討論事項 list. Returns { text, live }. Falls back to a light
+ * deterministic cleanup (split lines → bullets) when the LLM is unavailable.
+ */
+export async function organizeAgenda(raw, { topic } = {}) {
+  const source = String(raw || '').trim();
+  if (!source) return { text: '', live: false };
+  if (llmEnabled()) {
+    const user = [
+      topic ? `會議主題：${topic}` : '',
+      '以下是主管隨手貼上的雜亂文字與片段訊息。請整理成一份清楚、精簡、不重複的「待討論事項」清單：',
+      '',
+      source,
+      '',
+      '輸出要求：只輸出 Markdown 無序清單（每行「- 」開頭），每條是一個明確、可被會議討論並收斂出結論的議題；',
+      '合併語意重複者、刪掉無關寒暄、把模糊句子改寫成具體待決問題；不要加標題或前言，只輸出清單本身。全程繁體中文。',
+    ].filter(Boolean).join('\n');
+    const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: config.llm.output.summary, temperature: 0.3 });
+    const text = polishArtifact(res?.text?.trim() || '');
+    if (text) return { text, live: true };
+  }
+  // Deterministic fallback: each non-empty line becomes a bullet.
+  const bullets = source.split('\n').map((l) => l.trim()).filter(Boolean)
+    .map((l) => (l.startsWith('- ') ? l : `- ${l.replace(/^[-*•]\s*/, '')}`));
+  return { text: bullets.join('\n'), live: false };
 }
 
 // One manager turn. Returns the trimmed text, or null to signal "fall back".

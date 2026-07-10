@@ -122,9 +122,12 @@ function citationsFor(grounding) {
  * @returns {Promise<{text:string, live:boolean, citations:Array}>}
  */
 export async function meetingTurn({ employee, grounding, context }) {
-  const { topic, rounds, round, roundTitle, roundGoal, participantList, convo } = context;
+  const { topic, agenda, rounds, round, roundTitle, roundGoal, participantList, convo } = context;
   const view = convo || {};
   const stance = roundStance(round, rounds);
+  const agendaBlock = String(agenda || '').trim()
+    ? `\n本次會議的待討論事項（請針對這些逐一收斂，不要偏題）：\n${String(agenda).trim()}`
+    : '';
 
   // Trailing two-phase instruction: models weight the last lines most, so the
   // "check facts with your tools FIRST" step must come after the stance — and
@@ -139,12 +142,13 @@ export async function meetingTurn({ employee, grounding, context }) {
   if (round === 0 && view.isFirstOverall) {
     user = [
       `這是一場關於「${topic}」的團隊會議，共 ${rounds} 輪。與會者：${participantList}。`,
+      agendaBlock,
       `現在是第 1 輪（${roundTitle}）。你是第一位發言者，為討論定調：${roundGoal}。`,
       stance,
       speakClosing,
-    ].join('\n');
+    ].filter(Boolean).join('\n');
   } else {
-    const lines = [`現在是第 ${round + 1} 輪（${roundTitle}），主題仍是「${topic}」。`];
+    const lines = [`現在是第 ${round + 1} 輪（${roundTitle}），主題仍是「${topic}」。${agendaBlock}`];
     if (view.previousSpeaker) {
       lines.push(
         '',

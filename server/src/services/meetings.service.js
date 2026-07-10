@@ -5,6 +5,7 @@ import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { distillMeetingMemories } from '../orchestration/MemoryDistiller.js';
 import { interject as interjectLive, directedTurn, planConvergeRounds } from '../orchestration/MeetingOrchestrator.js';
+import { organizeAgenda as organizeAgendaAgent } from '../orchestration/ReportSynthesizer.js';
 import { badRequest, notFound } from '../util/http.js';
 import { id as newId } from '../util/ids.js';
 import { withLock } from '../util/locks.js';
@@ -107,18 +108,26 @@ export function remove(id) {
 // concluding synthesizes the minutes/report and distills memories.
 // ---------------------------------------------------------------------------
 
+/** Manager agent tidies a messy paste into a bulleted 待討論事項 list. */
+export async function organizeAgenda({ text, topic } = {}) {
+  if (!String(text || '').trim()) throw badRequest('請先貼上要整理的內容');
+  const { text: agenda, live } = await organizeAgendaAgent(text, { topic });
+  return { agenda, live };
+}
+
 /** Start a discussion: run the first rounds, persist as status 'discussing'. */
-export async function startDiscussion({ topic, participantIds, rounds, outputMode } = {}, onEvent, signal) {
+export async function startDiscussion({ topic, participantIds, rounds, outputMode, agenda } = {}, onEvent, signal) {
   const participants = getEmployees(participantIds || []);
   if (!topic || participants.length === 0) {
     throw badRequest('主題與至少一位與會者為必填');
   }
   const mode = outputMode === 'conclusion' ? 'conclusion' : 'full';
+  const agendaText = String(agenda || '').trim();
   const runtime = requireInteractiveRuntime();
   const runId = newId('run'); // the orchestrator registers the mailbox + emits 'run'
 
   const result = await runtime.runMeetingRounds({
-    topic, participants, rounds: boundRounds(rounds), outputMode: mode, runId, onEvent, signal,
+    topic, participants, rounds: boundRounds(rounds), outputMode: mode, agenda: agendaText, runId, onEvent, signal,
   });
 
   return repo.insertMeeting({
@@ -131,6 +140,7 @@ export async function startDiscussion({ topic, participantIds, rounds, outputMod
     runtime: result.runtime || {},
     status: 'discussing',
     outputMode: mode,
+    agenda: agendaText,
   });
 }
 
@@ -153,6 +163,7 @@ export async function continueDiscussion(meetingId, { rounds } = {}, onEvent, si
       rounds: more,
       priorTranscript: meeting.transcript,
       outputMode: meeting.outputMode,
+      agenda: meeting.agenda,
       runId,
       onEvent,
       signal,
@@ -290,6 +301,7 @@ export async function convergeAndConclude(meetingId, { rounds } = {}, onEvent, s
       priorTranscript: meeting.transcript,
       roundPlan: planConvergeRounds(n), // forced-convergence round goals
       outputMode: meeting.outputMode,
+      agenda: meeting.agenda,
       runId,
       onEvent,
       signal,
@@ -324,6 +336,7 @@ export async function concludeDiscussion(meetingId, onEvent) {
     transcript: meeting.transcript,
     grounding: meeting.grounding,
     outputMode: meeting.outputMode,
+      agenda: meeting.agenda,
     onEvent,
   });
 
