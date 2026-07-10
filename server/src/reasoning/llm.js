@@ -193,6 +193,60 @@ export async function complete(system, user, maxTokens = 1500) {
   return result?.text ? result.text.trim() : null;
 }
 
+/** True when a Google Gemini key is configured — the ONLY brain that can see
+ *  images in this architecture (CLI subscription brains are text-stdin only). */
+export function geminiKeyPresent() {
+  return Boolean(effectiveGeminiKey());
+}
+
+/**
+ * Multimodal completion. ALWAYS routes to Google Gemini (which is multimodal)
+ * regardless of the currently-selected brain — so a codex/claude subscription
+ * user can still get image recognition on this one call. `images` is
+ * [{ mimeType, data(base64, no data-URL prefix) }].
+ * Returns { text } on success, { noKey: true } when no Gemini key is set (the
+ * caller should prompt the user to configure one), or { text: null } on failure.
+ */
+export async function generateVision({ system, user, images = [], maxTokens = 1500, temperature = 0.5 } = {}) {
+  const ai = getClient(); // Gemini client (null when no key)
+  if (!ai) return { noKey: true };
+  const effModel = config.llm.model; // gemma-4* / Gemini — multimodal
+  const parts = [
+    ...(user ? [{ text: String(user) }] : []),
+    ...images.filter((im) => im && im.data).map((im) => ({
+      inlineData: { mimeType: im.mimeType || 'image/png', data: im.data },
+    })),
+  ];
+  const cfg = { maxOutputTokens: maxTokens, temperature };
+  if (config.llm.thinkingLevel && /^gemma-4/i.test(effModel)) cfg.thinkingConfig = { thinkingLevel: config.llm.thinkingLevel };
+  if (system) cfg.systemInstruction = system;
+
+  const TRANSIENT = /"code":\s*(429|500|503)|INTERNAL|UNAVAILABLE|RESOURCE_EXHAUSTED/;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await ai.models.generateContent({
+        model: effModel,
+        contents: [{ role: 'user', parts }],
+        config: cfg,
+      });
+      const finish = res.candidates?.[0]?.finishReason;
+      if (!res.text && finish === 'MAX_TOKENS' && cfg.maxOutputTokens && attempt < 4) {
+        cfg.maxOutputTokens *= 3; // thinking ate the budget — give it room
+        continue;
+      }
+      return { text: res.text ?? null };
+    } catch (err) {
+      if (TRANSIENT.test(err.message || '') && attempt < 4) {
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1) ** 2));
+        continue;
+      }
+      console.warn(`[llm] vision request failed: ${err.message}`);
+      return { text: null };
+    }
+  }
+  return { text: null };
+}
+
 // ---------------------------------------------------------------------------
 // Agentic generation (Phase 13): a bounded perceive → act → observe loop that
 // lets one agent turn CALL TOOLS before speaking. Two transports, one behaviour:

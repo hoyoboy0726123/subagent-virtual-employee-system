@@ -13,7 +13,7 @@
 // citations only where the retrieved knowledge genuinely bore on a point.
 // De-duplication across turns is an explicit instruction, so the report reads
 // tighter than the transcript.
-import { generate, llmEnabled } from '../reasoning/llm.js';
+import { generate, generateVision, geminiKeyPresent, llmEnabled } from '../reasoning/llm.js';
 import * as engine from '../reasoning/engine.js';
 import { polishArtifact } from './output.js';
 import { config } from '../config.js';
@@ -118,20 +118,34 @@ export async function synthesizeGoalOutput({ title, description, assignees, task
  * clean bulleted 待討論事項 list. Returns { text, live }. Falls back to a light
  * deterministic cleanup (split lines → bullets) when the LLM is unavailable.
  */
-export async function organizeAgenda(raw, { topic } = {}) {
+export async function organizeAgenda(raw, { topic, images = [] } = {}) {
   const source = String(raw || '').trim();
-  if (!source) return { text: '', live: false };
-  if (llmEnabled()) {
-    const user = [
-      topic ? `會議主題：${topic}` : '',
-      '以下是主管隨手貼上的雜亂文字與片段訊息。請整理成一份清楚、精簡、不重複的「待討論事項」清單：',
-      '',
-      source,
-      '',
-      '輸出要求：只輸出 Markdown 無序清單（每行「- 」開頭），每條是一個明確、可被會議討論並收斂出結論的議題；',
-      '合併語意重複者、刪掉無關寒暄、把模糊句子改寫成具體待決問題；不要加標題或前言，只輸出清單本身。全程繁體中文。',
-    ].filter(Boolean).join('\n');
-    const res = await generate({ system: MANAGER_SYSTEM, user, maxTokens: config.llm.output.summary, temperature: 0.3 });
+  const imgs = Array.isArray(images) ? images.filter((im) => im && im.data).slice(0, 4) : [];
+  if (!source && !imgs.length) return { text: '', live: false };
+
+  const instruction = [
+    topic ? `會議主題：${topic}` : '',
+    imgs.length
+      ? '以下附上主管拍的白板／筆記照片（可能還有一些文字）。請辨識圖片與文字內容，整理成一份清楚、精簡、不重複的「待討論事項」清單：'
+      : '以下是主管隨手貼上的雜亂文字與片段訊息。請整理成一份清楚、精簡、不重複的「待討論事項」清單：',
+    source ? `\n${source}` : '',
+    '',
+    '輸出要求：只輸出 Markdown 無序清單（每行「- 」開頭），每條是一個明確、可被會議討論並收斂出結論的議題；',
+    '合併語意重複者、刪掉無關塗鴉或寒暄、把模糊字句改寫成具體待決問題；不要加標題或前言，只輸出清單本身。全程繁體中文。',
+  ].filter(Boolean).join('\n');
+
+  // Image input → force Gemini (multimodal). No key → signal the caller to prompt.
+  if (imgs.length) {
+    if (!geminiKeyPresent()) return { text: '', live: false, needsGeminiKey: true };
+    const res = await generateVision({ system: MANAGER_SYSTEM, user: instruction, images: imgs, maxTokens: config.llm.output.summary, temperature: 0.3 });
+    if (res?.noKey) return { text: '', live: false, needsGeminiKey: true };
+    const text = polishArtifact(res?.text?.trim() || '');
+    if (text) return { text, live: true };
+    // vision failed but we may still have pasted text — fall through to text path.
+  }
+
+  if (source && llmEnabled()) {
+    const res = await generate({ system: MANAGER_SYSTEM, user: instruction, maxTokens: config.llm.output.summary, temperature: 0.3 });
     const text = polishArtifact(res?.text?.trim() || '');
     if (text) return { text, live: true };
   }

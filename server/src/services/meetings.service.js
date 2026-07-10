@@ -108,11 +108,16 @@ export function remove(id) {
 // concluding synthesizes the minutes/report and distills memories.
 // ---------------------------------------------------------------------------
 
-/** Manager agent tidies a messy paste into a bulleted 待討論事項 list. */
-export async function organizeAgenda({ text, topic } = {}) {
-  if (!String(text || '').trim()) throw badRequest('請先貼上要整理的內容');
-  const { text: agenda, live } = await organizeAgendaAgent(text, { topic });
-  return { agenda, live };
+/** Manager agent tidies a messy paste (and/or a whiteboard photo) into a
+ *  bulleted 待討論事項 list. */
+export async function organizeAgenda({ text, topic, images } = {}) {
+  const imgs = Array.isArray(images) ? images.filter((im) => im && im.data) : [];
+  if (!String(text || '').trim() && !imgs.length) throw badRequest('請先貼上文字或圖片');
+  const res = await organizeAgendaAgent(text, { topic, images: imgs });
+  if (res.needsGeminiKey) {
+    throw badRequest('辨識圖片需要 Google Gemini 金鑰。請點右上「🔑 API 金鑰」設定 Gemini 金鑰（目前的 codex／claude 訂閱大腦無法看圖），再重試。');
+  }
+  return { agenda: res.text, live: res.live };
 }
 
 /** Start a discussion: run the first rounds, persist as status 'discussing'. */

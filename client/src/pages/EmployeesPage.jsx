@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
+import { fileToImagePart, imagesFromPaste, imagesFromDrop } from '../lib/image.js';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
 // everything is canonicalized to Markdown by MarkItDown on ingestion.
@@ -476,7 +477,17 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
   const [dialogue, setDialogue] = useState(null);
   const [history, setHistory] = useState(null); // null = loading; [] = none
   const [draft, setDraft] = useState('');
+  const [pendingImages, setPendingImages] = useState([]); // [{mimeType, data, dataUrl}]
   const [busy, setBusy] = useState(false);
+
+  // Paste / drop an image into the chat — downscaled client-side, attached to
+  // the next message. Recognition runs on Gemini (forced) regardless of brain.
+  const addImageFiles = async (files) => {
+    const parts = await Promise.all(files.map((f) => fileToImagePart(f).catch(() => null)));
+    setPendingImages((cur) => [...cur, ...parts.filter(Boolean)].slice(0, 4));
+  };
+  const onPasteImg = (e) => { const f = imagesFromPaste(e); if (f.length) { e.preventDefault(); addImageFiles(f); } };
+  const onDropImg = (e) => { const f = imagesFromDrop(e); if (f.length) { e.preventDefault(); addImageFiles(f); } };
   const [closing, setClosing] = useState(false); // showing the save/discard choice
   const [err, setErr] = useState('');
   const endRef = useRef(null);
@@ -505,20 +516,26 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || busy || !dialogue) return;
+    const images = pendingImages;
+    if ((!text && !images.length) || busy || !dialogue) return;
     setErr('');
     setBusy(true);
     setDraft('');
-    // Optimistic echo of the manager's message while the agent thinks.
-    setDialogue((d) => ({ ...d, transcript: [...d.transcript, { who: 'manager', text }] }));
+    setPendingImages([]);
+    // Optimistic echo of the manager's message (with any images) while thinking.
+    setDialogue((d) => ({ ...d, transcript: [...d.transcript, { who: 'manager', text, images }] }));
     try {
-      setDialogue(await api.post(`/dialogues/${dialogue.id}/messages`, { text }));
+      setDialogue(await api.post(`/dialogues/${dialogue.id}/messages`, {
+        text,
+        images: images.map((im) => ({ mimeType: im.mimeType, data: im.data })),
+      }));
     } catch (e) {
-      // Roll the optimistic echo back and give the manager their words back —
-      // otherwise the message silently vanishes on the next successful send.
+      // Roll the optimistic echo back and give the manager their words + images
+      // back — otherwise they silently vanish on the next successful send.
       setErr(e.message);
       setDialogue((d) => ({ ...d, transcript: d.transcript.slice(0, -1) }));
       setDraft(text);
+      setPendingImages(images);
     } finally { setBusy(false); }
   };
 
@@ -588,7 +605,16 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
         {(dialogue?.transcript || []).map((t, i) => (
           t.who === 'manager' ? (
             <div key={i} className="chat-row chat-manager">
-              <div className="chat-bubble chat-bubble-manager">{t.text}</div>
+              <div className="chat-bubble chat-bubble-manager">
+                {(t.images || []).length > 0 && (
+                  <div className="chat-images">
+                    {t.images.map((im, j) => (
+                      <img key={j} src={im.dataUrl || `data:${im.mimeType};base64,${im.data}`} alt="附圖" />
+                    ))}
+                  </div>
+                )}
+                {t.text}
+              </div>
             </div>
           ) : (
             <div key={i} className="chat-row">
@@ -607,16 +633,26 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
       )}
 
       {dialogue && (!closing ? (
-        <div className="chat-controls">
+        <div className="chat-controls" onPaste={onPasteImg} onDrop={onDropImg} onDragOver={(e) => e.preventDefault()}>
+          {pendingImages.length > 0 && (
+            <div className="pending-images">
+              {pendingImages.map((im, j) => (
+                <div key={j} className="pending-image">
+                  <img src={im.dataUrl} alt="待送出" />
+                  <button className="pending-image-x" onClick={() => setPendingImages((cur) => cur.filter((_, k) => k !== j))} title="移除">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="interject-row">
             <input
-              placeholder={`對 ${employee.name} 說…（Enter 送出）`}
+              placeholder={`對 ${employee.name} 說…（可貼上/拖入圖片，Enter 送出）`}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               disabled={busy || !dialogue}
             />
-            <button className="btn sm" onClick={send} disabled={busy || !draft.trim() || !dialogue}>送出</button>
+            <button className="btn sm" onClick={send} disabled={busy || (!draft.trim() && !pendingImages.length) || !dialogue}>送出</button>
           </div>
           <div className="row end">
             <ExportButtons path={`/dialogues/${dialogue.id}`} compact />

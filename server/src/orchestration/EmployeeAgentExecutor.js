@@ -19,7 +19,7 @@
 // (network/quota/empty), the executor degrades *per turn* to the deterministic
 // engine and marks that turn `live: false` — so the orchestration is real either
 // way, and the runtime metadata can report exactly how much ran live.
-import { generateAgentic, llmEnabled, activeModelInfo } from '../reasoning/llm.js';
+import { generateAgentic, generateVision, geminiKeyPresent, llmEnabled, activeModelInfo } from '../reasoning/llm.js';
 import { buildToolbox } from '../reasoning/tools.js';
 import * as engine from '../reasoning/engine.js';
 import { polishUtterance } from './output.js';
@@ -290,7 +290,7 @@ export async function taskDeliverableTurn({ employee, goal, task, others, priorD
  * @param {string} opts.message     what the manager just said
  * @returns {Promise<{text:string, live:boolean, toolCalls:number, citations:Array}>}
  */
-export async function oneOnOneTurn({ employee, grounding, history, message }) {
+export async function oneOnOneTurn({ employee, grounding, history, message, images = [] }) {
   const expertise = asList(employee.expertise);
   const knowledge = grounding.length
     ? grounding.map((h) => `- 《${h.documentTitle}》：${snippet(h.content)}`).join('\n')
@@ -323,6 +323,20 @@ export async function oneOnOneTurn({ employee, grounding, history, message }) {
     '',
     '請直接回應主管。',
   ].join('\n');
+
+  // Image input → force the multimodal Gemini path (the only brain that can see
+  // images here), regardless of the selected brain. No Gemini key → tell the
+  // manager to configure one. Tools are skipped on vision turns (v1).
+  if (images.length) {
+    if (!geminiKeyPresent()) {
+      return { text: null, needsGeminiKey: true, live: false, toolCalls: 0, citations: [] };
+    }
+    const visionUser = [user, '', '（主管附上了圖片，請先辨識圖片內容，再據此回應。）'].join('\n');
+    const res = await generateVision({ system, user: visionUser, images, maxTokens: config.llm.output.document });
+    if (res?.noKey) return { text: null, needsGeminiKey: true, live: false, toolCalls: 0, citations: [] };
+    const text = polishUtterance(res?.text?.trim() || '') || engine.speak(employee, message, 0, [], grounding);
+    return { text, live: Boolean(res?.text), toolCalls: 0, citations: [] };
+  }
 
   if (llmEnabled()) {
     const agentCfg = employee.agentConfig || {};

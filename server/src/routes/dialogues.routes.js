@@ -26,7 +26,8 @@ dialoguesRouter.get('/dialogues/:id', asyncHandler(async (req, res) => {
 }));
 
 dialoguesRouter.post('/dialogues/:id/messages', asyncHandler(async (req, res) => {
-  res.json(await dialogues.say(req.params.id, (req.body || {}).text));
+  const { text, images } = req.body || {};
+  res.json(await dialogues.say(req.params.id, text, images));
 }));
 
 dialoguesRouter.post('/dialogues/:id/close', asyncHandler(async (req, res) => {

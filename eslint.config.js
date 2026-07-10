@@ -18,6 +18,7 @@ const browserGlobals = {
   HTMLInputElement: 'readonly', HTMLSelectElement: 'readonly', Event: 'readonly',
   URL: 'readonly', URLSearchParams: 'readonly', TextDecoder: 'readonly',
   FormData: 'readonly', Blob: 'readonly', setTimeout: 'readonly', console: 'readonly',
+  FileReader: 'readonly', Image: 'readonly',
 };
 
 export default [

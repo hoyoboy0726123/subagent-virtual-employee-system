@@ -56,27 +56,38 @@ export function reopen(dialogueId) {
   return repo.updateDialogue(dialogueId, { status: 'open' });
 }
 
-/** Manager says something; the employee agent replies (tools live). */
-export async function say(dialogueId, text) {
+/** Manager says something (optionally with images); the employee agent replies. */
+export async function say(dialogueId, text, images = []) {
   const d = get(dialogueId);
   if (d.status !== 'open') throw badRequest('這場面談已經結束。');
   const message = String(text || '').trim();
-  if (!message) throw badRequest('請輸入要說的話');
+  const imgs = Array.isArray(images) ? images.filter((im) => im && im.data).slice(0, 4) : [];
+  if (!message && !imgs.length) throw badRequest('請輸入要說的話');
   const emp = getEmployee(d.employeeId);
   if (!emp) throw notFound('與談員工已不存在');
 
-  const grounding = await retrievalSearch({ query: message, employeeIds: [emp.id], limit: 3 });
+  const grounding = message ? await retrievalSearch({ query: message, employeeIds: [emp.id], limit: 3 }) : [];
   const reply = await oneOnOneTurn({
     employee: emp,
     grounding,
     history: d.transcript,
-    message,
+    message: message || '（請看這張圖）',
+    images: imgs,
   });
+  // Image turns need the Gemini brain — surface a clear, actionable error and
+  // DON'T persist a half turn, so the manager can set the key and resend.
+  if (reply.needsGeminiKey) {
+    throw badRequest('辨識圖片需要 Google Gemini 金鑰。請點右上「🔑 API 金鑰」設定 Gemini 金鑰（目前的 codex／claude 訂閱大腦無法看圖），再重送。');
+  }
 
   const at = new Date().toISOString();
+  // Store a lightweight image marker in the transcript (mimeType + data URL) so
+  // the conversation still shows the thumbnails; the client already downscales.
+  const managerTurn = { who: 'manager', text: message, at };
+  if (imgs.length) managerTurn.images = imgs.map((im) => ({ mimeType: im.mimeType || 'image/png', data: im.data }));
   const transcript = [
     ...d.transcript,
-    { who: 'manager', text: message, at },
+    managerTurn,
     {
       who: 'employee',
       text: reply.text,

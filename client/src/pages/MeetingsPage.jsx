@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 import PixelOffice from '../components/PixelOffice.jsx';
+import { fileToImagePart, imagesFromPaste, imagesFromDrop } from '../lib/image.js';
 
 const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
 
@@ -13,6 +14,7 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
   const [rounds, setRounds] = useState(3);
   const [outputMode, setOutputMode] = useState('full'); // 'full' | 'conclusion'
   const [agenda, setAgenda] = useState('');
+  const [agendaImages, setAgendaImages] = useState([]); // whiteboard photos to parse
   const [organizing, setOrganizing] = useState(false);
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -56,14 +58,25 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
 
   // Phase 16: start a DISCUSSION — it stops after the rounds and waits for the
   // manager (you) to continue / interject / conclude.
-  // Manager agent tidies the pasted mess into a bulleted agenda.
+  // Paste / drop a whiteboard photo to parse into agenda items.
+  const addAgendaImages = async (files) => {
+    const parts = await Promise.all(files.map((f) => fileToImagePart(f).catch(() => null)));
+    setAgendaImages((cur) => [...cur, ...parts.filter(Boolean)].slice(0, 4));
+  };
+  const onAgendaPaste = (e) => { const f = imagesFromPaste(e); if (f.length) { e.preventDefault(); addAgendaImages(f); } };
+  const onAgendaDrop = (e) => { const f = imagesFromDrop(e); if (f.length) { e.preventDefault(); addAgendaImages(f); } };
+
+  // Manager agent tidies the pasted mess (and/or whiteboard photos) into bullets.
   const organizeAgenda = async () => {
-    if (!agenda.trim() || organizing) return;
+    if ((!agenda.trim() && !agendaImages.length) || organizing) return;
     setErr('');
     setOrganizing(true);
     try {
-      const res = await api.post('/meetings/organize-agenda', { text: agenda, topic });
-      if (res.agenda) setAgenda(res.agenda);
+      const res = await api.post('/meetings/organize-agenda', {
+        text: agenda, topic,
+        images: agendaImages.map((im) => ({ mimeType: im.mimeType, data: im.data })),
+      });
+      if (res.agenda) { setAgenda(res.agenda); setAgendaImages([]); }
     } catch (e) { setErr(e.message); } finally { setOrganizing(false); }
   };
 
@@ -204,18 +217,30 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
             <button
               className="btn-ghost sm"
               onClick={organizeAgenda}
-              disabled={organizing || !agenda.trim()}
-              title="把雜亂貼上的文字與片段，用主管代理整理成條列式待討論事項"
+              disabled={organizing || (!agenda.trim() && !agendaImages.length)}
+              title="把雜亂貼上的文字、或白板/筆記照片，用主管代理整理成條列式待討論事項（圖片辨識需 Gemini 金鑰）"
             >
               {organizing ? '⏳ 整理中…' : '✨ 整理成條列'}
             </button>
           </div>
-          <textarea
-            rows={4}
-            value={agenda}
-            onChange={(e) => setAgenda(e.target.value)}
-            placeholder="貼上雜亂的文字、片段訊息…按「✨ 整理成條列」讓主管代理整理成待討論事項，或自己直接條列。會議會針對這些逐項收斂。"
-          />
+          <div onPaste={onAgendaPaste} onDrop={onAgendaDrop} onDragOver={(e) => e.preventDefault()}>
+            {agendaImages.length > 0 && (
+              <div className="pending-images">
+                {agendaImages.map((im, j) => (
+                  <div key={j} className="pending-image">
+                    <img src={im.dataUrl} alt="白板照片" />
+                    <button className="pending-image-x" onClick={() => setAgendaImages((cur) => cur.filter((_, k) => k !== j))} title="移除">✕</button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <textarea
+              rows={4}
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
+              placeholder="貼上雜亂的文字、片段訊息，或直接貼上/拖入白板照片…按「✨ 整理成條列」讓主管代理整理成待討論事項。會議會針對這些逐項收斂。"
+            />
+          </div>
         </label>
         <label className="block">與會者
           {employees.length === 0

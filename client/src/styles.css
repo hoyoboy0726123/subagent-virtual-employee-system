@@ -429,3 +429,14 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: #cfd3e6; font-size: 13px; letter-spacing: 0.05em;
 }
+
+/* Multimodal image input (1on1 chat + meeting agenda) */
+.pending-images { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+.pending-image { position: relative; }
+.pending-image img { height: 64px; width: auto; max-width: 120px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); }
+.pending-image-x {
+  position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1;
+  border-radius: 50%; border: none; background: #f4685a; color: #fff; font-size: 11px; cursor: pointer; padding: 0;
+}
+.chat-images { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.chat-images img { max-height: 180px; max-width: 100%; border-radius: 6px; }
