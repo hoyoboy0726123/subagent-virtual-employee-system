@@ -8,7 +8,7 @@ const STATUSES = ['in-progress', 'blocked', 'done'];
 const STATUS_LABELS = { pending: '待執行', 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
 const DEFAULT_FILTERS = { q: '', assigneeId: '', runtime: '', live: '', status: '', sort: 'newest', page: 1, pageSize: 5 };
 
-export default function GoalsPage({ refreshKey, onChange, onActivity }) {
+export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeeting }) {
   const [employees, setEmployees] = useState([]);
   const [goalData, setGoalData] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
   const [open, setOpen] = useState(null);
@@ -90,14 +90,16 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   // Re-run the collaboration (the goal's「重啟」): the team builds on the
   // previous plan plus the manager's revision instruction; the fresh result
   // REPLACES tasks/output. Streams the same task-by-task progress as assign.
-  // Close the loop: feed this goal's deliverables back into its source meeting.
+  // Close the loop: feed this goal's deliverables back into its source meeting,
+  // then jump straight into that meeting's room (one click, no tab hunting).
   const reviewInMeeting = async () => {
     if (!open || reviewing) return;
     setErr(''); setReviewMsg('');
     setReviewing(true);
     try {
-      await api.post(`/goals/${open.id}/review-in-meeting`, {});
-      setReviewMsg('✅ 已把各員工的成果帶回原會議並重新開啟討論。請到「🗓️ 會議」分頁，點這場會議「🔄 重啟討論」，團隊就會針對實際成果收斂下一步決議。');
+      const meeting = await api.post(`/goals/${open.id}/review-in-meeting`, {});
+      setOpen(null); // close the goal modal
+      onGotoMeeting?.(meeting.id); // App switches to 會議 tab + opens the room
     } catch (e) { setErr(e.message); } finally { setReviewing(false); }
   };
 

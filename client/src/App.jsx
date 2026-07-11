@@ -38,6 +38,7 @@ function QuitButton() {
 
 export default function App() {
   const [tab, setTab] = useState('employees');
+  const [gotoMeeting, setGotoMeeting] = useState(null); // close-the-loop: jump into a meeting room
   const [health, setHealth] = useState(null);
   const [settings, setSettings] = useState(null);
   const [dashboard, setDashboard] = useState(null);
@@ -193,10 +194,21 @@ export default function App() {
           <EmployeesPage refreshKey={refreshKey} onChange={refresh} />
         </div>
         <div className={tab === 'meetings' ? '' : 'tab-hidden'}>
-          <MeetingsPage refreshKey={refreshKey} onChange={refresh} onActivity={reportActivity('meetings')} />
+          <MeetingsPage
+            refreshKey={refreshKey}
+            onChange={refresh}
+            onActivity={reportActivity('meetings')}
+            gotoMeetingId={gotoMeeting}
+            onGotoHandled={() => setGotoMeeting(null)}
+          />
         </div>
         <div className={tab === 'goals' ? '' : 'tab-hidden'}>
-          <GoalsPage refreshKey={refreshKey} onChange={refresh} onActivity={reportActivity('goals')} />
+          <GoalsPage
+            refreshKey={refreshKey}
+            onChange={refresh}
+            onActivity={reportActivity('goals')}
+            onGotoMeeting={(id) => { setGotoMeeting(id); setTab('meetings'); }}
+          />
         </div>
       </main>
 

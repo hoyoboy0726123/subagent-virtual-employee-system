@@ -6,7 +6,7 @@ import { fileToImagePart, imagesFromPaste, imagesFromDrop } from '../lib/image.j
 
 const DEFAULT_FILTERS = { q: '', participantId: '', runtime: '', live: '', sort: 'newest', page: 1, pageSize: 5 };
 
-export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
+export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMeetingId, onGotoHandled }) {
   const [employees, setEmployees] = useState([]);
   const [meetingData, setMeetingData] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
   const [open, setOpen] = useState(null); // meeting being viewed
@@ -187,6 +187,17 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity }) {
       setRoom({ meetingId: full.id, topic: full.topic, transcript: full.transcript, runId: null, streaming: false, phase: null });
     } catch (e) { setErr(e.message); }
   };
+
+  // Close-the-loop: another tab (GoalsPage「帶成果回會議」) asked us to jump straight
+  // into a specific meeting's room. Open it, refresh the list so its status shows
+  // as 討論中, and clear the request so we don't reopen on every render.
+  useEffect(() => {
+    if (!gotoMeetingId) return;
+    reopenRoom({ id: gotoMeetingId });
+    reload(filters);
+    onGotoHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gotoMeetingId]);
 
   // Reopen a CONCLUDED meeting (mirrors the 1on1): status flips back to
   // 'discussing' and the room opens on the same transcript — continue,

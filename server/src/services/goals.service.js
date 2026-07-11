@@ -116,17 +116,22 @@ export function reviewGoalInMeeting(goalId) {
   const delivered = (goal.tasks || []).filter((t) => t.deliverable);
   if (!delivered.length) throw badRequest('這個目標還沒有任何交付成果可回報——請先執行交付。');
 
-  const summary = delivered.map((t) => {
-    const full = String(t.deliverable).replace(/\s+/g, ' ').trim();
-    const body = full.slice(0, 400);
-    return `- **${t.assignee}（${t.role}）**：${body}${full.length > 400 ? '…' : ''}`;
-  }).join('\n');
+  // One SHORT line per delivery — the gist, not the whole document. Take the
+  // deliverable's first meaningful line (usually its title/heading), strip
+  // Markdown, and cap it, so the meeting turn stays readable. The full content
+  // lives on the goal.
+  const gist = (text) => {
+    const firstLine = String(text).split('\n').map((l) => l.trim())
+      .find((l) => l && !/^[|>#\-*\s]*$/.test(l)) || String(text);
+    return firstLine.replace(/^#+\s*/, '').replace(/[*`|]/g, '').replace(/\s+/g, ' ').trim().slice(0, 60);
+  };
+  const summary = delivered.map((t) => `・${t.assignee}（${t.role}）：${gist(t.deliverable)}`).join('\n');
   const text = [
-    `【成果回報】上一輪派下去的目標「${goal.title}」已完成，各負責人的實際交付如下：`,
+    `【成果回報】上一輪的目標「${goal.title}」已由各負責人交付完成，重點如下：`,
     '',
     summary,
     '',
-    '請團隊根據以上「實際做出來的成果」（不只是先前的討論），檢視是否達標、有沒有新風險或需要調整，並收斂出下一步的決議。',
+    '（完整交付內容在對應的目標裡）請團隊根據這些「實際做出來的成果」檢視是否達標、有沒有新風險，收斂出下一步的決議。',
   ].join('\n');
 
   const lastRound = meeting.transcript.reduce((m, t) => Math.max(m, t.round || 0), 0);
