@@ -17,6 +17,7 @@ function rowToGoal(row) {
     output: row.output,
     grounding: j(row.grounding, []),
     runtime: j(row.runtime, {}),
+    sourceMeetingId: row.source_meeting_id || '',
     createdAt: row.created_at,
   };
 }
@@ -128,17 +129,18 @@ export function insertGoal(data) {
     output: data.output || '',
     grounding: data.grounding || [],
     runtime: data.runtime || {},
+    sourceMeetingId: data.sourceMeetingId || '',
     createdAt: now(),
   };
   getDb()
     .prepare(`INSERT INTO goals
-      (id, title, description, assignee_ids, assignees, status, tasks, output, grounding, runtime, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      (id, title, description, assignee_ids, assignees, status, tasks, output, grounding, runtime, source_meeting_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     .run(
       goal.id, goal.title, goal.description, JSON.stringify(goal.assigneeIds),
       JSON.stringify(goal.assignees), goal.status, JSON.stringify(goal.tasks),
       goal.output, JSON.stringify(goal.grounding), JSON.stringify(goal.runtime),
-      goal.createdAt,
+      goal.sourceMeetingId, goal.createdAt,
     );
   return goal;
 }

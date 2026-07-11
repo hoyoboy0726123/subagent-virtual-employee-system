@@ -22,6 +22,8 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   const [rerunning, setRerunning] = useState(false);
   const [executing, setExecuting] = useState(null); // task order being executed
   const [executingAll, setExecutingAll] = useState(false); // batch run in progress
+  const [reviewing, setReviewing] = useState(false); // feeding results back to the meeting
+  const [reviewMsg, setReviewMsg] = useState(''); // success note after close-the-loop
   // Tell the shell a goal run is streaming — dot on the tab; page stays mounted
   // across tab switches so the run isn't dropped.
   useEffect(() => { onActivity?.(busy || rerunning || executing !== null); }, [busy, rerunning, executing, onActivity]);
@@ -88,6 +90,17 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
   // Re-run the collaboration (the goal's「重啟」): the team builds on the
   // previous plan plus the manager's revision instruction; the fresh result
   // REPLACES tasks/output. Streams the same task-by-task progress as assign.
+  // Close the loop: feed this goal's deliverables back into its source meeting.
+  const reviewInMeeting = async () => {
+    if (!open || reviewing) return;
+    setErr(''); setReviewMsg('');
+    setReviewing(true);
+    try {
+      await api.post(`/goals/${open.id}/review-in-meeting`, {});
+      setReviewMsg('✅ 已把各員工的成果帶回原會議並重新開啟討論。請到「🗓️ 會議」分頁，點這場會議「🔄 重啟討論」，團隊就會針對實際成果收斂下一步決議。');
+    } catch (e) { setErr(e.message); } finally { setReviewing(false); }
+  };
+
   const rerunGoal = async () => {
     if (!open || rerunning) return;
     setErr('');
@@ -265,6 +278,20 @@ export default function GoalsPage({ refreshKey, onChange, onActivity }) {
             </div>
           )}
           {open.description && <p className="muted">{open.description}</p>}
+
+          {/* Close the loop: goals born from a meeting can feed their delivered
+              results back for a follow-up decision. */}
+          {(open.sourceMeetingId || /來源會議/.test(open.runtime?.note || '')) && open.tasks.some((t) => t.deliverable) && (
+            <div className="loop-box">
+              <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', margin: 0 }}>
+                <span className="muted sm">🔁 這個目標來自一場會議。交付完成後，可以把成果帶回會議收斂下一步。</span>
+                <button className="btn sm" onClick={reviewInMeeting} disabled={reviewing}>
+                  {reviewing ? '帶回中…' : '🔄 帶成果回會議'}
+                </button>
+              </div>
+              {reviewMsg && <div className="loop-note">{reviewMsg}</div>}
+            </div>
+          )}
 
           <div className="upload-box">
             <div className="interject-row">

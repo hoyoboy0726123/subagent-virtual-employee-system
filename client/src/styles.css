@@ -461,3 +461,7 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 .quit-card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 40px 48px; text-align: center; box-shadow: var(--shadow); max-width: 90vw; }
 .quit-card h2 { margin: 8px 0 10px; }
 .quit-emoji { font-size: 48px; }
+
+/* Close-the-loop box (goal → back to source meeting) */
+.loop-box { border: 1px solid rgba(109, 139, 255, 0.3); background: rgba(109, 139, 255, 0.06); border-radius: 10px; padding: 12px 14px; margin: 10px 0; }
+.loop-note { margin-top: 10px; font-size: 13px; color: var(--green); line-height: 1.6; }

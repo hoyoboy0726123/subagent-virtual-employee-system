@@ -1,7 +1,7 @@
 // Service: goals. Resolves assignees, delegates execution to the active runtime
 // adapter, and persists. Status/task updates stay simple CRUD.
 import * as repo from '../storage/goals.repo.js';
-import { getMeeting } from '../storage/meetings.repo.js';
+import { getMeeting, updateMeeting } from '../storage/meetings.repo.js';
 import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { taskDeliverableTurn } from '../orchestration/EmployeeAgentExecutor.js';
@@ -97,6 +97,53 @@ export function remove(id) {
  * action items ARE the plan. Owners that aren't participants (e.g. 主管, or a
  * paraphrased name) are skipped; if none map, it's an honest error.
  */
+/**
+ * Close the loop: feed a goal's real deliverables back into the meeting it came
+ * from. Reopens that meeting and appends a manager "成果回報" turn summarizing
+ * each assignee's delivery, so the team reviews the ACTUAL outputs and the
+ * manager can converge the next decision (which can spawn the next goal).
+ * Returns the reopened meeting so the UI can drop the manager into its room.
+ */
+export function reviewGoalInMeeting(goalId) {
+  const goal = repo.getGoal(goalId);
+  if (!goal) throw notFound('找不到該目標');
+  const meetingId = goal.sourceMeetingId
+    || (String(goal.runtime?.note || '').match(/來源會議\s+(\S+)/)?.[1]) || '';
+  if (!meetingId) throw badRequest('這個目標不是由會議建立的，無法帶成果回會議。');
+  const meeting = getMeeting(meetingId);
+  if (!meeting) throw badRequest('來源會議已不存在（可能已被刪除）。');
+
+  const delivered = (goal.tasks || []).filter((t) => t.deliverable);
+  if (!delivered.length) throw badRequest('這個目標還沒有任何交付成果可回報——請先執行交付。');
+
+  const summary = delivered.map((t) => {
+    const full = String(t.deliverable).replace(/\s+/g, ' ').trim();
+    const body = full.slice(0, 400);
+    return `- **${t.assignee}（${t.role}）**：${body}${full.length > 400 ? '…' : ''}`;
+  }).join('\n');
+  const text = [
+    `【成果回報】上一輪派下去的目標「${goal.title}」已完成，各負責人的實際交付如下：`,
+    '',
+    summary,
+    '',
+    '請團隊根據以上「實際做出來的成果」（不只是先前的討論），檢視是否達標、有沒有新風險或需要調整，並收斂出下一步的決議。',
+  ].join('\n');
+
+  const lastRound = meeting.transcript.reduce((m, t) => Math.max(m, t.round || 0), 0);
+  const turn = {
+    round: lastRound || 1,
+    roundTitle: '成果回報',
+    speaker: '主管', role: '會議主持人', speakerId: 'manager',
+    text, live: true, isManager: true, toolCalls: 0, citations: [],
+  };
+  const updated = updateMeeting(meetingId, {
+    status: 'discussing',
+    transcript: [...meeting.transcript, turn],
+  });
+  if (!updated) throw badRequest('來源會議在處理期間已被刪除。');
+  return updated;
+}
+
 export function createFromMeeting(meetingId) {
   const meeting = getMeeting(meetingId);
   if (!meeting) throw notFound('找不到該會議');
@@ -137,6 +184,7 @@ export function createFromMeeting(meetingId) {
     output: '',
     grounding: meeting.grounding || [], // carry the meeting's knowledge grounding forward
     runtime: { mode: 'standalone', engine: 'standalone-multiagent', label: '由會議行動項目建立', note: `來源會議 ${meetingId}` },
+    sourceMeetingId: meetingId, // close-the-loop: results can be fed back into this meeting
   });
 }
 

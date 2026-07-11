@@ -227,6 +227,13 @@ const MIGRATIONS = [
   (db) => {
     db.exec('ALTER TABLE meetings ADD COLUMN quick INTEGER NOT NULL DEFAULT 0;');
   },
+
+  // v11 — close the loop: a goal spawned from a meeting remembers its source, so
+  // once its tasks are delivered the results can be fed BACK into that meeting
+  // (reopen + inject a results report) for the team to converge the next decision.
+  (db) => {
+    db.exec("ALTER TABLE goals ADD COLUMN source_meeting_id TEXT NOT NULL DEFAULT '';");
+  },
 ];
 
 export function migrate(db) {

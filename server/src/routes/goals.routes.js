@@ -44,6 +44,12 @@ goalsRouter.post('/goals/:id/tasks/:order/execute', asyncHandler(async (req, res
   res.json(await goals.executeTask(req.params.id, req.params.order));
 }));
 
+// Close the loop: feed the goal's deliverables back into its source meeting
+// (reopen + a 成果回報 turn) so the team converges the next decision.
+goalsRouter.post('/goals/:id/review-in-meeting', asyncHandler(async (req, res) => {
+  res.json(goals.reviewGoalInMeeting(req.params.id));
+}));
+
 // Re-run the collaboration with the previous plan + an optional manager
 // instruction as context; the fresh result REPLACES tasks/output.
 goalsRouter.post('/goals/:id/rerun', asyncHandler(async (req, res) => {
