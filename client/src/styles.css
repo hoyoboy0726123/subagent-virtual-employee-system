@@ -363,7 +363,7 @@ a.cite-link:hover { background: color-mix(in srgb, var(--brand) 12%, transparent
 .meeting-room-controls .callon-row { display: flex; gap: 8px; margin-bottom: 8px; }
 .meeting-room-controls .callon-row input { flex: 1; }
 .meeting-room-controls .callon-row select { flex: 0 0 auto; max-width: 220px; }
-.turn-manager .turn-text { border-left: 3px solid #e67e22; padding-left: 8px; font-weight: 600; }
+.turn-manager .turn-text { border-left: 3px solid #e67e22; padding-left: 8px; font-weight: 600; white-space: pre-wrap; }
 .turn-av-manager { background: rgba(230, 126, 34, 0.2); }
 
 /* Phase 17 — light theme. Dark stays the default; the topbar toggle sets
