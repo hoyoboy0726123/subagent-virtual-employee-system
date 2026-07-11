@@ -141,8 +141,13 @@ export function reviewGoalInMeeting(goalId) {
     speaker: '主管', role: '會議主持人', speakerId: 'manager',
     text, live: true, isManager: true, toolCalls: 0, citations: [],
   };
+  // Close the loop for real: once delivered results are back, the follow-up
+  // meeting should CONVERGE TO A FINAL CONCLUSION, not spawn yet another round
+  // of tasks (which would never end). Force conclusion mode so the eventual
+  // report is decision-only (no 行動項目 → no 派成目標 → the loop closes).
   const updated = updateMeeting(meetingId, {
     status: 'discussing',
+    outputMode: 'conclusion',
     transcript: [...meeting.transcript, turn],
   });
   if (!updated) throw badRequest('來源會議在處理期間已被刪除。');

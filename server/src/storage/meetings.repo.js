@@ -164,12 +164,12 @@ export function updateMeeting(meetingId, patch = {}, { expectStatus } = {}) {
   const merged = { ...existing, ...patch, id: existing.id, createdAt: existing.createdAt };
   getDb()
     .prepare(`UPDATE meetings SET
-      rounds = ?, transcript = ?, minutes = ?, report = ?, grounding = ?, runtime = ?, status = ?
+      rounds = ?, transcript = ?, minutes = ?, report = ?, grounding = ?, runtime = ?, status = ?, output_mode = ?
       WHERE id = ?`)
     .run(
       merged.rounds, JSON.stringify(merged.transcript), JSON.stringify(merged.minutes),
       merged.report, JSON.stringify(merged.grounding), JSON.stringify(merged.runtime),
-      merged.status, meetingId,
+      merged.status, merged.outputMode === 'conclusion' ? 'conclusion' : 'full', meetingId,
     );
   return merged;
 }

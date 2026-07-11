@@ -189,10 +189,12 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMee
   };
 
   // Close-the-loop: another tab (GoalsPage「帶成果回會議」) asked us to jump straight
-  // into a specific meeting's room. Open it AND auto-run one discussion round so the
-  // team immediately reacts to the 成果回報 turn (instead of sitting paused waiting
-  // for the manager to click 繼續討論) — that automatic reaction IS the whole point
-  // of feeding results back. It then pauses so the manager can converge/conclude.
+  // into a specific meeting's room. Open it, let the team react to the 成果回報 turn,
+  // and CONVERGE TO A FINAL CONCLUSION — the meeting is now in 結論 mode (set server
+  // -side on review), so this produces a decision-only report with NO new action
+  // items. That truly closes the loop: delivered results → final decision, instead
+  // of spawning yet another round of tasks (which would never end). Lands on the
+  // report; if the manager wants to keep going they can 重啟討論.
   useEffect(() => {
     if (!gotoMeetingId) return;
     const id = gotoMeetingId;
@@ -201,11 +203,12 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMee
       setErr('');
       try {
         const full = await api.get(`/meetings/${id}`);
-        setRoom({ meetingId: full.id, topic: full.topic, transcript: full.transcript, runId: null, streaming: true, phase: '團隊正在檢視上一輪成果…' });
+        setRoom({ meetingId: full.id, topic: full.topic, transcript: full.transcript, runId: null, streaming: true, phase: '團隊正在檢視上一輪成果，收斂出最終結論…' });
         reload(filters);
-        const { meeting } = await api.stream(`/meetings/${id}/continue/stream`, { rounds: 1 }, roomEvents);
-        setRoom((r) => (r ? { ...r, transcript: meeting.transcript, streaming: false, runId: null, phase: null } : r));
+        const { meeting } = await api.stream(`/meetings/${id}/converge/stream`, { rounds: 2 }, roomEvents);
+        setRoom(null);
         onChange?.();
+        setOpen(meeting); // show the final 結論 report (no 派成目標 — the loop is closed)
       } catch (e) {
         setErr(e.message);
         setRoom((r) => (r ? { ...r, streaming: false, runId: null, phase: null } : r));
