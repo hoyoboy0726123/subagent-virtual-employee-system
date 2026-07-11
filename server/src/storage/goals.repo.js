@@ -162,3 +162,14 @@ export function updateGoal(goalId, patch) {
 export function deleteGoal(goalId) {
   return getDb().prepare('DELETE FROM goals WHERE id = ?').run(goalId).changes > 0;
 }
+
+// Close-the-loop: a meeting owns AT MOST ONE current goal. Deleting the prior
+// goal(s) spawned from a meeting lets a re-dispatch reset it to the latest
+// action items, so the manager never has to guess which goal is current.
+export function deleteGoalsBySourceMeeting(meetingId) {
+  // Match on the source_meeting_id column AND the legacy runtime.note fallback
+  // ("來源會議 <id>"), so goals created before the column existed also reset.
+  return getDb()
+    .prepare("DELETE FROM goals WHERE source_meeting_id = ? OR json_extract(runtime,'$.note') = ?")
+    .run(meetingId, `來源會議 ${meetingId}`).changes;
+}

@@ -178,8 +178,15 @@ export function createFromMeeting(meetingId) {
     throw badRequest('行動項目的負責人都不在與會員工名單中，無法自動指派。');
   }
 
+  // 歸零：a meeting owns ONE current goal. Re-dispatching (e.g. after another
+  // close-the-loop round produced fresh action items) REPLACES the prior goal
+  // so the manager can always tell this round's goal from last round's. The old
+  // goal's deliverables already fed back into this meeting's transcript, so
+  // nothing decided is lost.
+  const replacedPrevious = repo.deleteGoalsBySourceMeeting(meetingId);
+
   const assignees = [...assigneeMap.values()].map((e) => ({ id: e.id, name: e.name, roleTitle: e.roleTitle }));
-  return repo.insertGoal({
+  const goal = repo.insertGoal({
     title: `執行「${meeting.topic}」的行動項目`,
     description: `由會議「${meeting.topic}」的行動項目自動建立。逐項按「執行交付」讓負責人實際完成。`,
     assigneeIds: assignees.map((a) => a.id),
@@ -191,6 +198,7 @@ export function createFromMeeting(meetingId) {
     runtime: { mode: 'standalone', engine: 'standalone-multiagent', label: '由會議行動項目建立', note: `來源會議 ${meetingId}` },
     sourceMeetingId: meetingId, // close-the-loop: results can be fed back into this meeting
   });
+  return { ...goal, replacedPrevious }; // UI tells the user it superseded the old goal
 }
 
 /**

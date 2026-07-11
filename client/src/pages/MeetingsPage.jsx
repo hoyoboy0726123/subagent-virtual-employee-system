@@ -657,7 +657,9 @@ function MeetingView({ meeting, onClose, onReopen, onChange }) {
     setSpin({ busy: true, msg: '', err: '' });
     try {
       const goal = await api.post(`/goals/from-meeting/${meeting.id}`);
-      setSpin({ busy: false, msg: `已建立目標「${goal.title}」（${goal.tasks.length} 項任務）——切到「🎯 目標」分頁，逐項按「執行交付」讓負責人完成。`, err: '' });
+      const replaced = goal.replacedPrevious > 0
+        ? '已取代上一輪由本會議建立的舊目標（只保留這份最新的），' : '';
+      setSpin({ busy: false, msg: `${replaced}已建立目標「${goal.title}」（${goal.tasks.length} 項任務）——切到「🎯 目標」分頁，逐項按「執行交付」讓負責人完成。`, err: '' });
       onChange?.(); // the new goal shows at the top of the goals list
     } catch (e) {
       setSpin({ busy: false, msg: '', err: e.message });
