@@ -44,9 +44,13 @@ export async function synthesizeMeetingReport({ topic, participants, transcript,
   // Conclusion mode: a decision-only report — no action items / owners / due
   // dates, just the team's final call. When an agenda exists it must answer
   // every item explicitly.
-  const conclusionHeading = agendaText
-    ? '「## 最終結論／方案」：逐一針對上面「待討論事項」的每一條，給出明確的最終方案或決定（可用小標或條列對應每一項）；若某項仍有分歧，明說採用哪個方案與理由。這是報告的重點。'
-    : '「## 最終結論／方案」：把團隊收斂出的最終決定或建議清楚寫成條列或短段落；若仍有分歧，明說採用哪個方案與理由。這是報告的重點。';
+  const conclusionHeading = [
+    '「## 最終結論／方案」：這是報告的重點。',
+    `這一節的第一句話，必須直接、正面回答本次會議主題所提出的問題：「${topic}」——例如「決定開發 ⭕⭕ 系統」「採用 ⭕⭕ 方案」，用一句話把主題的答案講死，不能只談過程、子問題或原則卻不給出對主題本身的明確答案。`,
+    agendaText
+      ? '接著再逐一針對上面「待討論事項」的每一條，給出明確的最終方案或決定（可用小標或條列對應每一項）；若某項仍有分歧，明說採用哪個方案與理由。'
+      : '接著把團隊收斂出的其餘決定或建議清楚寫成條列或短段落；若仍有分歧，明說採用哪個方案與理由。',
+  ].join('\n');
   const sections = outputMode === 'conclusion'
     ? [
       '「## 執行摘要」：3–5 句，寫出會議的核心結論與最終方向，讓沒參加的人也讀得懂。',
