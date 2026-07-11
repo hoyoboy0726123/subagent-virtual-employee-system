@@ -189,13 +189,28 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMee
   };
 
   // Close-the-loop: another tab (GoalsPage「帶成果回會議」) asked us to jump straight
-  // into a specific meeting's room. Open it, refresh the list so its status shows
-  // as 討論中, and clear the request so we don't reopen on every render.
+  // into a specific meeting's room. Open it AND auto-run one discussion round so the
+  // team immediately reacts to the 成果回報 turn (instead of sitting paused waiting
+  // for the manager to click 繼續討論) — that automatic reaction IS the whole point
+  // of feeding results back. It then pauses so the manager can converge/conclude.
   useEffect(() => {
     if (!gotoMeetingId) return;
-    reopenRoom({ id: gotoMeetingId });
-    reload(filters);
+    const id = gotoMeetingId;
     onGotoHandled?.();
+    (async () => {
+      setErr('');
+      try {
+        const full = await api.get(`/meetings/${id}`);
+        setRoom({ meetingId: full.id, topic: full.topic, transcript: full.transcript, runId: null, streaming: true, phase: '團隊正在檢視上一輪成果…' });
+        reload(filters);
+        const { meeting } = await api.stream(`/meetings/${id}/continue/stream`, { rounds: 1 }, roomEvents);
+        setRoom((r) => (r ? { ...r, transcript: meeting.transcript, streaming: false, runId: null, phase: null } : r));
+        onChange?.();
+      } catch (e) {
+        setErr(e.message);
+        setRoom((r) => (r ? { ...r, streaming: false, runId: null, phase: null } : r));
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gotoMeetingId]);
 
