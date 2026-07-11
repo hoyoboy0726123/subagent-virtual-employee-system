@@ -11,6 +11,31 @@ const TABS = [
   { key: 'goals', label: '🎯 目標' },
 ];
 
+// Packaged (windowless) exe only: quit the app from the browser, since there's
+// no console window to close. After the server exits, show a done screen.
+function QuitButton() {
+  const [done, setDone] = useState(false);
+  const quit = async () => {
+    if (!window.confirm('確定要關閉應用嗎？未儲存的進行中討論會停止。')) return;
+    try { await api.post('/shutdown', {}); } catch { /* server exits mid-response */ }
+    setDone(true);
+  };
+  if (done) {
+    return (
+      <div className="quit-overlay">
+        <div className="quit-card">
+          <div className="quit-emoji">👋</div>
+          <h2>應用已關閉</h2>
+          <p className="muted">服務已停止，可以直接關閉這個瀏覽器分頁。<br />下次要用時再雙擊「虛擬員工系統」即可。</p>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <button className="icon-btn" onClick={quit} title="關閉應用（停止服務）" aria-label="關閉應用">⏻</button>
+  );
+}
+
 export default function App() {
   const [tab, setTab] = useState('employees');
   const [health, setHealth] = useState(null);
@@ -139,6 +164,7 @@ export default function App() {
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
+          {health?.packaged && <QuitButton />}
         </div>
       </header>
 

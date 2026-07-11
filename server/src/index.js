@@ -1,12 +1,13 @@
 // Entry point. Builds the app and listens; exports `app` for the smoke test.
 import path from 'node:path';
+import fs from 'node:fs';
 import readline from 'node:readline';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { llmEnabled, activeModelInfo } from './reasoning/llm.js';
-import { isPackaged } from './util/portable.js';
+import { isPackaged, exeDir } from './util/portable.js';
 import { listEmployees } from './storage/employees.repo.js';
 import { getSetting, setSetting } from './storage/settings.repo.js';
 
@@ -50,8 +51,19 @@ function listenWithFallback(startPort, tries = 15) {
   });
 }
 
-// Keep a double-clicked console window open on a fatal error so the user can
-// read it (otherwise it flashes shut). No-op in a source checkout / non-TTY.
+// A windowless exe has no console — record fatal boot errors to a file next to
+// it so a user can still find out why nothing happened.
+function logFatal(err) {
+  if (!isPackaged()) return;
+  try {
+    const dir = path.join(exeDir(), 'veemp-data');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'error.log'), `[${new Date().toISOString()}] 啟動失敗：${err?.stack || err?.message || err}\n`);
+  } catch { /* nothing else we can do */ }
+}
+
+// Keep a double-clicked CONSOLE window open on a fatal error so the user can
+// read it. Windowless exe (no TTY) already logged to file — just exit.
 function pauseThenExit(code) {
   if (!isPackaged() || !process.stdin.isTTY) { process.exit(code); return; }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -79,13 +91,15 @@ if (isMain) (async () => {
     console.log(`  LLM     : ${llmEnabled() ? `live (${activeModelInfo().label})` : 'off (deterministic engine)'}`);
     if (port !== config.port) console.log(`  （埠 ${config.port} 已被佔用，改用 ${port}）`);
     console.log('');
-    // Packaged exe: open the browser for the double-click user (best-effort).
+    // Packaged exe: open the browser for the double-click user. windowsHide so
+    // the launcher cmd never flashes (the exe itself is windowless).
     if (isPackaged() && process.platform === 'win32') {
-      try { spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore' }).unref(); } catch { /* ignore */ }
+      try { spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref(); } catch { /* ignore */ }
     }
   } catch (err) {
+    logFatal(err);
     console.error('\n  ✗ 啟動失敗：', err?.message || err);
-    console.error('  請截圖上方訊息回報。');
+    console.error('  請截圖上方訊息回報（或見 veemp-data\\error.log）。');
     pauseThenExit(1);
   }
 })();

@@ -12,8 +12,19 @@ import { config } from '../config.js';
 import { getSettings } from '../services/settings.service.js';
 import { getRuntimeAdapter } from '../runtime/index.js';
 import { ingestCapability } from '../services/knowledge.service.js';
+import { isPackaged } from '../util/portable.js';
 
 export const healthRouter = Router();
+
+// Graceful shutdown — only meaningful for the packaged (windowless) exe, where
+// there's no console window to close. The UI's ⏻ 關閉應用 button calls this; we
+// reply first, then exit so the process actually stops. Guarded to the exe so a
+// dev/source server can't be killed by a stray request.
+healthRouter.post('/shutdown', (_req, res) => {
+  if (!isPackaged()) { res.status(403).json({ error: '僅限打包版可用' }); return; }
+  res.json({ ok: true, message: '應用已關閉，可以關閉此分頁。' });
+  setTimeout(() => process.exit(0), 200);
+});
 
 healthRouter.get('/health', asyncHandler(async (_req, res) => {
   const kb = retrievalStats();
@@ -31,6 +42,7 @@ healthRouter.get('/health', asyncHandler(async (_req, res) => {
   const embCount = embOn ? embeddingStats(embedder.model()) : { total: kb.chunks, embedded: 0 };
   res.json({
     ok: true,
+    packaged: isPackaged(), // exe build → UI shows the ⏻ 關閉應用 button
     llm: llmEnabled(),
     runtime: 'standalone',
     runtimeLabel: settings.runtimeLabel,

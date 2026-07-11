@@ -45,6 +45,25 @@ const MIME = {
   '.woff2': 'font/woff2',
 };
 
+// Flip a Windows PE executable's Subsystem field from Console (3) to GUI (2)
+// in place, so a double-click launches it with NO console window. Parses the
+// PE header (PE32/PE32+) to locate the 2-byte Subsystem field precisely.
+function setWindowsGuiSubsystem(exePath) {
+  const buf = fs.readFileSync(exePath);
+  if (buf.readUInt16LE(0) !== 0x5a4d) throw new Error('不是有效的 PE 檔（缺少 MZ 標頭）'); // "MZ"
+  const peOff = buf.readUInt32LE(0x3c); // e_lfanew → PE header
+  if (buf.readUInt32LE(peOff) !== 0x00004550) throw new Error('缺少 PE 簽章'); // "PE\0\0"
+  const optOff = peOff + 24; // COFF header is 20 bytes after the 4-byte signature
+  const magic = buf.readUInt16LE(optOff); // 0x10b = PE32, 0x20b = PE32+
+  if (magic !== 0x10b && magic !== 0x20b) throw new Error(`未知的 Optional Header magic 0x${magic.toString(16)}`);
+  const subsystemOff = optOff + 68; // Subsystem is at optional-header offset 0x44 (same for PE32/PE32+)
+  const current = buf.readUInt16LE(subsystemOff);
+  if (current === 2) { console.log('  （已是 GUI subsystem）'); return; }
+  if (current !== 3) console.warn(`  警告：目前 subsystem = ${current}（非 Console），仍改為 GUI`);
+  buf.writeUInt16LE(2, subsystemOff); // IMAGE_SUBSYSTEM_WINDOWS_GUI
+  fs.writeFileSync(exePath, buf);
+}
+
 function collectAssets(dir, base = '') {
   const out = {};
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -123,9 +142,16 @@ try {
     { stdio: 'inherit', cwd: root },
   );
 
+  // ── 5b) windowless: flip the PE subsystem Console(3) → Windows GUI(2) so a
+  // double-click shows NO black console window; the app runs in the background
+  // and is stopped from the web UI's ⏻ 關閉應用 button. Boot errors are logged
+  // to veemp-data/error.log instead of a console.
+  console.log('→ 設為無主控台視窗（PE subsystem → GUI）…');
+  setWindowsGuiSubsystem(exePath);
+
   const mb = (fs.statSync(exePath).size / 1024 / 1024).toFixed(0);
-  console.log(`\n✓ 完成：dist-exe\\虛擬員工系統.exe（約 ${mb} MB）`);
-  console.log('  雙擊即用；資料存在 exe 旁的 veemp-data\\ 資料夾。');
+  console.log(`\n✓ 完成：dist-exe\\虛擬員工系統.exe（約 ${mb} MB，無終端機視窗）`);
+  console.log('  雙擊即用；資料存在 exe 旁的 veemp-data\\ 資料夾。用完在網頁按「⏻ 關閉應用」。');
 } finally {
   // ── 6) always restore the stub so the repo never carries generated blobs ──
   fs.writeFileSync(ASSETS_MJS, STUB);
