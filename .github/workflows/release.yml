@@ -1,0 +1,53 @@
+# Release automation: push a tag like v1.2.0 and this builds the portable
+# Windows exe (Node SEA) and attaches it to a GitHub Release. Users go from
+# "clone + npm install" to "download the exe and double-click".
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write # create the release + upload assets
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+          cache: npm
+
+      - run: npm ci
+
+      # Hermetic sanity gate — same suites as CI.
+      - name: Test
+        run: npm test
+
+      - name: Build single-file exe
+        run: npm run build:exe
+
+      # Zip it so the Chinese filename survives every browser/OS download path.
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist-exe/虛擬員工系統.exe" -DestinationPath "dist-exe/veemp-windows-x64-${{ github.ref_name }}.zip"
+          Get-FileHash "dist-exe/veemp-windows-x64-${{ github.ref_name }}.zip" -Algorithm SHA256 | ForEach-Object { "$($_.Hash)  veemp-windows-x64-${{ github.ref_name }}.zip" } | Out-File -Encoding utf8 "dist-exe/SHA256SUMS.txt"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-exe/veemp-windows-x64-${{ github.ref_name }}.zip
+            dist-exe/SHA256SUMS.txt
+          generate_release_notes: true
+          body: |
+            ## 🧑‍💼 虛擬員工系統 ${{ github.ref_name }}
+
+            **Windows 免安裝版**：下載 `veemp-windows-x64-${{ github.ref_name }}.zip`，解壓後雙擊
+            `虛擬員工系統.exe` 即用（資料存在 exe 旁的 `veemp-data\`）。
+            **Portable Windows build**: download the zip, extract, double-click the exe.
+            No Node.js required. Data lives in `veemp-data\` next to the exe.

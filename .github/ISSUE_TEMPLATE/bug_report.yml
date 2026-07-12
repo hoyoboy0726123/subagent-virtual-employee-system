@@ -1,0 +1,66 @@
+name: 🐛 Bug 回報 / Bug report
+description: 回報一個可重現的問題 / Report a reproducible problem
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝回報!中英文皆可。 Thanks for reporting — English or 中文 both welcome.
+  - type: textarea
+    id: what
+    attributes:
+      label: 發生了什麼 / What happened
+      description: 實際看到的行為,附截圖更好 / What you saw; screenshots help a lot
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 預期行為 / Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟 / Steps to reproduce
+      placeholder: |
+        1. 開啟會議分頁…
+        2. 點擊…
+        3. 出現…
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: 安裝方式 / Install method
+      options:
+        - start.bat(一鍵啟動)
+        - 單一 exe(portable exe)
+        - npm(手動 / manual)
+        - Docker
+    validations:
+      required: true
+  - type: dropdown
+    id: brain
+    attributes:
+      label: 使用的大腦 / Brain in use
+      options:
+        - 無金鑰離線模式 / Offline (no key)
+        - Google Gemini API
+        - Claude 訂閱(claude CLI)
+        - Codex 訂閱(codex CLI)
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: 環境 / Environment
+      placeholder: "Windows 11 / Node 22.12 / Chrome 150"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相關日誌 / Relevant logs
+      description: 終端機輸出或 veemp-data/error.log / Terminal output or veemp-data/error.log
+      render: text
