@@ -15,13 +15,22 @@
 //     hermetic test suite never touches the network.
 import { getSetting, setSetting } from '../storage/settings.repo.js';
 import { config } from '../config.js';
+import { encryptSecret, decryptSecret, isEncrypted } from '../util/secrets.js';
 
 export const GEMINI_KEY_SETTING = 'apiKeyGemini';
 export const TAVILY_KEY_SETTING = 'apiKeyTavily';
 
 // Settings live in SQLite; in exotic no-DB contexts behave as "not stored".
+// Values are AES-256-GCM encrypted at rest (Phase 2-3) with a key file kept
+// SEPARATE from the DB; legacy plaintext values are upgraded on first read.
 const stored = (key) => {
-  try { return (getSetting(key) || '').trim(); } catch { return ''; }
+  try {
+    const raw = (getSetting(key) || '').trim();
+    if (!raw) return '';
+    const plain = decryptSecret(raw).trim();
+    if (plain && !isEncrypted(raw)) setSetting(key, encryptSecret(plain)); // lazy migration
+    return plain;
+  } catch { return ''; }
 };
 
 /** Effective Google/Gemini key: UI-saved value first, then the environment. */
@@ -55,8 +64,8 @@ export function keyStatus() {
  * patch are touched. Returns the masked status — never the keys.
  */
 export function saveKeys({ gemini, tavily } = {}) {
-  if (gemini !== undefined) setSetting(GEMINI_KEY_SETTING, String(gemini).trim());
-  if (tavily !== undefined) setSetting(TAVILY_KEY_SETTING, String(tavily).trim());
+  if (gemini !== undefined) setSetting(GEMINI_KEY_SETTING, encryptSecret(String(gemini).trim()));
+  if (tavily !== undefined) setSetting(TAVILY_KEY_SETTING, encryptSecret(String(tavily).trim()));
   return keyStatus();
 }
 

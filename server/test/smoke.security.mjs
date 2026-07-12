@@ -82,6 +82,22 @@ try {
     } finally { Object.assign(config.rateLimit, prev); }
   });
 
+  await step('API keys are encrypted at rest (enc:v1: in the DB, plaintext out)', async () => {
+    const { saveKeys, keyStatus, effectiveGeminiKey, GEMINI_KEY_SETTING } = await import('../src/reasoning/apiKeys.js');
+    const { getSetting, setSetting } = await import('../src/storage/settings.repo.js');
+    saveKeys({ gemini: 'test-key-123456' });
+    const raw = getSetting(GEMINI_KEY_SETTING);
+    assert.ok(raw.startsWith('enc:v1:'), 'stored value must be ciphertext');
+    assert.ok(!raw.includes('test-key-123456'), 'plaintext must not appear in the DB');
+    assert.equal(effectiveGeminiKey(), 'test-key-123456', 'decrypts back to the key');
+    assert.equal(keyStatus().gemini.tail, '…3456', 'status still masks correctly');
+    // legacy plaintext migrates to ciphertext on first read
+    setSetting(GEMINI_KEY_SETTING, 'legacy-plain-9999');
+    assert.equal(effectiveGeminiKey(), 'legacy-plain-9999');
+    assert.ok(getSetting(GEMINI_KEY_SETTING).startsWith('enc:v1:'), 'legacy value upgraded in place');
+    saveKeys({ gemini: '' }); // clean up
+  });
+
   console.log(`\n  security smoke: all ${passed} checks passed ✅`);
 } finally {
   server.close();

@@ -4,6 +4,10 @@ server/data/*.db
 server/data/*.db-shm
 server/data/*.db-wal
 server/data/db.json
+# at-rest encryption key file for UI-saved API keys — NEVER commit
+server/data/.veemp-secret
+.veemp-secret
+veemp-data/
 *.log
 .DS_Store
 .env
