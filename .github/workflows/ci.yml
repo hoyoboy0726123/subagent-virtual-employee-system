@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 20 # hard backstop — never leave a 6-hour zombie
+    timeout-minutes: 35 # hard backstop — never leave a 6-hour zombie
     strategy:
       matrix:
         node-version: ['22.x', '24.x']
@@ -23,56 +23,33 @@ jobs:
 
       - run: npm ci
 
-      # Sanity probes: prove that node runs, that `timeout` can kill it, and
-      # that a bare import of the app module returns. Each is tiny and bounded.
-      - name: Probe environment
-        run: |
-          set +e  # probes report rc themselves; expected non-zero must not kill the step
-          echo "— probe 1: node runs —"
-          node -e "console.log('node ok', process.version)"
-          echo "— probe 2: timeout kills a sleeping node (expect rc=124) —"
-          timeout -k 5 10 node -e "setTimeout(()=>{},1e9)" </dev/null >/dev/null 2>&1
-          echo "rc=$?"
-          echo "— probe 3: import the app (DB in memory) —"
-          timeout -k 5 60 node -e "process.env.DB_FILE=':memory:'; const t=Date.now(); import('./server/src/app.js').then(()=>{console.log('app import ok in', Date.now()-t, 'ms'); process.exit(0);})" </dev/null
-          echo "rc=$?"
-          exit 0
+      # One STEP per suite, bounded by the RUNNER's step-level timeout — a
+      # shell `timeout` proved unable to bound whatever hangs here (the loop
+      # step outlived per-suite SIGKILL budgets), while the platform timeout
+      # tears the step down unconditionally. continue-on-error lets every
+      # suite report, and the Verdict step fails the job with names.
+      - { id: s_tools,   name: smoke.tools,         timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.tools.mjs }
+      - { id: s_sec,     name: smoke.security,      timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.security.mjs }
+      - { id: s_cli,     name: smoke.cliRunner,     timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.cliRunner.mjs }
+      - { id: s_emb,     name: smoke.embeddings,    timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.embeddings.mjs }
+      - { id: s_mem,     name: smoke.memory,        timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.memory.mjs }
+      - { id: s_prov,    name: smoke.providers,     timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.providers.mjs }
+      - { id: s_orch,    name: smoke.orchestration, timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.orchestration.mjs }
+      - { id: s_http,    name: smoke.http,          timeout-minutes: 5, continue-on-error: true, run: node server/test/smoke.mjs }
 
-      # One suite, bounded, with a JS-stack diagnostic if it never exits:
-      # SIGUSR2 makes node write a report (full JS stack) before we SIGKILL.
-      - name: Test (diagnose smoke.tools)
+      - name: Verdict
         run: |
-          node --report-on-signal --report-signal=SIGUSR2 --report-directory=/tmp \
-            server/test/smoke.tools.mjs > /tmp/suite.log 2>&1 < /dev/null &
-          pid=$!
-          for i in $(seq 1 60); do kill -0 $pid 2>/dev/null || break; sleep 1; done
-          if kill -0 $pid 2>/dev/null; then
-            echo "✗ smoke.tools still alive after 60s — dumping JS stack"
-            kill -USR2 $pid; sleep 3
-            for r in /tmp/report.*.json; do
-              echo "== $r (javascript stack) =="
-              node -e "const j=require('$r'); console.log(JSON.stringify(j.javascriptStack, null, 1)); console.log('libuv handles:', JSON.stringify((j.libuv||[]).map(h=>h.type+':'+(h.is_active?'active':'idle'))))" || true
-            done
-            kill -9 $pid 2>/dev/null
-            cat /tmp/suite.log
-            exit 1
-          fi
-          wait $pid; rc=$?
-          cat /tmp/suite.log
-          echo "smoke.tools exited rc=$rc"
-          exit $rc
-
-      - name: Test (remaining suites)
-        run: |
-          rc_total=0
-          for f in security cliRunner embeddings memory providers orchestration mjs; do
-            file="server/test/smoke.$f.mjs"; [ "$f" = "mjs" ] && file="server/test/smoke.mjs"
-            echo "══════ $file ══════"
-            timeout -k 5 120 node "$file" > /tmp/suite.log 2>&1 < /dev/null; rc=$?
-            cat /tmp/suite.log
-            if [ $rc -ne 0 ]; then echo "✗ $file exited rc=$rc$([ $rc -eq 124 ] && echo ' (TIMED OUT / never exited)')"; rc_total=1; fi
-          done
-          exit $rc_total
+          fail=0
+          check() { if [ "$2" != "success" ]; then echo "✗ $1 → $2"; fail=1; else echo "✓ $1"; fi; }
+          check smoke.tools         "${{ steps.s_tools.outcome }}"
+          check smoke.security      "${{ steps.s_sec.outcome }}"
+          check smoke.cliRunner     "${{ steps.s_cli.outcome }}"
+          check smoke.embeddings    "${{ steps.s_emb.outcome }}"
+          check smoke.memory        "${{ steps.s_mem.outcome }}"
+          check smoke.providers     "${{ steps.s_prov.outcome }}"
+          check smoke.orchestration "${{ steps.s_orch.outcome }}"
+          check smoke.http          "${{ steps.s_http.outcome }}"
+          exit $fail
 
       - name: Build client
         run: npm run build
