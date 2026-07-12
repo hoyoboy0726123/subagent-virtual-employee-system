@@ -12,7 +12,7 @@ Hire AI employees with personas and private knowledge bases, watch them debate i
 
 ![Live demo: AI employees holding a meeting in the pixel office](.github/assets/demo.gif)
 
-> **Note on language**: the app UI and agent output are currently **Traditional Chinese**. English UI is on the roadmap — contributions welcome! The codebase, docs and this README are English-friendly.
+> **Note on language**: the UI ships in **Traditional Chinese and English** (🌐 toggle in the top bar). Agent *output* still follows the team's Chinese personas; more locales welcome — just add a file under `client/src/locales/`.
 
 ## What is this?
 
@@ -119,8 +119,9 @@ More: [CONTRIBUTING.md](CONTRIBUTING.md) ・ [SECURITY.md](SECURITY.md)
 
 ## 🗺️ Roadmap
 
-- [ ] English UI (i18n layer) — **help wanted**
+- [x] English UI (i18n layer, 🌐 toggle in the top bar)
 - [ ] Ollama / OpenAI-compatible local model support
+- [ ] Voice control (browser Web Speech API → intent → existing APIs)
 - [ ] Scenario packs (one-click team templates: marketing dept, paper review committee, D&D party…)
 - [ ] Public-deploy hardening (auth token, rate limiting)
 - [ ] GitHub Releases with prebuilt exe
