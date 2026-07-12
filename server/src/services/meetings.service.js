@@ -5,7 +5,9 @@ import { getEmployees } from '../storage/employees.repo.js';
 import { getActiveRuntime } from './settings.service.js';
 import { distillMeetingMemories } from '../orchestration/MemoryDistiller.js';
 import { interject as interjectLive, directedTurn, planConvergeRounds } from '../orchestration/MeetingOrchestrator.js';
-import { organizeAgenda as organizeAgendaAgent } from '../orchestration/ReportSynthesizer.js';
+import { organizeAgenda as organizeAgendaAgent, agendaFromAudio } from '../orchestration/ReportSynthesizer.js';
+import { uploadAudioToGemini, deleteGeminiFile } from '../reasoning/llm.js';
+import { config } from '../config.js';
 import { badRequest, notFound } from '../util/http.js';
 import { id as newId } from '../util/ids.js';
 import { withLock } from '../util/locks.js';
@@ -117,6 +119,46 @@ export async function organizeAgenda({ text, topic, images } = {}) {
   if (res.needsGeminiKey) {
     throw badRequest('辨識圖片需要 Google Gemini 金鑰。請點右上「🔑 API 金鑰」設定 Gemini 金鑰（目前的 codex／claude 訂閱大腦無法看圖），再重試。');
   }
+  return { agenda: res.text, live: res.live };
+}
+
+// Audio formats Gemini accepts (whitelist by extension + common MIME types).
+const AUDIO_EXT = /\.(mp3|wav|m4a|aac|ogg|oga|flac|aiff|aif|webm)$/i;
+const AUDIO_MIME = /^audio\/|^video\/webm|^application\/ogg/i;
+
+/**
+ * Turn an uploaded MEETING RECORDING into a bulleted 待討論事項 list. Small files
+ * (≤ inline limit) go base64-inline in one request; larger recordings go
+ * through the Gemini Files API (upload → reference → delete). Runs on the
+ * dedicated audio model (Gemini Flash), NOT the selected meeting brain.
+ */
+export async function transcribeAudioToAgenda(file, { topic } = {}) {
+  if (!file || !file.buffer?.length) throw badRequest('請選擇一個語音檔');
+  const name = file.originalname || 'recording';
+  const mimeType = file.mimetype || 'audio/mpeg';
+  if (!AUDIO_EXT.test(name) && !AUDIO_MIME.test(mimeType)) {
+    throw badRequest('不支援的音訊格式。請上傳 MP3 / WAV / M4A / AAC / OGG / FLAC / WEBM。');
+  }
+
+  let res;
+  if (file.buffer.length <= config.ingest.audioInlineBytes) {
+    // Small enough to inline as base64 in the generateContent request.
+    res = await agendaFromAudio({ mimeType, data: file.buffer.toString('base64') }, { topic });
+  } else {
+    // Large recording — upload via the Files API, reference by URI, then delete.
+    let uploaded;
+    try {
+      uploaded = await uploadAudioToGemini(file.buffer, mimeType);
+      res = await agendaFromAudio({ mimeType, fileUri: uploaded.fileUri }, { topic });
+    } finally {
+      if (uploaded?.name) await deleteGeminiFile(uploaded.name);
+    }
+  }
+
+  if (res.needsGeminiKey) {
+    throw badRequest('解析語音需要 Google Gemini 金鑰。請點右上「🔑 API 金鑰」設定 Gemini 金鑰（訂閱大腦無法處理音訊），再重試。');
+  }
+  if (!res.text) throw badRequest(`語音解析失敗，請再試一次。${res.error ? `（${String(res.error).slice(0, 120)}）` : ''}`);
   return { agenda: res.text, live: res.live };
 }
 

@@ -13,7 +13,7 @@
 // citations only where the retrieved knowledge genuinely bore on a point.
 // De-duplication across turns is an explicit instruction, so the report reads
 // tighter than the transcript.
-import { generate, generateVision, geminiKeyPresent, llmEnabled } from '../reasoning/llm.js';
+import { generate, generateVision, generateAudio, geminiKeyPresent, llmEnabled } from '../reasoning/llm.js';
 import * as engine from '../reasoning/engine.js';
 import { polishArtifact } from './output.js';
 import { config } from '../config.js';
@@ -157,6 +157,33 @@ export async function organizeAgenda(raw, { topic, images = [] } = {}) {
   const bullets = source.split('\n').map((l) => l.trim()).filter(Boolean)
     .map((l) => (l.startsWith('- ') ? l : `- ${l.replace(/^[-*•]\s*/, '')}`));
   return { text: bullets.join('\n'), live: false };
+}
+
+/**
+ * Turn a MEETING AUDIO RECORDING into a bulleted 待討論事項 list — the audio
+ * equivalent of organizeAgenda. Runs on the dedicated Gemini audio model
+ * (generateAudio forces it, regardless of the selected meeting brain). `audio`
+ * is { mimeType, data(base64) } (inline) or { mimeType, fileUri } (Files API).
+ * Returns { text, live } / { text, needsGeminiKey } / { text:'' } on failure.
+ */
+export async function agendaFromAudio(audio, { topic } = {}) {
+  if (!audio || (!audio.data && !audio.fileUri)) return { text: '', live: false };
+  if (!geminiKeyPresent()) return { text: '', live: false, needsGeminiKey: true };
+
+  const instruction = [
+    topic ? `會議主題：${topic}` : '',
+    '以下附上一段會議或討論的錄音。請先在心裡把它聽懂並轉寫（不需輸出逐字稿），',
+    '再把其中「需要團隊討論並收斂出結論的議題」整理成一份清楚、精簡、不重複的「待討論事項」清單。',
+    '',
+    '輸出要求：只輸出 Markdown 無序清單（每行「- 」開頭），每條是一個明確、可被會議討論的議題；',
+    '合併語意重複者、略過寒暄與雜訊、把模糊處改寫成具體待決問題；不要加標題、前言或逐字稿，只輸出清單本身。全程繁體中文。',
+  ].filter(Boolean).join('\n');
+
+  const res = await generateAudio({ system: MANAGER_SYSTEM, user: instruction, audio, maxTokens: config.llm.output.document, temperature: 0.3 });
+  if (res?.noKey) return { text: '', live: false, needsGeminiKey: true };
+  const text = polishArtifact(res?.text?.trim() || '');
+  if (text) return { text, live: true };
+  return { text: '', live: false, error: res?.error };
 }
 
 // One manager turn. Returns the trimmed text, or null to signal "fall back".

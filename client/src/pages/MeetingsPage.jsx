@@ -83,6 +83,23 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMee
     } catch (e) { setErr(e.message); } finally { setOrganizing(false); }
   };
 
+  // Upload a MEETING RECORDING → the dedicated Gemini audio model transcribes it
+  // into agenda bullets (large files route through the Files API server-side).
+  const [transcribing, setTranscribing] = useState(false);
+  const audioInputRef = useRef(null);
+  const transcribeAudio = async (file) => {
+    if (!file || transcribing) return;
+    setErr('');
+    setTranscribing(true);
+    try {
+      const res = await api.upload('/meetings/transcribe-audio', file, 'file', { topic });
+      if (res.agenda) setAgenda((cur) => (cur.trim() ? `${cur.trim()}\n${res.agenda}` : res.agenda));
+    } catch (e) { setErr(e.message); } finally {
+      setTranscribing(false);
+      if (audioInputRef.current) audioInputRef.current.value = '';
+    }
+  };
+
   const run = async () => {
     setErr('');
     if (!topic.trim() || selected.length === 0) {
@@ -259,14 +276,31 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMee
         <label className="block">
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
             <span>{t('meetings.agendaLabel')}</span>
-            <button
-              className="btn-ghost sm"
-              onClick={organizeAgenda}
-              disabled={organizing || (!agenda.trim() && !agendaImages.length)}
-              title={t('meetings.organizeAgendaTitle')}
-            >
-              {organizing ? t('meetings.organizingBtn') : t('meetings.organizeBtn')}
-            </button>
+            <div className="row" style={{ gap: 6, margin: 0 }}>
+              <input
+                ref={audioInputRef}
+                type="file"
+                accept="audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac,.webm"
+                style={{ display: 'none' }}
+                onChange={(e) => transcribeAudio(e.target.files?.[0])}
+              />
+              <button
+                className="btn-ghost sm"
+                onClick={() => audioInputRef.current?.click()}
+                disabled={transcribing || organizing}
+                title={t('meetings.transcribeAudioTitle')}
+              >
+                {transcribing ? t('meetings.transcribingBtn') : t('meetings.transcribeAudioBtn')}
+              </button>
+              <button
+                className="btn-ghost sm"
+                onClick={organizeAgenda}
+                disabled={organizing || (!agenda.trim() && !agendaImages.length)}
+                title={t('meetings.organizeAgendaTitle')}
+              >
+                {organizing ? t('meetings.organizingBtn') : t('meetings.organizeBtn')}
+              </button>
+            </div>
           </div>
           <div onPaste={onAgendaPaste} onDrop={onAgendaDrop} onDragOver={(e) => e.preventDefault()}>
             {agendaImages.length > 0 && (

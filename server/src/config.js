@@ -91,6 +91,11 @@ export const config = {
     python: process.env.MARKITDOWN_PYTHON || '',
     // Per-file upload ceiling (bytes). Guards the ingestion surface.
     maxBytes: Number(process.env.UPLOAD_MAX_BYTES) || 15 * 1024 * 1024, // 15 MiB
+    // Audio recordings are their own surface: they can be much larger than a
+    // knowledge doc (a full meeting recording). Files at/under the inline limit
+    // go base64-inline in one request; larger ones go via the Gemini Files API.
+    audioMaxBytes: Number(process.env.AUDIO_MAX_BYTES) || 100 * 1024 * 1024, // 100 MiB hard cap
+    audioInlineBytes: Number(process.env.AUDIO_INLINE_BYTES) || 18 * 1024 * 1024, // ≤18 MiB → inline; above → Files API
     // Per-conversion timeout (seconds) for the MarkItDown subprocess.
     timeoutSec: Number(process.env.MARKITDOWN_TIMEOUT_SEC) || 120,
     // Hard kill-switch: MARKITDOWN_DISABLE=1 forces the built-in JS fallback even
@@ -156,6 +161,11 @@ export const config = {
     // --- google ---
     apiKey: process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '',
     model: process.env.GEMINI_MODEL || 'gemma-4-31b-it',
+    // Audio understanding runs on a SEPARATE, dedicated Gemini model regardless
+    // of the selected meeting brain (gemma-4-31b has no audio; only Flash-class
+    // models do long audio). This is the same "force Gemini for one capability"
+    // split as image vision. gemini-3.5-flash: 250K TPM free tier, up to 9.5h.
+    audioModel: process.env.AUDIO_MODEL || 'gemini-3.5-flash',
     // Gemma 4 is a thinking model; its reasoning tokens count against
     // maxOutputTokens and add latency, which short conversational agent turns
     // don't need. 'MINIMAL' is the ONLY level the Gemini API accepts for Gemma 4

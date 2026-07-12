@@ -34,9 +34,10 @@ const json = (method) => async (path, body, _retried) => {
 
 // Multipart upload (a File/Blob) to a server endpoint. We deliberately do NOT
 // set a Content-Type header — the browser adds the multipart boundary itself.
-const uploadFile = (path, file, field = 'file') => {
+const uploadFile = (path, file, field = 'file', fields = {}) => {
   const body = new FormData();
   body.append(field, file, file.name);
+  for (const [k, v] of Object.entries(fields)) if (v != null) body.append(k, v);
   return fetch(`/api${path}`, { method: 'POST', body, headers: authHeaders() }).then(async (res) => {
     const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
     if (!res.ok) throw new Error(data?.error || tStatic('api.uploadFailed', { status: res.status }));

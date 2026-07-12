@@ -1,10 +1,18 @@
 import { Router } from 'express';
-import { asyncHandler, sendDownload } from '../util/http.js';
+import multer from 'multer';
+import { asyncHandler, sendDownload, badRequest } from '../util/http.js';
 import { streamRun } from '../util/sse.js';
+import { config } from '../config.js';
 import * as meetings from '../services/meetings.service.js';
 import { buildMeetingExport } from '../export/reportDoc.js';
 
 export const meetingsRouter = Router();
+
+// Meeting recordings can be far larger than a knowledge doc — their own cap.
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: config.ingest.audioMaxBytes, files: 1 },
+});
 
 meetingsRouter.get('/meetings', asyncHandler(async (req, res) => {
   res.json(meetings.list(req.query || {}));
@@ -59,6 +67,24 @@ meetingsRouter.post('/meetings/interject', asyncHandler(async (req, res) => {
 meetingsRouter.post('/meetings/organize-agenda', asyncHandler(async (req, res) => {
   res.json(await meetings.organizeAgenda(req.body || {}));
 }));
+
+// Upload a MEETING RECORDING (multipart `file`, + optional `topic`) → the
+// dedicated Gemini audio model transcribes and returns a bulleted 待討論事項
+// list. Large files route through the Files API server-side.
+meetingsRouter.post(
+  '/meetings/transcribe-audio',
+  (req, res, next) =>
+    audioUpload.single('file')(req, res, (err) => {
+      if (err) {
+        const mb = Math.round(config.ingest.audioMaxBytes / (1024 * 1024));
+        return next(err.code === 'LIMIT_FILE_SIZE' ? badRequest(`語音檔過大（上限 ${mb} MB）。`) : err);
+      }
+      next();
+    }),
+  asyncHandler(async (req, res) => {
+    res.json(await meetings.transcribeAudioToAgenda(req.file, { topic: (req.body || {}).topic }));
+  }),
+);
 
 // Manager "點名": call on one specific employee to speak next (optional question).
 meetingsRouter.post('/meetings/:id/call-on', asyncHandler(async (req, res) => {

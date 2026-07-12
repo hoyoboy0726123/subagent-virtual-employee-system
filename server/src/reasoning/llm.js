@@ -247,6 +247,86 @@ export async function generateVision({ system, user, images = [], maxTokens = 15
   return { text: null };
 }
 
+const sleep = (ms) => new Promise((r) => { const t = setTimeout(r, ms); t.unref?.(); });
+
+/**
+ * Upload a large audio recording via the Gemini Files API and wait until it is
+ * ACTIVE (processed and ready to reference). Used for recordings above the
+ * inline-request limit; the returned { fileUri, name } is passed to
+ * generateAudio, and the caller MUST deleteGeminiFile(name) afterwards.
+ * @returns {Promise<{fileUri:string, name:string}>}
+ */
+export async function uploadAudioToGemini(buffer, mimeType) {
+  const ai = getClient();
+  if (!ai) throw new Error('未設定 Gemini 金鑰');
+  const blob = new Blob([buffer], { type: mimeType || 'audio/mpeg' });
+  let file = await ai.files.upload({ file: blob, config: { mimeType: mimeType || 'audio/mpeg' } });
+  // Poll until the file finishes server-side processing (large audio can take
+  // a while). Bounded so a stuck PROCESSING never hangs the request forever.
+  for (let i = 0; i < 60 && file.state === 'PROCESSING'; i++) {
+    await sleep(2000);
+    file = await ai.files.get({ name: file.name });
+  }
+  if (file.state !== 'ACTIVE') throw new Error(`音訊檔處理未完成（狀態：${file.state || '未知'}）`);
+  return { fileUri: file.uri, name: file.name };
+}
+
+/** Delete a previously uploaded Gemini file (best-effort cleanup). */
+export async function deleteGeminiFile(name) {
+  const ai = getClient();
+  if (!ai || !name) return;
+  try { await ai.files.delete({ name }); } catch { /* best-effort */ }
+}
+
+/**
+ * Understand an audio recording (transcribe + reason) on a DEDICATED Gemini
+ * audio model — independent of the selected meeting brain, since gemma-4-31b
+ * has no audio input (only Flash-class models do long audio). Same "force
+ * Gemini for one capability" split as generateVision.
+ *
+ * `audio` is EITHER { mimeType, data } (base64, no data-URL prefix — inline,
+ * for small files) OR { mimeType, fileUri } (a Files API upload — for large
+ * recordings). Returns { text }, { noKey: true } when no key is set, or
+ * { text: null } on failure.
+ */
+export async function generateAudio({ system, user, audio, maxTokens = 4096, temperature = 0.3 } = {}) {
+  const ai = getClient();
+  if (!ai) return { noKey: true };
+  if (!audio || (!audio.data && !audio.fileUri)) return { text: null };
+  const effModel = config.llm.audioModel; // Flash-class — long audio capable
+  const audioPart = audio.fileUri
+    ? { fileData: { fileUri: audio.fileUri, mimeType: audio.mimeType || 'audio/mpeg' } }
+    : { inlineData: { mimeType: audio.mimeType || 'audio/mpeg', data: audio.data } };
+  const parts = [...(user ? [{ text: String(user) }] : []), audioPart];
+  const cfg = { maxOutputTokens: maxTokens, temperature };
+  if (system) cfg.systemInstruction = system;
+
+  const TRANSIENT = /"code":\s*(429|500|503)|INTERNAL|UNAVAILABLE|RESOURCE_EXHAUSTED/;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const res = await ai.models.generateContent({
+        model: effModel,
+        contents: [{ role: 'user', parts }],
+        config: cfg,
+      });
+      const finish = res.candidates?.[0]?.finishReason;
+      if (!res.text && finish === 'MAX_TOKENS' && cfg.maxOutputTokens && attempt < 4) {
+        cfg.maxOutputTokens *= 3;
+        continue;
+      }
+      return { text: res.text ?? null };
+    } catch (err) {
+      if (TRANSIENT.test(err.message || '') && attempt < 4) {
+        await sleep(600 * (attempt + 1) ** 2);
+        continue;
+      }
+      console.warn(`[llm] audio request failed: ${err.message}`);
+      return { text: null, error: err.message };
+    }
+  }
+  return { text: null };
+}
+
 // ---------------------------------------------------------------------------
 // Agentic generation (Phase 13): a bounded perceive → act → observe loop that
 // lets one agent turn CALL TOOLS before speaking. Two transports, one behaviour:
