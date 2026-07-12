@@ -1,20 +1,22 @@
 import React from 'react';
 import { download } from '../api.js';
+import { useI18n } from '../i18n.jsx';
 
 // Report download controls. `path` is the export endpoint (e.g. `/meetings/ID`);
 // we request `.docx` by default and offer Markdown as a portable alternative.
 // `compact` renders the icon-only variant used inside list rows.
 export function ExportButtons({ path, compact = false }) {
+  const { t } = useI18n();
   const go = (format) => (e) => { e.stopPropagation(); download(`${path}/export?format=${format}`); };
   if (compact) {
     return (
-      <button className="icon-btn" onClick={go('docx')} title="下載 Word 報告（.docx）" aria-label="下載 Word 報告">⬇</button>
+      <button className="icon-btn" onClick={go('docx')} title={t('ui.downloadDocxTitle')} aria-label={t('ui.downloadDocxAria')}>⬇</button>
     );
   }
   return (
     <span className="export-buttons">
-      <button className="btn btn-sm" onClick={go('docx')} title="下載 Word 文件">⬇ 下載 Word（.docx）</button>
-      <button className="btn-ghost btn-sm" onClick={go('md')} title="下載 Markdown">Markdown</button>
+      <button className="btn btn-sm" onClick={go('docx')} title={t('ui.downloadWordTitle')}>{t('ui.downloadWordBtn')}</button>
+      <button className="btn-ghost btn-sm" onClick={go('md')} title={t('ui.downloadMdTitle')}>Markdown</button>
     </span>
   );
 }
@@ -150,12 +152,13 @@ function MarkdownImpl({ text = '' }) {
 export const Markdown = React.memo(MarkdownImpl);
 
 export function Modal({ title, children, onClose, wide }) {
+  const { t } = useI18n();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="關閉">✕</button>
+          <button className="icon-btn" onClick={onClose} aria-label={t('common.close')}>✕</button>
         </div>
         <div className="modal-body">{children}</div>
       </div>
@@ -172,10 +175,11 @@ export function Empty({ children }) {
 // ideate, memory consolidate…). An animated sliding bar plus an optional label
 // so the user always knows something is happening, not that it hung.
 export function ProgressBar({ label }) {
+  const { t } = useI18n();
   return (
     <div className="progress-wrap" role="status" aria-live="polite">
       {label && <div className="progress-label">⏳ {label}</div>}
-      <div className="progress-bar" aria-label={label || '處理中'} />
+      <div className="progress-bar" aria-label={label || t('common.processing')} />
     </div>
   );
 }
@@ -186,6 +190,7 @@ export function ProgressBar({ label }) {
 // only http(s) URLs become anchors (defense against javascript: etc.).
 // Knowledge sources (📎) stay as hover-titled spans (internal, not navigable).
 export function Citations({ items }) {
+  const { t } = useI18n();
   if (!items?.length) return null;
   return (
     <div className="citations">
@@ -197,7 +202,7 @@ export function Citations({ items }) {
             href={c.snippet}
             target="_blank"
             rel="noopener noreferrer"
-            title={`在新分頁開啟：${c.snippet}`}
+            title={t('ui.openInNewTab', { url: c.snippet })}
           >
             🌐 {c.documentTitle}
           </a>

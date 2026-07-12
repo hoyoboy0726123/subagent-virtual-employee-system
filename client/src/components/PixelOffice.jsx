@@ -13,6 +13,7 @@ import { renderFrame } from '../pixel-office/engine/renderer';
 import { startGameLoop } from '../pixel-office/engine/gameLoop';
 import { loadCharacterPNGs, loadWallPNG } from '../pixel-office/sprites/pngLoader';
 import { syncAgentsToOffice } from '../pixel-office/agentBridge';
+import { useI18n } from '../i18n.jsx';
 
 const TILE = 16;      // engine tile size
 const MAX_ZOOM = 3;   // don't upscale past this (keeps pixels crisp)
@@ -52,6 +53,7 @@ function buildActivities(participants, wanderers, active) {
 }
 
 export default function PixelOffice({ participants = [], wanderPool = [], active = null, height = 380 }) {
+  const { t } = useI18n();
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const officeRef = useRef(null);
@@ -160,7 +162,7 @@ export default function PixelOffice({ participants = [], wanderPool = [], active
   return (
     <div className="pixel-office" ref={wrapRef} style={{ minHeight: ready ? undefined : Math.min(height, MAX_HEIGHT) }}>
       <canvas ref={canvasRef} className="pixel-office-canvas" />
-      {!ready && <div className="pixel-office-loading">載入辦公室…</div>}
+      {!ready && <div className="pixel-office-loading">{t('pixel.loading')}</div>}
     </div>
   );
 }

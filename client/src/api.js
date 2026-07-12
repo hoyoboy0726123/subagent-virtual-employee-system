@@ -1,4 +1,5 @@
 // Thin API client. All calls go to the Express server (proxied in dev).
+import { tStatic } from './i18n.jsx';
 
 // Optional access token (server started with AUTH_TOKEN=…). Kept in
 // localStorage for fetch headers AND mirrored into a cookie so plain anchor
@@ -12,7 +13,7 @@ const setToken = (t) => {
 };
 const authHeaders = () => (getToken() ? { 'x-auth-token': getToken() } : {});
 const promptForToken = () => {
-  const t = window.prompt('這台伺服器需要存取權杖（AUTH_TOKEN）。請輸入：');
+  const t = window.prompt(tStatic('api.tokenPrompt'));
   if (t && t.trim()) { setToken(t.trim()); return true; }
   return false;
 };
@@ -27,7 +28,7 @@ const json = (method) => async (path, body, _retried) => {
   });
   if (res.status === 401 && !_retried && promptForToken()) return json(method)(path, body, true);
   const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-  if (!res.ok) throw new Error(data?.error || `請求失敗（${res.status}）`);
+  if (!res.ok) throw new Error(data?.error || tStatic('api.requestFailed', { status: res.status }));
   return data;
 };
 
@@ -38,7 +39,7 @@ const uploadFile = (path, file, field = 'file') => {
   body.append(field, file, file.name);
   return fetch(`/api${path}`, { method: 'POST', body, headers: authHeaders() }).then(async (res) => {
     const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-    if (!res.ok) throw new Error(data?.error || `上傳失敗（${res.status}）`);
+    if (!res.ok) throw new Error(data?.error || tStatic('api.uploadFailed', { status: res.status }));
     return data;
   });
 };
@@ -55,7 +56,7 @@ const stream = async (path, body, onEvent, _retried) => {
   if (res.status === 401 && !_retried && promptForToken()) return stream(path, body, onEvent, true);
   if (!res.ok || !res.body) {
     const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-    throw new Error(data?.error || `請求失敗（${res.status}）`);
+    throw new Error(data?.error || tStatic('api.requestFailed', { status: res.status }));
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -71,12 +72,12 @@ const stream = async (path, body, onEvent, _retried) => {
       const dataLine = frame.split('\n').find((l) => l.startsWith('data: '));
       if (!dataLine) continue;
       const evt = JSON.parse(dataLine.slice(6));
-      if (evt.type === 'error') throw new Error(evt.error || '執行失敗');
+      if (evt.type === 'error') throw new Error(evt.error || tStatic('api.runFailed'));
       onEvent?.(evt);
       if (evt.type === 'done') return evt;
     }
   }
-  throw new Error('串流意外中斷');
+  throw new Error(tStatic('api.streamBroken'));
 };
 
 export const api = {

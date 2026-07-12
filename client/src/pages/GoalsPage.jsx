@@ -1,14 +1,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, EmployeePicker, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
+import { useI18n } from '../i18n.jsx';
 
 // Goal-level status the MANAGER sets (dropdown). Task status is separate: a
 // task is 'pending'(待執行) until ▶ 執行交付 delivers it → 'done'.
 const STATUSES = ['in-progress', 'blocked', 'done'];
-const STATUS_LABELS = { pending: '待執行', 'in-progress': '進行中', blocked: '受阻', done: '已完成' };
 const DEFAULT_FILTERS = { q: '', assigneeId: '', runtime: '', live: '', status: '', sort: 'newest', page: 1, pageSize: 5 };
 
 export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeeting }) {
+  const { t } = useI18n();
+  const STATUS_LABELS = {
+    pending: t('goals.statusPending'), 'in-progress': t('goals.statusInProgress'),
+    blocked: t('goals.statusBlocked'), done: t('goals.statusDone'),
+  };
   const [employees, setEmployees] = useState([]);
   const [goalData, setGoalData] = useState({ items: [], total: 0, page: 1, totalPages: 1 });
   const [open, setOpen] = useState(null);
@@ -51,7 +56,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
   const assign = async () => {
     setErr('');
     if (!form.title.trim() || selected.length === 0) {
-      setErr('請輸入目標標題並至少選擇一位員工。');
+      setErr(t('goals.errNeedTitleAndOne'));
       return;
     }
     setBusy(true);
@@ -64,7 +69,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
           if (evt.type === 'task') {
             setProgress((p) => ({ ...p, doneTasks: [...(p?.doneTasks || []), evt.task] }));
           } else if (evt.type === 'synthesizing') {
-            setProgress((p) => ({ ...p, phase: '主管代理正在整合各負責人的計畫…' }));
+            setProgress((p) => ({ ...p, phase: t('goals.synthesizingPhase') }));
           }
         },
       );
@@ -116,7 +121,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
           if (evt.type === 'task') {
             setProgress((p) => ({ ...p, doneTasks: [...(p?.doneTasks || []), evt.task] }));
           } else if (evt.type === 'synthesizing') {
-            setProgress((p) => ({ ...p, phase: '主管代理正在整合各負責人的計畫…' }));
+            setProgress((p) => ({ ...p, phase: t('goals.synthesizingPhase') }));
           }
         },
       );
@@ -155,7 +160,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
         try {
           current = await api.post(`/goals/${current.id}/tasks/${order}/execute`);
           setOpen(current);
-        } catch (e) { failures += 1; setErr(`任務 #${order} 執行失敗：${e.message}（已略過，繼續其餘）`); }
+        } catch (e) { failures += 1; setErr(t('goals.execFailedErr', { order, msg: e.message })); }
       }
       onChange?.();
       if (!failures) setErr('');
@@ -168,69 +173,70 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
 
   return (
     <div className="page">
-      <div className="page-head"><div><h2>目標</h2><p className="muted">將目標指派給一位或多位員工。他們會依專長分工，並產出協作成果。</p></div></div>
+      <div className="page-head"><div><h2>{t('goals.pageTitle')}</h2><p className="muted">{t('goals.pageDesc')}</p></div></div>
 
       <div className="panel">
-        <h3>指派目標</h3>
+        <h3>{t('goals.assignTitle')}</h3>
         {err && <div className="banner-err">{err}</div>}
-        <label className="block">目標標題
-          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="例如：啟動私人測試版" />
+        <label className="block">{t('goals.titleLabel')}
+          <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder={t('goals.titlePlaceholder')} />
         </label>
-        <label className="block">說明（選填）
-          <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="背景、限制、期限…" />
+        <label className="block">{t('goals.descLabel')}
+          <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder={t('goals.descPlaceholder')} />
         </label>
-        <label className="block">負責人
+        <label className="block">{t('goals.assigneesLabel')}
           {employees.length === 0
-            ? <p className="muted">請先建立員工。</p>
+            ? <p className="muted">{t('goals.noEmployeesYet')}</p>
             : <EmployeePicker employees={employees} selected={selected} toggle={toggle} />}
         </label>
         <div className="row end">
-          <button className="btn" onClick={assign} disabled={busy}>{busy ? '指派中…' : '🎯 指派並協作'}</button>
+          <button className="btn" onClick={assign} disabled={busy}>{busy ? t('goals.assigningBtn') : t('goals.assignBtn')}</button>
         </div>
         {busy && (
           <ProgressBar label={progress?.phase
-            || `各負責人平行認領中 ${progress?.doneTasks.length || 0}/${progress?.total || '?'}${progress?.doneTasks.length ? `（最新完成：${progress.doneTasks[progress.doneTasks.length - 1].assignee}）` : ''}`} />
+            || t('goals.assignProgress', { done: progress?.doneTasks.length || 0, total: progress?.total || '?' })
+              + (progress?.doneTasks.length ? t('goals.latestDone', { name: progress.doneTasks[progress.doneTasks.length - 1].assignee }) : '')} />
         )}
       </div>
 
       <div className="section-head">
-        <h3 className="section-title">目標庫</h3>
-        <span className="muted">共 {goalData.total || 0} 筆</span>
+        <h3 className="section-title">{t('goals.goalLibraryHeading')}</h3>
+        <span className="muted">{t('goals.totalCount', { n: goalData.total || 0 })}</span>
       </div>
       <div className="toolbar panel">
         <div className="toolbar-grid toolbar-grid-goals">
-          <label>搜尋
-            <input value={filters.q} onChange={(e) => patchFilters({ q: e.target.value })} placeholder="標題、描述、負責人、輸出內容" />
+          <label>{t('goals.searchLabel')}
+            <input value={filters.q} onChange={(e) => patchFilters({ q: e.target.value })} placeholder={t('goals.searchPlaceholder')} />
           </label>
-          <label>負責人
+          <label>{t('goals.assigneeFilterLabel')}
             <select value={filters.assigneeId} onChange={(e) => patchFilters({ assigneeId: e.target.value })}>
-              <option value="">全部</option>
+              <option value="">{t('goals.allOption')}</option>
               {employees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
             </select>
           </label>
-          <label>狀態
+          <label>{t('goals.statusFilterLabel')}
             <select value={filters.status} onChange={(e) => patchFilters({ status: e.target.value })}>
-              <option value="">全部</option>
+              <option value="">{t('goals.allOption')}</option>
               {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
             </select>
           </label>
-          <label>是否即時
+          <label>{t('goals.liveFilterLabel')}
             <select value={filters.live} onChange={(e) => patchFilters({ live: e.target.value })}>
-              <option value="">全部</option>
-              <option value="true">即時模型</option>
-              <option value="false">離線 / 備援</option>
+              <option value="">{t('goals.allOption')}</option>
+              <option value="true">{t('goals.liveOption')}</option>
+              <option value="false">{t('goals.offlineOption')}</option>
             </select>
           </label>
-          <label>排序
+          <label>{t('goals.sortLabel')}
             <select value={filters.sort} onChange={(e) => patchFilters({ sort: e.target.value })}>
-              <option value="newest">最新優先</option>
-              <option value="oldest">最舊優先</option>
-              <option value="title-asc">標題 A→Z</option>
-              <option value="title-desc">標題 Z→A</option>
-              <option value="status">狀態優先</option>
+              <option value="newest">{t('goals.sortNewest')}</option>
+              <option value="oldest">{t('goals.sortOldest')}</option>
+              <option value="title-asc">{t('goals.sortTitleAsc')}</option>
+              <option value="title-desc">{t('goals.sortTitleDesc')}</option>
+              <option value="status">{t('goals.sortStatus')}</option>
             </select>
           </label>
-          <label>每頁
+          <label>{t('goals.perPageLabel')}
             <select value={filters.pageSize} onChange={(e) => patchFilters({ pageSize: Number(e.target.value) })}>
               {[5, 10, 20].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -239,7 +245,7 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
       </div>
 
       {goals.length === 0 ? (
-        <Empty>目前沒有符合條件的目標。</Empty>
+        <Empty>{t('goals.emptyGoals')}</Empty>
       ) : (
         <>
           <div className="list">
@@ -247,13 +253,13 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
               <div key={g.id} className="list-item">
                 <button className="list-main" onClick={() => openGoal(g)}>
                   <strong>{g.title}</strong>
-                  <span className="muted">{(g.assignees || []).map((p) => p.name).join('、')} · {g.taskCount ?? g.tasks?.length ?? 0} 項任務</span>
+                  <span className="muted">{(g.assignees || []).map((p) => p.name).join('、')}{t('goals.taskCountSuffix', { n: g.taskCount ?? g.tasks?.length ?? 0 })}</span>
                 </button>
                 <select value={g.status} onChange={(e) => setStatus(g, e.target.value)} className={`status status-${g.status}`}>
                   {STATUSES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}
                 </select>
                 <ExportButtons path={`/goals/${g.id}`} compact />
-                <button className="icon-btn" onClick={() => del(g.id)} aria-label="刪除目標">🗑</button>
+                <button className="icon-btn" onClick={() => del(g.id)} aria-label={t('goals.deleteGoalAria')}>🗑</button>
               </div>
             ))}
           </div>
@@ -267,28 +273,27 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
           {open.runtime?.mode && (
             <div className="view-meta">
               <span className={`runtime-badge ${open.runtime.fallback ? 'runtime-fallback' : ''}`} title={open.runtime.note || ''}>
-                ⚙ {open.runtime.label || open.runtime.mode}{open.runtime.fallback ? ' · 備援' : ''}
+                ⚙ {open.runtime.label || open.runtime.mode}{open.runtime.fallback ? t('meetings.runtimeFallbackSuffix') : ''}
               </span>
               {open.runtime.live && !open.runtime.fallback && (
                 <span className="runtime-badge" title={open.runtime.note || ''}>
-                  {open.runtime.engine === 'openclaw-cli'
-                    ? `🦞 真實子代理 ${open.runtime.liveTurns}/${open.runtime.totalTurns} 回合${open.runtime.model ? ` · ${open.runtime.model}` : ''}`
-                    : `🤖 內建多代理即時 ${open.runtime.liveTurns}/${open.runtime.totalTurns} 回合${open.runtime.model ? ` · ${open.runtime.model}` : ''}`}
+                  {t(open.runtime.engine === 'openclaw-cli' ? 'meetings.openClawLiveText' : 'meetings.builtinLiveText', { live: open.runtime.liveTurns, total: open.runtime.totalTurns })}
+                  {open.runtime.model ? t('meetings.modelSuffix', { model: open.runtime.model }) : ''}
                 </span>
               )}
-              {open.grounding?.length > 0 && <span className="runtime-badge">📚 {open.grounding.length} 筆知識依據</span>}
+              {open.grounding?.length > 0 && <span className="runtime-badge">{t('goals.groundingCountBadge', { n: open.grounding.length })}</span>}
             </div>
           )}
           {open.description && <p className="muted">{open.description}</p>}
 
           {/* Close the loop: goals born from a meeting can feed their delivered
               results back for a follow-up decision. */}
-          {(open.sourceMeetingId || /來源會議/.test(open.runtime?.note || '')) && open.tasks.some((t) => t.deliverable) && (
+          {(open.sourceMeetingId || /來源會議/.test(open.runtime?.note || '')) && open.tasks.some((tk) => tk.deliverable) && (
             <div className="loop-box">
               <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', margin: 0 }}>
-                <span className="muted sm">🔁 這個目標來自一場會議。交付完成後，可以把成果帶回會議收斂下一步。</span>
+                <span className="muted sm">{t('goals.loopHint')}</span>
                 <button className="btn sm" onClick={reviewInMeeting} disabled={reviewing}>
-                  {reviewing ? '帶回中…' : '🔄 帶成果回會議'}
+                  {reviewing ? t('goals.reviewingBtn') : t('goals.reviewBtn')}
                 </button>
               </div>
               {reviewMsg && <div className="loop-note">{reviewMsg}</div>}
@@ -298,83 +303,83 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
           <div className="upload-box">
             <div className="interject-row">
               <input
-                placeholder="修訂指示（選填）——例如「把時程壓到 6 週，聚焦行動端」"
+                placeholder={t('goals.rerunPlaceholder')}
                 value={rerunNote}
                 onChange={(e) => setRerunNote(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') rerunGoal(); }}
                 disabled={rerunning}
               />
               <button className="btn-ghost sm" onClick={rerunGoal} disabled={rerunning}>
-                {rerunning ? '重新執行中…' : '🔄 重新執行'}
+                {rerunning ? t('goals.rerunningBtn') : t('goals.rerunBtn')}
               </button>
             </div>
             {rerunning ? (
-              <ProgressBar label={progress?.phase || `各負責人重新認領中 ${progress?.doneTasks.length || 0}/${progress?.total || '?'}…`} />
+              <ProgressBar label={progress?.phase || t('goals.rerunProgress', { done: progress?.doneTasks.length || 0, total: progress?.total || '?' })} />
             ) : (
-              <p className="muted sm">團隊會在前一版計畫的基礎上重新協作；結果會取代目前的任務拆解與協作產出。</p>
+              <p className="muted sm">{t('goals.rerunHint')}</p>
             )}
             {err && <div className="banner-err sm">{err}</div>}
           </div>
 
           <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-            <h4 style={{ margin: 0 }}>任務拆解</h4>
-            {open.tasks.some((t) => t.status !== 'done' && !t.deliverable) && (
+            <h4 style={{ margin: 0 }}>{t('goals.taskBreakdownHeading')}</h4>
+            {open.tasks.some((tk) => tk.status !== 'done' && !tk.deliverable) && (
               <button className="btn sm" onClick={executeAll} disabled={executing !== null || executingAll}>
-                {executingAll ? `⏳ 依序執行中…（#${executing}）` : '▶ 依序執行全部交付'}
+                {executingAll ? t('goals.executingAllBtn', { n: executing }) : t('goals.executeAllBtn')}
               </button>
             )}
           </div>
-          {executingAll && <ProgressBar label={`正在依序執行交付（目前 #${executing}）——完成後自動接續下一位`} />}
+          {executingAll && <ProgressBar label={t('goals.executingAllProgress', { n: executing })} />}
           <div className="tasks">
-            {open.tasks.map((t, i) => (
+            {open.tasks.map((task, i) => (
               <div key={i} className="task">
-                <div className="task-badge">{t.order}</div>
+                <div className="task-badge">{task.order}</div>
                 <div>
-                  <div className="turn-who">{t.assignee} <span className="muted">· {t.role}</span></div>
-                  <div><strong>{t.subtask}</strong></div>
-                  <div className="muted">{t.approach}</div>
+                  <div className="turn-who">{task.assignee} <span className="muted">· {task.role}</span></div>
+                  <div><strong>{task.subtask}</strong></div>
+                  <div className="muted">{task.approach}</div>
 
-                  {t.deliverable ? (
+                  {task.deliverable ? (
                     <div className="task-deliverable">
                       <div className="turn-who">
-                        📦 交付物
-                        {t.deliverableToolCalls > 0 && <span className="tag" title="產出前自主查證的次數">🛠 {t.deliverableToolCalls} 次查證</span>}
-                        {t.deliveredAt && <span className="muted sm"> · {new Date(t.deliveredAt).toLocaleString('zh-Hant')}</span>}
+                        {t('goals.deliverableHeading')}
+                        {task.deliverableToolCalls > 0 && <span className="tag" title={t('goals.deliverableToolCallsTitle')}>{t('goals.deliverableToolCallsTag', { n: task.deliverableToolCalls })}</span>}
+                        {task.deliveredAt && <span className="muted sm"> · {new Date(task.deliveredAt).toLocaleString('zh-Hant')}</span>}
                       </div>
-                      <Markdown text={t.deliverable} />
-                      <Citations items={t.deliverableCitations} />
+                      <Markdown text={task.deliverable} />
+                      <Citations items={task.deliverableCitations} />
                       <div className="row end">
-                        <button className="btn-ghost sm" onClick={() => executeTask(t)} disabled={executing !== null}>
-                          {executing === t.order ? '⏳ 重新執行中…' : '🔁 重新執行交付'}
+                        <button className="btn-ghost sm" onClick={() => executeTask(task)} disabled={executing !== null}>
+                          {executing === task.order ? t('goals.reexecutingBtn') : t('goals.reexecuteBtn')}
                         </button>
                       </div>
                     </div>
                   ) : (
                     <div style={{ marginTop: 8 }}>
                       <div className="row">
-                        <button className="btn sm" onClick={() => executeTask(t)} disabled={executing !== null}>
-                          {executing === t.order ? '⏳ 執行中…' : '▶ 執行交付'}
+                        <button className="btn sm" onClick={() => executeTask(task)} disabled={executing !== null}>
+                          {executing === task.order ? t('goals.executingBtn') : t('goals.executeBtn')}
                         </button>
-                        {executing !== t.order && (
-                          <span className="muted sm">讓 {t.assignee} 真的完成這項任務——上網查證並交出成品</span>
+                        {executing !== task.order && (
+                          <span className="muted sm">{t('goals.executeHint', { name: task.assignee })}</span>
                         )}
                       </div>
-                      {executing === t.order && (
-                        <ProgressBar label={`${t.assignee} 正在查證並產出交付物，請稍候…`} />
+                      {executing === task.order && (
+                        <ProgressBar label={t('goals.executingProgress', { name: task.assignee })} />
                       )}
                     </div>
                   )}
                 </div>
-                <span className={`status status-${t.status}`}>{STATUS_LABELS[t.status] || t.status}</span>
+                <span className={`status status-${task.status}`}>{STATUS_LABELS[task.status] || task.status}</span>
               </div>
             ))}
           </div>
-          <h4>協作產出</h4>
+          <h4>{t('goals.outputHeading')}</h4>
           <div className="report"><Markdown text={open.output} /></div>
 
           {open.grounding?.length > 0 && (
             <>
-              <h4>📚 使用的知識</h4>
+              <h4>{t('goals.usedKnowledgeHeading')}</h4>
               <ul className="notes">
                 {open.grounding.map((g) => (
                   <li key={g.chunkId} className="note">
@@ -394,12 +399,13 @@ export default function GoalsPage({ refreshKey, onChange, onActivity, onGotoMeet
 }
 
 function Pagination({ page, totalPages, onPage }) {
+  const { t } = useI18n();
   if (!totalPages || totalPages <= 1) return null;
   return (
     <div className="pagination">
-      <button className="btn-ghost btn-sm" onClick={() => onPage(page - 1)} disabled={page <= 1}>← 上一頁</button>
-      <span className="muted">第 {page} / {totalPages} 頁</span>
-      <button className="btn-ghost btn-sm" onClick={() => onPage(page + 1)} disabled={page >= totalPages}>下一頁 →</button>
+      <button className="btn-ghost btn-sm" onClick={() => onPage(page - 1)} disabled={page <= 1}>{t('common.prevPage')}</button>
+      <span className="muted">{t('common.pageOf', { page, total: totalPages })}</span>
+      <button className="btn-ghost btn-sm" onClick={() => onPage(page + 1)} disabled={page >= totalPages}>{t('common.nextPage')}</button>
     </div>
   );
 }

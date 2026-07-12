@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 import { fileToImagePart, imagesFromPaste, imagesFromDrop } from '../lib/image.js';
+import { useI18n } from '../i18n.jsx';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
 // everything is canonicalized to Markdown by MarkItDown on ingestion.
@@ -15,6 +16,7 @@ const BLANK = {
 };
 
 export default function EmployeesPage({ refreshKey, onChange }) {
+  const { t } = useI18n();
   const [employees, setEmployees] = useState([]);
   const [selected, setSelected] = useState(null); // employee detail
   const [editing, setEditing] = useState(null); // form state or null
@@ -30,17 +32,17 @@ export default function EmployeesPage({ refreshKey, onChange }) {
     <div className="page">
       <div className="page-head">
         <div>
-          <h2>你的團隊</h2>
-          <p className="muted">共 {employees.length} 位員工。點擊卡片可開啟個人檔案與知識庫。</p>
+          <h2>{t('employees.title')}</h2>
+          <p className="muted">{t('employees.countLine', { n: employees.length })}</p>
         </div>
         <div className="actions">
-          <button className="btn-ghost" onClick={() => setIdeating(true)}>✨ 發想角色</button>
-          <button className="btn" onClick={openNew}>+ 新增員工</button>
+          <button className="btn-ghost" onClick={() => setIdeating(true)}>{t('employees.ideateBtn')}</button>
+          <button className="btn" onClick={openNew}>{t('employees.newBtn')}</button>
         </div>
       </div>
 
       {employees.length === 0 ? (
-        <Empty>尚無員工。請新增一位，或使用「發想角色」由一段描述草擬。</Empty>
+        <Empty>{t('employees.emptyList')}</Empty>
       ) : (
         <div className="grid">
           {employees.map((e) => (
@@ -49,7 +51,7 @@ export default function EmployeesPage({ refreshKey, onChange }) {
               <div className="card-main">
                 <h3>{e.name}</h3>
                 <p className="role">{e.roleTitle}</p>
-                <p className="muted clamp">{e.personality || '尚未設定個性。'}</p>
+                <p className="muted clamp">{e.personality || t('employees.noPersonality')}</p>
                 <div className="tags">
                   {(Array.isArray(e.expertise) ? e.expertise : String(e.expertise).split(','))
                     .filter(Boolean).slice(0, 3)
@@ -99,6 +101,7 @@ const toForm = (e) => ({
 });
 
 function EmployeeForm({ initial, onClose, onSaved }) {
+  const { t } = useI18n();
   const [form, setForm] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -125,7 +128,7 @@ function EmployeeForm({ initial, onClose, onSaved }) {
 
   const save = async () => {
     setErr('');
-    if (!form.name || !form.roleTitle) { setErr('姓名與職稱為必填。'); return; }
+    if (!form.name || !form.roleTitle) { setErr(t('employees.nameRequired')); return; }
     setBusy(true);
     try {
       if (form.id) await api.put(`/employees/${form.id}`, payload());
@@ -135,41 +138,41 @@ function EmployeeForm({ initial, onClose, onSaved }) {
   };
 
   return (
-    <Modal title={form.id ? '編輯員工' : '新增員工'} onClose={onClose} wide>
+    <Modal title={form.id ? t('employees.editTitle') : t('employees.newTitle')} onClose={onClose} wide>
       {err && <div className="banner-err">{err}</div>}
       <div className="form-grid">
-        <label>姓名*<input value={form.name} onChange={set('name')} placeholder="王小明" /></label>
-        <label>職稱*<input value={form.roleTitle} onChange={set('roleTitle')} placeholder="產品經理" /></label>
-        <label>個性／背景<input value={form.personality} onChange={set('personality')} placeholder="果斷且重視成效" /></label>
-        <label>溝通風格<input value={form.communicationStyle} onChange={set('communicationStyle')} placeholder="簡潔且具敘事性" /></label>
-        <label className="col-2">專長（以逗號分隔）<input value={form.expertise} onChange={set('expertise')} placeholder="產品策略, 路線圖規劃, 使用者研究" /></label>
-        <label className="col-2">目標<input value={form.objectives} onChange={set('objectives')} placeholder="交付讓顧客喜愛的產品。" /></label>
+        <label>{t('employees.nameLabel')}<input value={form.name} onChange={set('name')} placeholder={t('employees.namePlaceholder')} /></label>
+        <label>{t('employees.roleLabel')}<input value={form.roleTitle} onChange={set('roleTitle')} placeholder={t('employees.rolePlaceholder')} /></label>
+        <label>{t('employees.personalityLabel')}<input value={form.personality} onChange={set('personality')} placeholder={t('employees.personalityPlaceholder')} /></label>
+        <label>{t('employees.commStyleLabel')}<input value={form.communicationStyle} onChange={set('communicationStyle')} placeholder={t('employees.commStylePlaceholder')} /></label>
+        <label className="col-2">{t('employees.expertiseLabel')}<input value={form.expertise} onChange={set('expertise')} placeholder={t('employees.expertisePlaceholder')} /></label>
+        <label className="col-2">{t('employees.objectivesLabel')}<input value={form.objectives} onChange={set('objectives')} placeholder={t('employees.objectivesPlaceholder')} /></label>
       </div>
 
       <details className="agent-config">
-        <summary>⚙️ 代理設定（進階，留空即用系統預設）</summary>
+        <summary>{t('employees.agentConfigSummary')}</summary>
         <div className="form-grid">
-          <label>模型
+          <label>{t('employees.modelLabel')}
             <input
               value={form.agentModel}
               onChange={set('agentModel')}
-              placeholder="預設（gemma-4-31b-it）"
+              placeholder={t('employees.modelPlaceholder')}
             />
           </label>
-          <label>溫度（0–2）
+          <label>{t('employees.temperatureLabel')}
             <input
               type="number" min="0" max="2" step="0.05"
               value={form.agentTemperature}
               onChange={set('agentTemperature')}
-              placeholder="自動（依員工微調）"
+              placeholder={t('employees.temperaturePlaceholder')}
             />
           </label>
-          <label>每回合工具上限（1–10）
+          <label>{t('employees.maxToolCallsLabel')}
             <input
               type="number" min="1" max="10" step="1"
               value={form.agentMaxToolCalls}
               onChange={set('agentMaxToolCalls')}
-              placeholder="預設 3"
+              placeholder={t('employees.maxToolCallsPlaceholder')}
             />
           </label>
           <label className="agent-config-check">
@@ -178,32 +181,33 @@ function EmployeeForm({ initial, onClose, onSaved }) {
               checked={form.agentWebSearch !== false}
               onChange={(ev) => setForm({ ...form, agentWebSearch: ev.target.checked })}
             />
-            允許此員工使用網路搜尋（仍受全域開關控制）
+            {t('employees.webSearchCheck')}
           </label>
         </div>
       </details>
 
       <div className="profile-head">
-        <label className="profile-label">自動產生的背景／個人檔案</label>
-        <button className="btn-ghost sm" onClick={genProfile} disabled={busy}>↻ 由欄位產生</button>
+        <label className="profile-label">{t('employees.profileLabel')}</label>
+        <button className="btn-ghost sm" onClick={genProfile} disabled={busy}>{t('employees.genProfileBtn')}</button>
       </div>
       <textarea
         className="profile-area"
         rows={8}
         value={form.profile}
         onChange={set('profile')}
-        placeholder="點擊「由欄位產生」，之後可自由編輯。"
+        placeholder={t('employees.profilePlaceholder')}
       />
 
       <div className="modal-actions">
-        <button className="btn-ghost" onClick={onClose}>取消</button>
-        <button className="btn" onClick={save} disabled={busy}>{busy ? '儲存中…' : '儲存員工'}</button>
+        <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="btn" onClick={save} disabled={busy}>{busy ? t('employees.savingBtn') : t('employees.saveEmployeeBtn')}</button>
       </div>
     </Modal>
   );
 }
 
 function IdeateModal({ onClose, onDraft }) {
+  const { t } = useI18n();
   const [desc, setDesc] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -225,24 +229,25 @@ function IdeateModal({ onClose, onDraft }) {
   };
 
   return (
-    <Modal title="✨ 發想角色" onClose={onClose}>
-      <p className="muted">描述你需要的員工類型，我們會草擬一份完整檔案，儲存前可自由編輯。</p>
+    <Modal title={t('employees.ideateModalTitle')} onClose={onClose}>
+      <p className="muted">{t('employees.ideateDesc')}</p>
       <textarea
         rows={4}
         value={desc}
         onChange={(e) => setDesc(e.target.value)}
-        placeholder="例如：負責我們後端 API 與資料庫可靠性的人選"
+        placeholder={t('employees.ideatePlaceholder')}
       />
-      {busy && <ProgressBar label="正在草擬角色檔案…" />}
+      {busy && <ProgressBar label={t('employees.ideateProgress')} />}
       <div className="modal-actions">
-        <button className="btn-ghost" onClick={onClose}>取消</button>
-        <button className="btn" onClick={draft} disabled={busy || !desc.trim()}>{busy ? '草擬中…' : '草擬檔案 →'}</button>
+        <button className="btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
+        <button className="btn" onClick={draft} disabled={busy || !desc.trim()}>{busy ? t('employees.draftingBtn') : t('employees.draftBtn')}</button>
       </div>
     </Modal>
   );
 }
 
 function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
+  const { t } = useI18n();
   const [note, setNote] = useState({ title: '', content: '' });
   const [busy, setBusy] = useState(false);
   const [upload, setUpload] = useState({ busy: false, err: '', ok: '' });
@@ -275,8 +280,8 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
     setUpload({ busy: true, err: '', ok: '' });
     try {
       const doc = await api.upload(`/employees/${employee.id}/knowledge/upload`, file);
-      const via = doc.metadata?.parser === 'markitdown' ? 'MarkItDown' : '內建擷取';
-      setUpload({ busy: false, err: '', ok: `已匯入「${doc.title}」（${via}，${doc.chunkCount} 個片段）` });
+      const via = doc.metadata?.parser === 'markitdown' ? 'MarkItDown' : t('employees.viaBuiltIn');
+      setUpload({ busy: false, err: '', ok: t('employees.uploadedOk', { title: doc.title, via, count: doc.chunkCount }) });
       onChange();
     } catch (e) {
       setUpload({ busy: false, err: e.message, ok: '' });
@@ -292,13 +297,13 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
     try {
       const res = await api.post(`/employees/${employee.id}/memory/consolidate`);
       if (res.skipped) {
-        const why = res.skipped === 'disabled' ? '整併功能已停用'
-          : res.skipped === 'nothing-to-merge' ? '目前沒有可整併的記憶'
-          : '記憶量尚未達整併門檻';
+        const why = res.skipped === 'disabled' ? t('employees.consolidateDisabled')
+          : res.skipped === 'nothing-to-merge' ? t('employees.consolidateNothing')
+          : t('employees.consolidateBelowThreshold');
         setConsolidating({ busy: false, msg: why, err: '' });
       } else {
-        const via = res.method === 'live' ? 'AI 整併' : '離線去重';
-        setConsolidating({ busy: false, msg: `已把 ${res.mergedCount} 則記憶整併為 1 則（${via}）`, err: '' });
+        const via = res.method === 'live' ? t('employees.viaAi') : t('employees.viaOfflineDedup');
+        setConsolidating({ busy: false, msg: t('employees.consolidatedOk', { count: res.mergedCount, via }), err: '' });
         onChange();
       }
     } catch (e) {
@@ -307,7 +312,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   };
 
   const remove = async () => {
-    if (!confirm(`確定要刪除 ${employee.name}？此操作會一併移除其知識庫。`)) return;
+    if (!confirm(t('employees.deleteConfirm', { name: employee.name }))) return;
     await api.del(`/employees/${employee.id}`);
     onDeleted();
   };
@@ -320,16 +325,16 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
             {employee.personality && <span className="tag">🧠 {employee.personality}</span>}
             {employee.communicationStyle && <span className="tag">💬 {employee.communicationStyle}</span>}
           </div>
-          {employee.objectives && <p><strong>目標：</strong> {employee.objectives}</p>}
+          {employee.objectives && <p><strong>{t('employees.objectivesPrefix')}</strong> {employee.objectives}</p>}
           <div className="tags">
-            {(employee.expertise || []).map((t) => <span key={t} className="tag tag-blue">{t}</span>)}
+            {(employee.expertise || []).map((ex) => <span key={ex} className="tag tag-blue">{ex}</span>)}
           </div>
-          <h4>背景</h4>
+          <h4>{t('employees.backgroundHeading')}</h4>
           <div className="profile-box"><Markdown text={employee.profile} /></div>
         </section>
 
         <section>
-          <h4>📚 個人知識庫 <span className="count">{employee.knowledge?.length || 0}</span></h4>
+          <h4>{t('employees.knowledgeHeading')} <span className="count">{employee.knowledge?.length || 0}</span></h4>
 
           <div className="upload-box">
             <div className="upload-row">
@@ -338,9 +343,9 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                 onClick={() => fileRef.current?.click()}
                 disabled={upload.busy}
               >
-                {upload.busy ? '解析中…' : '⬆ 上傳文件'}
+                {upload.busy ? t('employees.uploadingBtn') : t('employees.uploadBtn')}
               </button>
-              <span className="muted upload-hint">支援 PDF、DOCX、PPTX、XLSX、CSV、TXT、Markdown、HTML；一律經 MarkItDown 轉為 Markdown 後匯入。</span>
+              <span className="muted upload-hint">{t('employees.uploadHint')}</span>
               <input
                 ref={fileRef}
                 type="file"
@@ -357,13 +362,13 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
             <div className="upload-box">
               <div className="upload-row">
                 <button className="btn-ghost sm" onClick={consolidate} disabled={consolidating.busy}>
-                  {consolidating.busy ? '整併中…' : `🧠 整併記憶（${memoryCount} 則）`}
+                  {consolidating.busy ? t('employees.consolidatingBtn') : t('employees.consolidateBtn', { count: memoryCount })}
                 </button>
                 <span className="muted upload-hint">
-                  把累積的會議／自主記憶合併成一則精簡、去重、以較新為準的記憶；原始記憶會封存（移出檢索但可還原）。
+                  {t('employees.consolidateHint')}
                 </span>
               </div>
-              {consolidating.busy && <ProgressBar label="正在整併記憶，請稍候…" />}
+              {consolidating.busy && <ProgressBar label={t('employees.consolidateProgress')} />}
               {consolidating.err && <div className="banner-err sm">{consolidating.err}</div>}
               {consolidating.msg && <div className="banner-ok sm">{consolidating.msg}</div>}
             </div>
@@ -371,17 +376,17 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
 
           <div className="note-form">
             <input
-              placeholder="筆記標題"
+              placeholder={t('employees.noteTitlePlaceholder')}
               value={note.title}
               onChange={(e) => setNote({ ...note, title: e.target.value })}
             />
             <textarea
               rows={2}
-              placeholder="或手動新增一則此員工應知道的事實、文件摘錄或背景…"
+              placeholder={t('employees.noteContentPlaceholder')}
               value={note.content}
               onChange={(e) => setNote({ ...note, content: e.target.value })}
             />
-            <button className="btn sm" onClick={addNote} disabled={busy || !note.content.trim()}>+ 新增筆記</button>
+            <button className="btn sm" onClick={addNote} disabled={busy || !note.content.trim()}>{t('employees.addNoteBtn')}</button>
           </div>
           <ul className="notes">
             {(employee.knowledge || []).map((k) => (
@@ -390,52 +395,52 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
                   className="note-open"
                   role="button"
                   tabIndex={0}
-                  title="點擊查看完整內容與檢索片段"
+                  title={t('employees.noteOpenTitle')}
                   onClick={() => openDoc(k.id)}
                   onKeyDown={(e) => { if (e.key === 'Enter') openDoc(k.id); }}
                 >
                   <strong>{k.title}</strong>
                   {k.source === 'file' && (
                     <span className="tag tag-blue" title={k.metadata?.originalFilename || ''}>
-                      📄 {TYPE_LABELS[k.metadata?.sourceType] || '檔案'}
+                      📄 {TYPE_LABELS[k.metadata?.sourceType] || t('employees.fileTag')}
                     </span>
                   )}
                   {k.source === 'memory' && (
                     k.metadata?.consolidated ? (
-                      <span className="tag tag-blue" title={`由 ${k.metadata.mergedCount || '多'} 則記憶整併而成`}>
-                        🧠 整併記憶
+                      <span className="tag tag-blue" title={t('employees.consolidatedFromTitle', { count: k.metadata.mergedCount || t('employees.manyFallback') })}>
+                        {t('employees.consolidatedTag')}
                       </span>
                     ) : (
-                      <span className="tag" title={k.metadata?.topic ? `來自會議：${k.metadata.topic}` : '代理自主記憶'}>
-                        🧠 記憶
+                      <span className="tag" title={k.metadata?.topic ? t('employees.fromMeetingTitle', { topic: k.metadata.topic }) : t('employees.agentMemoryTitle')}>
+                        {t('employees.memoryTag')}
                       </span>
                     )
                   )}
                   {k.source === 'research' && (
-                    <span className="tag tag-blue" title="經你核准的自主研究報告">🔍 研究</span>
+                    <span className="tag tag-blue" title={t('employees.researchApprovedTitle')}>{t('employees.researchTag')}</span>
                   )}
                   {k.source === 'dialogue' && (
-                    <span className="tag" title="1 on 1 面談紀錄">💬 1on1</span>
+                    <span className="tag" title={t('employees.oneOnOneTitle')}>{t('employees.oneOnOneTag')}</span>
                   )}
                   {k.metadata?.parseStatus === 'fallback' && (
-                    <span className="tag" title={k.metadata?.parseError || ''}>內建擷取</span>
+                    <span className="tag" title={k.metadata?.parseError || ''}>{t('employees.builtInExtractTag')}</span>
                   )}
                   {typeof k.chunkCount === 'number' && (
-                    <span className="count" title="可檢索片段">{k.chunkCount} 個片段</span>
+                    <span className="count" title={t('employees.chunksTitle')}>{t('employees.chunksCount', { count: k.chunkCount })}</span>
                   )}
                   {k.source === 'file' && k.metadata?.originalFilename && (
-                    <p className="muted upload-file">來源：{k.metadata.originalFilename}</p>
+                    <p className="muted upload-file">{t('employees.sourcePrefix')}{k.metadata.originalFilename}</p>
                   )}
                   <p className="muted clamp">{k.content}</p>
                   {(k.tags || []).length > 0 && (
-                    <div className="tags">{k.tags.map((t) => <span key={t} className="tag">{TYPE_LABELS[t] || t}</span>)}</div>
+                    <div className="tags">{k.tags.map((tg) => <span key={tg} className="tag">{TYPE_LABELS[tg] || tg}</span>)}</div>
                   )}
                 </div>
-                <button className="icon-btn" onClick={() => delNote(k.id)} aria-label="刪除文件">🗑</button>
+                <button className="icon-btn" onClick={() => delNote(k.id)} aria-label={t('employees.deleteDocAria')}>🗑</button>
               </li>
             ))}
             {(!employee.knowledge || employee.knowledge.length === 0) && (
-              <li className="muted">尚無文件。上傳檔案或手動新增筆記皆可。</li>
+              <li className="muted">{t('employees.noDocs')}</li>
             )}
           </ul>
 
@@ -452,10 +457,10 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
       )}
 
       <div className="modal-actions between">
-        <button className="btn-danger" onClick={remove}>刪除員工</button>
+        <button className="btn-danger" onClick={remove}>{t('employees.deleteEmployeeBtn')}</button>
         <div className="actions">
-          <button className="btn-ghost" onClick={() => setOneOnOne(true)}>💬 1 on 1 面談</button>
-          <button className="btn" onClick={onEdit}>編輯檔案</button>
+          <button className="btn-ghost" onClick={() => setOneOnOne(true)}>{t('employees.oneOnOneBtn')}</button>
+          <button className="btn" onClick={onEdit}>{t('employees.editProfileBtn')}</button>
         </div>
       </div>
 
@@ -474,6 +479,7 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
 // until the MANAGER ends it, and only then do they choose whether the record
 // is distilled into this employee's knowledge base.
 function OneOnOneModal({ employee, onClose, onSaved }) {
+  const { t } = useI18n();
   const [dialogue, setDialogue] = useState(null);
   const [history, setHistory] = useState(null); // null = loading; [] = none
   const [draft, setDraft] = useState('');
@@ -557,31 +563,31 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
   return (
     // While a close action runs, the modal must not be dismissable — the manager
     // would lose the progress feedback and assume the save silently died.
-    <Modal title={`💬 與 ${employee.name} 的 1 on 1`} onClose={() => { if (!ending) onClose(); }} wide>
+    <Modal title={t('employees.oneOnOneModalTitle', { name: employee.name })} onClose={() => { if (!ending) onClose(); }} wide>
       <p className="muted sm">
-        沒有輪數限制——談到你滿意為止。要他查資料就直接說（例如「幫我查一下…的最新現況」）。
+        {t('employees.oneOnOneDesc')}
       </p>
       {err && <div className="banner-err sm">{err}</div>}
 
       {!dialogue && (
         <div className="chat-box">
-          {history === null && !err && <p className="muted">載入面談紀錄中…</p>}
+          {history === null && !err && <p className="muted">{t('employees.loadingHistory')}</p>}
           {history?.length > 0 && (
             <>
-              <p className="muted sm">📜 過往面談——點「▶ 繼續」就接回同一場對話，不用重新開始：</p>
+              <p className="muted sm">{t('employees.pastDialoguesHint')}</p>
               <ul className="notes">
                 {history.map((d) => {
-                  const first = d.transcript.find((t) => t.who === 'manager')?.text || '（沒有內容）';
+                  const first = d.transcript.find((tn) => tn.who === 'manager')?.text || t('employees.noContentFallback');
                   return (
                     <li key={d.id} className="note">
                       <div className="note-open">
                         <strong>{first.slice(0, 36)}{first.length > 36 ? '…' : ''}</strong>
-                        {d.savedDocId && <span className="tag" title="結束時已整理存入知識庫；續談後再儲存會更新同一份紀錄">💾 已入庫</span>}
-                        <span className="muted sm"> {new Date(d.createdAt).toLocaleDateString('zh-Hant')} · {d.transcript.length} 則訊息</span>
+                        {d.savedDocId && <span className="tag" title={t('employees.savedToKbTitle')}>{t('employees.savedToKbTag')}</span>}
+                        <span className="muted sm"> {new Date(d.createdAt).toLocaleDateString('zh-Hant')} · {t('employees.messagesCount', { count: d.transcript.length })}</span>
                       </div>
                       <span className="actions">
                         <ExportButtons path={`/dialogues/${d.id}`} compact />
-                        <button className="btn-ghost sm" onClick={() => continueOld(d.id)}>▶ 繼續</button>
+                        <button className="btn-ghost sm" onClick={() => continueOld(d.id)}>{t('employees.continueBtn')}</button>
                       </span>
                     </li>
                   );
@@ -591,7 +597,7 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
           )}
           {history !== null && (
             <div className="row end">
-              <button className="btn sm" onClick={startNew}>🆕 開始新的面談</button>
+              <button className="btn sm" onClick={startNew}>{t('employees.startNewBtn')}</button>
             </div>
           )}
         </div>
@@ -600,34 +606,34 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
       {dialogue && (
       <div className="chat-box">
         {dialogue.transcript.length === 0 && (
-          <p className="muted">（面談開始——說點什麼吧。）</p>
+          <p className="muted">{t('employees.dialogueStartHint')}</p>
         )}
-        {(dialogue?.transcript || []).map((t, i) => (
-          t.who === 'manager' ? (
+        {(dialogue?.transcript || []).map((tn, i) => (
+          tn.who === 'manager' ? (
             <div key={i} className="chat-row chat-manager">
               <div className="chat-bubble chat-bubble-manager">
-                {(t.images || []).length > 0 && (
+                {(tn.images || []).length > 0 && (
                   <div className="chat-images">
-                    {t.images.map((im, j) => (
-                      <img key={j} src={im.dataUrl || `data:${im.mimeType};base64,${im.data}`} alt="附圖" />
+                    {tn.images.map((im, j) => (
+                      <img key={j} src={im.dataUrl || `data:${im.mimeType};base64,${im.data}`} alt={t('employees.imageAlt')} />
                     ))}
                   </div>
                 )}
-                {t.text}
+                {tn.text}
               </div>
             </div>
           ) : (
             <div key={i} className="chat-row">
               <div className="turn-av">{employee.name.split(' ').map((s) => s[0]).slice(0, 2).join('')}</div>
               <div className="chat-bubble">
-                {t.toolCalls > 0 && <div className="muted sm">🛠 查證了 {t.toolCalls} 次</div>}
-                <Markdown text={t.text} />
-                <Citations items={t.citations} />
+                {tn.toolCalls > 0 && <div className="muted sm">{t('employees.toolCallsUsed', { count: tn.toolCalls })}</div>}
+                <Markdown text={tn.text} />
+                <Citations items={tn.citations} />
               </div>
             </div>
           )
         ))}
-        {busy && <ProgressBar label={`${employee.name} 思考中（需要查資料時會久一點）…`} />}
+        {busy && <ProgressBar label={t('employees.thinkingProgress', { name: employee.name })} />}
         <div ref={endRef} />
       </div>
       )}
@@ -638,41 +644,41 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
             <div className="pending-images">
               {pendingImages.map((im, j) => (
                 <div key={j} className="pending-image">
-                  <img src={im.dataUrl} alt="待送出" />
-                  <button className="pending-image-x" onClick={() => setPendingImages((cur) => cur.filter((_, k) => k !== j))} title="移除">✕</button>
+                  <img src={im.dataUrl} alt={t('employees.pendingImageAlt')} />
+                  <button className="pending-image-x" onClick={() => setPendingImages((cur) => cur.filter((_, k) => k !== j))} title={t('employees.removeImageTitle')}>✕</button>
                 </div>
               ))}
             </div>
           )}
           <div className="interject-row">
             <input
-              placeholder={`對 ${employee.name} 說…（可貼上/拖入圖片，Enter 送出）`}
+              placeholder={t('employees.chatInputPlaceholder', { name: employee.name })}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               disabled={busy || !dialogue}
             />
-            <button className="btn sm" onClick={send} disabled={busy || (!draft.trim() && !pendingImages.length) || !dialogue}>送出</button>
+            <button className="btn sm" onClick={send} disabled={busy || (!draft.trim() && !pendingImages.length) || !dialogue}>{t('employees.sendBtn')}</button>
           </div>
           <div className="row end">
             <ExportButtons path={`/dialogues/${dialogue.id}`} compact />
             <button className="btn-ghost sm" onClick={() => setClosing(true)} disabled={busy || !dialogue}>
-              ⏹ 結束面談…
+              {t('employees.endDialogueBtn')}
             </button>
           </div>
         </div>
       ) : (
         <div className="chat-controls">
-          <p className="muted">要把這場面談的紀錄整理後存進 {employee.name} 的知識庫嗎？（存下來，他之後開會就記得這些結論。）</p>
-          {ending === 'save' && <ProgressBar label="正在把面談整理成知識文件並建立索引（AI 整理約需 10–30 秒）…" />}
-          {ending === 'discard' && <ProgressBar label="正在結束面談…" />}
+          <p className="muted">{t('employees.closeConfirm', { name: employee.name })}</p>
+          {ending === 'save' && <ProgressBar label={t('employees.savingDistillProgress')} />}
+          {ending === 'discard' && <ProgressBar label={t('employees.endingProgress')} />}
           <div className="row end">
-            <button className="btn-ghost sm" onClick={() => setClosing(false)} disabled={Boolean(ending)}>取消</button>
+            <button className="btn-ghost sm" onClick={() => setClosing(false)} disabled={Boolean(ending)}>{t('common.cancel')}</button>
             <button className="btn-ghost sm" onClick={() => end(false)} disabled={Boolean(ending)}>
-              {ending === 'discard' ? '結束中…' : '不儲存，直接結束'}
+              {ending === 'discard' ? t('employees.endingBtn') : t('employees.discardEndBtn')}
             </button>
             <button className="btn sm" onClick={() => end(true)} disabled={Boolean(ending)}>
-              {ending === 'save' ? '⏳ 整理紀錄中…' : '💾 儲存到知識庫並結束'}
+              {ending === 'save' ? t('employees.savingEndBtn') : t('employees.saveAndEndBtn')}
             </button>
           </div>
         </div>
@@ -684,11 +690,15 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
 // Knowledge viewer: the FULL document plus its retrievable chunks — the exact
 // slices the FTS index serves to agents during grounding and search_knowledge.
 function DocViewer({ doc, onClose, onSaved }) {
+  const { t } = useI18n();
   const [view, setView] = useState('content');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ title: doc.title, content: doc.content });
   const [save, setSave] = useState({ busy: false, err: '' });
-  const SOURCE_LABELS = { note: '手動筆記', file: '上傳文件', memory: '會議／自主記憶', research: '核准的研究報告', dialogue: '1 on 1 面談紀錄' };
+  const SOURCE_LABELS = {
+    note: t('employees.sourceNote'), file: t('employees.sourceFile'), memory: t('employees.sourceMemory'),
+    research: t('employees.sourceResearch'), dialogue: t('employees.sourceDialogue'),
+  };
 
   const startEdit = () => {
     setDraft({ title: doc.title, content: doc.content });
@@ -698,7 +708,7 @@ function DocViewer({ doc, onClose, onSaved }) {
   };
 
   const commit = async () => {
-    if (!draft.content.trim()) { setSave({ busy: false, err: '內容不可為空' }); return; }
+    if (!draft.content.trim()) { setSave({ busy: false, err: t('employees.contentEmptyErr') }); return; }
     setSave({ busy: true, err: '' });
     try {
       const updated = await api.put(`/knowledge/${doc.id}`, {
@@ -708,25 +718,25 @@ function DocViewer({ doc, onClose, onSaved }) {
       setEditing(false);
       onSaved?.(updated); // refreshes the modal's doc + the card's chunk count
     } catch (e) {
-      setSave({ busy: false, err: e.message || '儲存失敗' });
+      setSave({ busy: false, err: e.message || t('employees.saveFailedErr') });
     }
   };
 
   return (
-    <Modal title={editing ? `✏️ 編輯：${doc.title}` : `📄 ${doc.title}`} onClose={onClose} wide>
+    <Modal title={editing ? t('employees.editDocTitle', { title: doc.title }) : `📄 ${doc.title}`} onClose={onClose} wide>
       <div className="detail-meta">
         <span className="tag">{SOURCE_LABELS[doc.source] || doc.source}</span>
-        {(doc.tags || []).map((t) => <span key={t} className="tag">{TYPE_LABELS[t] || t}</span>)}
-        <span className="muted sm">建立於 {new Date(doc.createdAt).toLocaleString('zh-Hant')}</span>
+        {(doc.tags || []).map((tg) => <span key={tg} className="tag">{TYPE_LABELS[tg] || tg}</span>)}
+        <span className="muted sm">{t('employees.createdAtPrefix')}{new Date(doc.createdAt).toLocaleString('zh-Hant')}</span>
         {!editing && (
-          <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>✏️ 編輯</button>
+          <button className="btn btn-sm" style={{ marginLeft: 'auto' }} onClick={startEdit}>{t('employees.editBtn')}</button>
         )}
       </div>
 
       {editing ? (
         <div className="doc-viewer-body">
           <label className="field">
-            <span className="field-label">標題</span>
+            <span className="field-label">{t('employees.titleFieldLabel')}</span>
             <input
               className="input"
               value={draft.title}
@@ -734,7 +744,7 @@ function DocViewer({ doc, onClose, onSaved }) {
             />
           </label>
           <label className="field">
-            <span className="field-label">內容（支援 Markdown）</span>
+            <span className="field-label">{t('employees.contentFieldLabel')}</span>
             <textarea
               className="input"
               style={{ minHeight: '46vh', fontFamily: 'var(--mono, monospace)', lineHeight: 1.6 }}
@@ -742,21 +752,21 @@ function DocViewer({ doc, onClose, onSaved }) {
               onChange={(e) => setDraft((d) => ({ ...d, content: e.target.value }))}
             />
           </label>
-          <p className="muted sm">儲存後會依新內容重新切割檢索片段，員工立即依更新後的知識發言。</p>
+          <p className="muted sm">{t('employees.resplitHint')}</p>
           {save.err && <p className="err sm">{save.err}</p>}
           <div className="row" style={{ gap: 8, justifyContent: 'flex-end' }}>
-            <button className="btn" onClick={() => setEditing(false)} disabled={save.busy}>取消</button>
+            <button className="btn" onClick={() => setEditing(false)} disabled={save.busy}>{t('common.cancel')}</button>
             <button className="btn btn-primary" onClick={commit} disabled={save.busy}>
-              {save.busy ? '儲存中…' : '💾 儲存'}
+              {save.busy ? t('employees.savingBtn') : `💾 ${t('common.save')}`}
             </button>
           </div>
         </div>
       ) : (
         <>
           <div className="subtabs">
-            <button className={view === 'content' ? 'subtab on' : 'subtab'} onClick={() => setView('content')}>完整內容</button>
+            <button className={view === 'content' ? 'subtab on' : 'subtab'} onClick={() => setView('content')}>{t('employees.fullContentTab')}</button>
             <button className={view === 'chunks' ? 'subtab on' : 'subtab'} onClick={() => setView('chunks')}>
-              檢索片段（{doc.chunks?.length || 0}）
+              {t('employees.chunksTab', { count: doc.chunks?.length || 0 })}
             </button>
           </div>
 
@@ -767,15 +777,13 @@ function DocViewer({ doc, onClose, onSaved }) {
           {view === 'chunks' && (
             <div className="doc-viewer-body">
               <p className="muted sm">
-                這些是文件切割後的檢索片段——員工代理在會議、目標與自主研究中，
-                透過知識檢索實際「讀到」的就是這些原文。要修改請按上方「✏️ 編輯」改內容，
-                片段會自動重新切割。
+                {t('employees.chunksDesc')}
               </p>
               <ul className="notes">
                 {(doc.chunks || []).map((c) => (
                   <li key={c.id} className="note">
                     <div>
-                      <strong className="muted">片段 #{c.chunkIndex + 1}</strong>
+                      <strong className="muted">{t('employees.chunkLabel', { n: c.chunkIndex + 1 })}</strong>
                       <p className="chunk-text">{c.content}</p>
                     </div>
                   </li>
@@ -789,15 +797,15 @@ function DocViewer({ doc, onClose, onSaved }) {
   );
 }
 
-const RESEARCH_STATUS = {
-  pending: { label: '⏳ 待審核', cls: 'tag' },
-  approved: { label: '✅ 已入庫', cls: 'tag tag-blue' },
-  rejected: { label: '🚫 已駁回', cls: 'tag' },
-};
-
 // Phase 14 — 讓 agent 自己上網做功課：主管出題 → 員工代理用 web_search 深度搜索
 // 寫出附出處的調查報告 → 主管在這裡審核，核准才會進入該員工的知識庫。
 function ResearchSection({ employee, onChange }) {
+  const { t } = useI18n();
+  const RESEARCH_STATUS = {
+    pending: { label: t('employees.statusPending'), cls: 'tag' },
+    approved: { label: t('employees.statusApproved'), cls: 'tag tag-blue' },
+    rejected: { label: t('employees.statusRejected'), cls: 'tag' },
+  };
   const [webSearch, setWebSearch] = useState(null); // {enabled, keyConfigured}
   const [reports, setReports] = useState([]);
   const [topic, setTopic] = useState('');
@@ -835,30 +843,30 @@ function ResearchSection({ employee, onChange }) {
   return (
     <div className="research-box">
       <h4>
-        🔍 AI 自主研究 <span className="count">{reports.length}</span>
+        {t('employees.researchHeading')} <span className="count">{reports.length}</span>
       </h4>
       <p className="muted sm">
-        指定主題，讓 {employee.name} 自己上網深度搜索並寫出附出處的調查報告；經你核准後才會加入知識庫。
+        {t('employees.researchDesc', { name: employee.name })}
       </p>
       {!enabled && (
         <div className="banner-err sm">
           {webSearch?.keyConfigured
-            ? '網路搜尋開關未開啟——請在頁面上方打開「🌐 網路搜尋」。'
-            : '尚未設定 TAVILY_API_KEY，無法進行網路研究。'}
+            ? t('employees.webSearchToggleOff')
+            : t('employees.noTavilyKey')}
         </div>
       )}
       <div className="note-form">
         <input
-          placeholder="調查主題，例如：2026 台灣電商物流的最新趨勢"
+          placeholder={t('employees.researchTopicPlaceholder')}
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
           disabled={!enabled || busy}
         />
         <button className="btn sm" onClick={run} disabled={!enabled || busy || !topic.trim()}>
-          {busy ? '研究中…' : '🔍 開始研究'}
+          {busy ? t('employees.researchingBtn') : t('employees.startResearchBtn')}
         </button>
       </div>
-      {busy && <ProgressBar label="agent 正在多次上網搜尋並撰寫調查報告，約需 1–2 分鐘…" />}
+      {busy && <ProgressBar label={t('employees.researchProgress')} />}
       {err && <div className="banner-err sm">{err}</div>}
 
       <ul className="notes">
@@ -869,15 +877,15 @@ function ResearchSection({ employee, onChange }) {
               <div>
                 <strong>{r.topic}</strong>
                 <span className={st.cls}>{st.label}</span>
-                <span className="muted sm"> · 搜尋 {r.queries.length} 次 · 來源 {r.sources.length} 個</span>
+                <span className="muted sm">{t('employees.researchMeta', { queries: r.queries.length, sources: r.sources.length })}</span>
                 <div>
                   <button className="btn-ghost sm" onClick={() => setOpen(open === r.id ? null : r.id)}>
-                    {open === r.id ? '收合報告 ▲' : '閱讀報告 ▼'}
+                    {open === r.id ? t('employees.collapseReportBtn') : t('employees.expandReportBtn')}
                   </button>
                   {r.status === 'pending' && (
                     <>
-                      <button className="btn sm" onClick={() => review(r.id, 'approve')}>✅ 核准入庫</button>
-                      <button className="btn-ghost sm" onClick={() => review(r.id, 'reject')}>🚫 駁回</button>
+                      <button className="btn sm" onClick={() => review(r.id, 'approve')}>{t('employees.approveBtn')}</button>
+                      <button className="btn-ghost sm" onClick={() => review(r.id, 'reject')}>{t('employees.rejectBtn')}</button>
                     </>
                   )}
                 </div>
@@ -886,7 +894,7 @@ function ResearchSection({ employee, onChange }) {
                     <Markdown text={r.report} />
                     {r.sources.length > 0 && (
                       <div className="muted sm">
-                        引用來源：
+                        {t('employees.citedSources')}
                         {r.sources.filter((s) => /^https?:\/\//i.test(s.url || '')).map((s) => (
                           <div key={s.url}>
                             <a href={s.url} target="_blank" rel="noreferrer noopener">{s.title || s.url}</a>
@@ -900,7 +908,7 @@ function ResearchSection({ employee, onChange }) {
             </li>
           );
         })}
-        {reports.length === 0 && <li className="muted">尚無研究報告。</li>}
+        {reports.length === 0 && <li className="muted">{t('employees.noReports')}</li>}
       </ul>
     </div>
   );

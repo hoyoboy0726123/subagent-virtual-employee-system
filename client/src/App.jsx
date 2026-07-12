@@ -4,19 +4,15 @@ import { Modal } from './components/ui.jsx';
 import EmployeesPage from './pages/EmployeesPage.jsx';
 import MeetingsPage from './pages/MeetingsPage.jsx';
 import GoalsPage from './pages/GoalsPage.jsx';
-
-const TABS = [
-  { key: 'employees', label: '👥 員工' },
-  { key: 'meetings', label: '🗓️ 會議' },
-  { key: 'goals', label: '🎯 目標' },
-];
+import { useI18n, LOCALES } from './i18n.jsx';
 
 // Packaged (windowless) exe only: quit the app from the browser, since there's
 // no console window to close. After the server exits, show a done screen.
 function QuitButton() {
+  const { t } = useI18n();
   const [done, setDone] = useState(false);
   const quit = async () => {
-    if (!window.confirm('確定要關閉應用嗎？未儲存的進行中討論會停止。')) return;
+    if (!window.confirm(t('app.quitConfirm'))) return;
     try { await api.post('/shutdown', {}); } catch { /* server exits mid-response */ }
     setDone(true);
   };
@@ -25,18 +21,29 @@ function QuitButton() {
       <div className="quit-overlay">
         <div className="quit-card">
           <div className="quit-emoji">👋</div>
-          <h2>應用已關閉</h2>
-          <p className="muted">服務已停止，可以直接關閉這個瀏覽器分頁。<br />下次要用時再雙擊「虛擬員工系統」即可。</p>
+          <h2>{t('app.quitDoneTitle')}</h2>
+          <p className="muted">{t('app.quitDoneLine1')}<br />{t('app.quitDoneLine2')}</p>
         </div>
       </div>
     );
   }
   return (
-    <button className="icon-btn" onClick={quit} title="關閉應用（停止服務）" aria-label="關閉應用">⏻</button>
+    <button className="icon-btn" onClick={quit} title={t('app.quitTitle')} aria-label={t('app.quitAria')}>⏻</button>
   );
 }
 
 export default function App() {
+  const { t, locale, setLocale } = useI18n();
+  const TABS = [
+    { key: 'employees', label: t('app.tabEmployees') },
+    { key: 'meetings', label: t('app.tabMeetings') },
+    { key: 'goals', label: t('app.tabGoals') },
+  ];
+  const LOCALE_KEYS = Object.keys(LOCALES);
+  const cycleLocale = () => {
+    const idx = LOCALE_KEYS.indexOf(locale);
+    setLocale(LOCALE_KEYS[(idx + 1) % LOCALE_KEYS.length]);
+  };
   const [tab, setTab] = useState('employees');
   const [gotoMeeting, setGotoMeeting] = useState(null); // close-the-loop: jump into a meeting room
   const [health, setHealth] = useState(null);
@@ -94,8 +101,8 @@ export default function App() {
         <div className="brand">
           <span className="logo">🧑‍💼</span>
           <div>
-            <h1>虛擬員工系統</h1>
-            <p className="subtitle">你是主管，打造屬於你的 AI 員工團隊。</p>
+            <h1>{t('app.brandTitle')}</h1>
+            <p className="subtitle">{t('app.brandSubtitle')}</p>
           </div>
         </div>
         <div className="topbar-status">
@@ -103,8 +110,8 @@ export default function App() {
             <label
               className="runtime-switch web-toggle"
               title={settings.webSearch?.keyConfigured
-                ? '開啟後，AI 員工在會議、目標與自主研究中可視需要上網搜尋（Tavily 深度搜索），引用外部資料時會標明出處'
-                : '點右側 🔑 輸入 Tavily 金鑰（或在伺服器環境設定 TAVILY_API_KEY）即可開啟網路搜尋'}
+                ? t('app.webSearchOnHint')
+                : t('app.webSearchOffHint')}
             >
               <input
                 type="checkbox"
@@ -112,36 +119,36 @@ export default function App() {
                 onChange={toggleWebSearch}
               />
               <span className="runtime-label">
-                🌐 網路搜尋{settings.webSearch?.keyConfigured ? '' : '（未設定金鑰）'}
+                {t('app.webSearchLabel')}{settings.webSearch?.keyConfigured ? '' : t('app.webSearchNoKey')}
               </span>
             </label>
           )}
           <button
             className="icon-btn"
             onClick={() => setShowKeys(true)}
-            title="設定 Gemini / 網路搜尋 API 金鑰（僅儲存在本機）"
-            aria-label="API 金鑰設定"
+            title={t('app.apiKeysTitle')}
+            aria-label={t('app.apiKeysAria')}
           >
             🔑
           </button>
           <button
             className="icon-btn"
             onClick={() => setShowSettings(true)}
-            title="系統設定（會議主持行為等）"
-            aria-label="系統設定"
+            title={t('app.settingsTitle')}
+            aria-label={t('app.settingsAria')}
           >
             ⚙️
           </button>
           {settings?.llm && (
             <label
               className="runtime-switch brain-switch"
-              title={settings.llm.providers?.find((p) => p.id === settings.llm.provider)?.detail || '選擇驅動 AI 員工的推理大腦'}
+              title={settings.llm.providers?.find((p) => p.id === settings.llm.provider)?.detail || t('app.brainSwitchDefaultTitle')}
             >
-              <span className="runtime-label">🧠 大腦</span>
+              <span className="runtime-label">{t('app.brainLabel')}</span>
               <select value={settings.llm.provider} onChange={(e) => switchBrain(e.target.value)}>
                 {(settings.llm.providers || []).map((p) => (
                   <option key={p.id} value={p.id} disabled={!p.selectable} title={p.detail}>
-                    {p.label}{p.available ? '' : `（${p.id === 'google' ? '離線' : (p.detail.includes('未登入') ? '未登入' : '未安裝')}）`}
+                    {p.label}{p.available ? '' : `（${p.id === 'google' ? t('app.brainOffline') : (p.detail.includes('未登入') ? t('app.brainNotLoggedIn') : t('app.brainNotInstalled'))}）`}
                   </option>
                 ))}
               </select>
@@ -151,19 +158,27 @@ export default function App() {
             <span
               className={`pill ${settings.llm.live ? 'pill-live' : 'pill-sim'}`}
               title={settings.llm.live
-                ? `每個代理回合由「${settings.llm.active?.label}」即時執行`
-                : '目前的大腦不可用或未設定金鑰；以離線推理引擎（persona + RAG）執行，仍為真實多代理編排'}
+                ? t('app.liveTitle', { label: settings.llm.active?.label })
+                : t('app.simTitle')}
             >
-              {settings.llm.live ? `即時：${settings.llm.active?.model}` : '離線推理'}
+              {settings.llm.live ? t('app.livePill', { model: settings.llm.active?.model }) : t('app.simPill')}
             </span>
           )}
           <button
             className="icon-btn theme-toggle"
-            onClick={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
-            title={theme === 'dark' ? '切換為明亮模式' : '切換為深色模式'}
-            aria-label="切換主題"
+            onClick={() => setTheme((th) => (th === 'dark' ? 'light' : 'dark'))}
+            title={theme === 'dark' ? t('app.themeToLight') : t('app.themeToDark')}
+            aria-label={t('app.themeAria')}
           >
             {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
+          <button
+            className="icon-btn lang-toggle"
+            onClick={cycleLocale}
+            title={t('app.langToggleTitle')}
+            aria-label={t('app.langToggleTitle')}
+          >
+            🌐
           </button>
           {health?.packaged && <QuitButton />}
         </div>
@@ -172,14 +187,14 @@ export default function App() {
       {dashboard && <DashboardStrip dashboard={dashboard} />}
 
       <nav className="tabs">
-        {TABS.map((t) => (
+        {TABS.map((tb) => (
           <button
-            key={t.key}
-            className={tab === t.key ? 'tab tab-active' : 'tab'}
-            onClick={() => setTab(t.key)}
+            key={tb.key}
+            className={tab === tb.key ? 'tab tab-active' : 'tab'}
+            onClick={() => setTab(tb.key)}
           >
-            {t.label}
-            {activity[t.key] && <span className="tab-dot" title="有進行中的工作——切換分頁不會中斷它">🟢</span>}
+            {tb.label}
+            {activity[tb.key] && <span className="tab-dot" title={t('app.tabActivityTitle')}>🟢</span>}
           </button>
         ))}
       </nav>
@@ -213,7 +228,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        獨立運作 · 內建多代理編排 · SQLite 儲存 · 無需外部服務{settings?.runtimeLabel ? ` · ${settings.runtimeLabel}` : ''}
+        {t('app.footer')}{settings?.runtimeLabel ? ` · ${settings.runtimeLabel}` : ''}
       </footer>
 
       {showKeys && (
@@ -242,6 +257,7 @@ export default function App() {
 // the server booted with (env vars keep their meaning). A tunable saved at its
 // default value clears its override instead of pinning it.
 function SettingsModal({ chair, tunables, onClose, onSaved }) {
+  const { t } = useI18n();
   const [cfg, setCfg] = useState({
     dynamicOrder: chair?.dynamicOrder !== false,
     followUps: chair?.followUps !== false,
@@ -267,7 +283,7 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
       const next = await api.put('/settings', { chairConfig: cfg, tunables: patch });
       onSaved(next);
       setTun({ ...(next.tunables?.values || {}) });
-      setState({ busy: false, msg: '已儲存——立即生效，無需重啟', err: '' });
+      setState({ busy: false, msg: t('app.savedMsg'), err: '' });
     } catch (e) {
       setState({ busy: false, msg: '', err: e.message });
     }
@@ -280,7 +296,7 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
       const next = await api.put('/settings', { tunables: patch });
       onSaved(next);
       setTun({ ...(next.tunables?.values || {}) });
-      setState({ busy: false, msg: '已恢復啟動預設（環境變數或內建值）', err: '' });
+      setState({ busy: false, msg: t('app.resetMsg'), err: '' });
     } catch (e) {
       setState({ busy: false, msg: '', err: e.message });
     }
@@ -307,41 +323,40 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
   );
 
   return (
-    <Modal title="⚙️ 系統設定" onClose={onClose} wide>
+    <Modal title={t('app.settingsModalTitle')} onClose={onClose} wide>
       <section className="settings-section">
-        <h4>👔 會議主持（主管代理）</h4>
+        <h4>{t('app.chairSectionTitle')}</h4>
         <p className="settings-desc">
-          主管代理是內建的 AI 主持人：每輪安排發言順序、對發言者追問、會後統整報告。
-          戰略永遠在你手上（插話／續會／作結），這裡調的是它的議事風格。
+          {t('app.chairSectionDesc')}
         </p>
         <Toggle
           checked={cfg.dynamicOrder}
           onChange={(e) => setCfg({ ...cfg, dynamicOrder: e.target.checked })}
-          title="動態點名"
-          hint="依討論內容安排每輪發言順序；關閉＝固定輪流，且完全不呼叫主持人模型"
+          title={t('app.dynamicOrderTitle')}
+          hint={t('app.dynamicOrderHint')}
         />
         <Toggle
           checked={cfg.followUps}
           onChange={(e) => setCfg({ ...cfg, followUps: e.target.checked })}
           disabled={!cfg.dynamicOrder}
-          title="追問"
-          hint="允許主持人對發言者附上尖銳但建設性的追問"
+          title={t('app.followUpsTitle')}
+          hint={t('app.followUpsHint')}
         />
         <div className="setting-grid">
-          <Field label="主持風格">
+          <Field label={t('app.styleLabel')}>
             <select
               value={cfg.style}
               onChange={(e) => setCfg({ ...cfg, style: e.target.value })}
               disabled={!cfg.dynamicOrder || !cfg.followUps}
             >
-              <option value="gentle">溫和——開放式引導，不施壓</option>
-              <option value="standard">標準——尖銳但建設性</option>
-              <option value="strict">嚴厲——逼出數字、期限與承諾</option>
+              <option value="gentle">{t('app.styleGentle')}</option>
+              <option value="standard">{t('app.styleStandard')}</option>
+              <option value="strict">{t('app.styleStrict')}</option>
             </select>
           </Field>
-          <Field label="主持人模型" hint="僅影響點名與追問的呼叫；留空＝跟隨目前大腦">
+          <Field label={t('app.chairModelLabel')} hint={t('app.chairModelHint')}>
             <input
-              placeholder="例如 gemma-4-31b-it"
+              placeholder={t('app.chairModelPlaceholder')}
               value={cfg.model}
               onChange={(e) => setCfg({ ...cfg, model: e.target.value })}
               disabled={!cfg.dynamicOrder}
@@ -351,21 +366,21 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
       </section>
 
       <section className="settings-section">
-        <h4>🧠 記憶</h4>
+        <h4>{t('app.memorySectionTitle')}</h4>
         <Toggle
           checked={Boolean(tun.memoryDistill)}
           onChange={(e) => setTun({ ...tun, memoryDistill: e.target.checked })}
-          title="會後記憶沉澱"
-          hint="每場會議作結後，為每位與會者寫下他該記住的結論"
+          title={t('app.memoryDistillTitle')}
+          hint={t('app.memoryDistillHint')}
         />
         <Toggle
           checked={Boolean(tun.memoryConsolidate)}
           onChange={(e) => setTun({ ...tun, memoryConsolidate: e.target.checked })}
-          title="記憶自動整併"
-          hint="累積達門檻時，把舊記憶合併成一則精簡版（原始記憶封存、可還原）"
+          title={t('app.memoryConsolidateTitle')}
+          hint={t('app.memoryConsolidateHint')}
         />
         <div className="setting-grid">
-          <Field label="整併門檻" hint="累積幾則記憶後自動整併（2–200）">
+          <Field label={t('app.consolidateThresholdLabel')} hint={t('app.consolidateThresholdHint')}>
             <input
               type="number" min={2} max={200}
               value={tun.consolidateThreshold ?? ''}
@@ -377,34 +392,34 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
       </section>
 
       <section className="settings-section">
-        <h4>✍️ 輸出長度上限（tokens）</h4>
-        <p className="settings-desc">這是防護欄不是目標——模型寫完就停，調高只在真的寫更多時才多花 token。</p>
+        <h4>{t('app.outputSectionTitle')}</h4>
+        <p className="settings-desc">{t('app.outputSectionDesc')}</p>
         <div className="setting-grid">
-          <Field label="會議／目標回合" hint="256–32768">
+          <Field label={t('app.turnTokensLabel')} hint={t('app.turnTokensHint')}>
             <input type="number" min={256} max={32768} value={tun.turnTokens ?? ''} onChange={num('turnTokens')} />
           </Field>
-          <Field label="文件級產出" hint="報告、研究、1on1（1024–65536）">
+          <Field label={t('app.documentTokensLabel')} hint={t('app.documentTokensHint')}>
             <input type="number" min={1024} max={65536} value={tun.documentTokens ?? ''} onChange={num('documentTokens')} />
           </Field>
-          <Field label="整理／蒸餾" hint="記憶、1on1 紀錄（512–32768）">
+          <Field label={t('app.summaryTokensLabel')} hint={t('app.summaryTokensHint')}>
             <input type="number" min={512} max={32768} value={tun.summaryTokens ?? ''} onChange={num('summaryTokens')} />
           </Field>
         </div>
       </section>
 
       <section className="settings-section">
-        <h4>🛠 代理工具</h4>
+        <h4>{t('app.toolsSectionTitle')}</h4>
         <div className="setting-grid">
-          <Field label="每回合工具上限" hint="會議／1on1 每回合可查詢次數（1–10）">
+          <Field label={t('app.maxToolCallsLabel')} hint={t('app.maxToolCallsHint')}>
             <input type="number" min={1} max={10} value={tun.maxToolCalls ?? ''} onChange={num('maxToolCalls')} />
           </Field>
-          <Field label="自主研究工具上限" hint="每次研究任務的查詢預算（2–20）">
+          <Field label={t('app.researchMaxCallsLabel')} hint={t('app.researchMaxCallsHint')}>
             <input type="number" min={2} max={20} value={tun.researchMaxCalls ?? ''} onChange={num('researchMaxCalls')} />
           </Field>
-          <Field label="網路搜尋深度" hint="深度＝每來源多段摘錄，2 credits／次">
+          <Field label={t('app.webSearchDepthLabel')} hint={t('app.webSearchDepthHint')}>
             <select value={tun.webSearchDepth || 'advanced'} onChange={(e) => setTun({ ...tun, webSearchDepth: e.target.value })}>
-              <option value="advanced">深度（2 credits／次）</option>
-              <option value="basic">基本（1 credit／次）</option>
+              <option value="advanced">{t('app.webSearchDepthAdvanced')}</option>
+              <option value="basic">{t('app.webSearchDepthBasic')}</option>
             </select>
           </Field>
         </div>
@@ -413,11 +428,11 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
       <div className="settings-footer">
         {state.err && <span className="banner-err sm">{state.err}</span>}
         {state.msg && <span className="banner-ok sm">{state.msg}</span>}
-        <button className="btn-ghost sm" onClick={resetDefaults} disabled={state.busy} title="清除所有覆寫，回到啟動時的環境變數／內建值">
-          恢復預設
+        <button className="btn-ghost sm" onClick={resetDefaults} disabled={state.busy} title={t('app.resetDefaultsTitle')}>
+          {t('app.resetDefaultsBtn')}
         </button>
         <button className="btn sm" onClick={save} disabled={state.busy}>
-          {state.busy ? '儲存中…' : '儲存'}
+          {state.busy ? t('app.savingBtn') : t('app.saveBtn')}
         </button>
       </div>
     </Modal>
@@ -428,18 +443,19 @@ function SettingsModal({ chair, tunables, onClose, onSaved }) {
 // to the LOCAL SQLite settings store on the server — the GET side only ever
 // returns a masked tail, so a saved key never round-trips to the browser.
 function KeyRow({ label, hint, provider, status, onSaved }) {
+  const { t } = useI18n();
   const [value, setValue] = useState('');
   const [test, setTest] = useState({ busy: false, ok: null, msg: '' });
   const [saving, setSaving] = useState(false);
 
-  const sourceLabel = status?.source === 'ui' ? 'UI 設定' : status?.source === 'env' ? '環境變數' : null;
+  const sourceLabel = status?.source === 'ui' ? t('app.keySourceUi') : status?.source === 'env' ? t('app.keySourceEnv') : null;
 
   const runTest = async () => {
     setTest({ busy: true, ok: null, msg: '' });
     try {
       // Test the typed key; with the field empty this tests the stored one.
       const res = await api.post('/settings/api-keys/test', { provider, key: value || undefined });
-      setTest({ busy: false, ok: res.ok, msg: res.ok ? `連線成功${res.model ? `（${res.model}）` : ''}` : res.error });
+      setTest({ busy: false, ok: res.ok, msg: res.ok ? t('app.testSuccess', { model: res.model ? `（${res.model}）` : '' }) : res.error });
     } catch (e) {
       setTest({ busy: false, ok: false, msg: e.message });
     }
@@ -450,7 +466,7 @@ function KeyRow({ label, hint, provider, status, onSaved }) {
     try {
       const next = await api.put('/settings/api-keys', { [provider]: clear ? '' : value });
       setValue('');
-      setTest({ busy: false, ok: null, msg: clear ? '已清除（改用環境變數,若有）' : '已儲存' });
+      setTest({ busy: false, ok: null, msg: clear ? t('app.clearedMsg') : t('app.savedShort') });
       onSaved(next);
     } catch (e) {
       setTest({ busy: false, ok: false, msg: e.message });
@@ -463,26 +479,26 @@ function KeyRow({ label, hint, provider, status, onSaved }) {
     <div className="upload-box">
       <strong>{label}</strong>
       <p className="muted sm">
-        {hint} · 目前:{status?.configured ? `已設定 ${status.tail}（${sourceLabel}）` : '未設定'}
+        {hint} · {t('app.keyRowStatus')}{status?.configured ? t('app.keyConfigured', { tail: status.tail, source: sourceLabel }) : t('app.keyNotConfigured')}
       </p>
       <div className="upload-row">
         <input
           type="password"
-          placeholder={status?.configured ? '輸入新金鑰以更換…' : '貼上 API 金鑰…'}
+          placeholder={status?.configured ? t('app.keyPlaceholderReplace') : t('app.keyPlaceholderPaste')}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoComplete="off"
           style={{ flex: 1 }}
         />
         <button className="btn-ghost sm" onClick={runTest} disabled={test.busy || (!value && !status?.configured)}>
-          {test.busy ? '測試中…' : '測試連線'}
+          {test.busy ? t('app.testingBtn') : t('app.testBtn')}
         </button>
         <button className="btn sm" onClick={() => save(false)} disabled={saving || !value.trim()}>
-          儲存
+          {t('app.saveBtn')}
         </button>
         {status?.source === 'ui' && (
-          <button className="btn-ghost sm" onClick={() => save(true)} disabled={saving} title="清除 UI 儲存的金鑰">
-            清除
+          <button className="btn-ghost sm" onClick={() => save(true)} disabled={saving} title={t('app.clearBtnTitle')}>
+            {t('app.clearBtn')}
           </button>
         )}
       </div>
@@ -494,21 +510,22 @@ function KeyRow({ label, hint, provider, status, onSaved }) {
 }
 
 function ApiKeysModal({ status, onClose, onSaved }) {
+  const { t } = useI18n();
   return (
-    <Modal title="🔑 API 金鑰設定" onClose={onClose}>
+    <Modal title={t('app.apiKeysModalTitle')} onClose={onClose}>
       <p className="muted sm">
-        金鑰只儲存在你本機的資料庫（不進版本控制、不回傳前端）；清除後會改用伺服器環境變數（若有設定）。
+        {t('app.apiKeysDesc')}
       </p>
       <KeyRow
-        label="🧠 Google Gemini API 金鑰"
-        hint="驅動 AI 員工的即時推理（gemma-4）。可於 aistudio.google.com/apikey 免費取得"
+        label={t('app.geminiLabel')}
+        hint={t('app.geminiHint')}
         provider="gemini"
         status={status?.gemini}
         onSaved={onSaved}
       />
       <KeyRow
-        label="🌐 網路搜尋金鑰（Tavily）"
-        hint="讓員工能上網查證與自主研究。可於 tavily.com 免費取得"
+        label={t('app.tavilyLabel')}
+        hint={t('app.tavilyHint')}
         provider="tavily"
         status={status?.tavily}
         onSaved={onSaved}
@@ -518,11 +535,12 @@ function ApiKeysModal({ status, onClose, onSaved }) {
 }
 
 function DashboardStrip({ dashboard }) {
+  const { t } = useI18n();
   const cards = [
-    { label: '員工', value: dashboard.counts.employees },
-    { label: '知識文件', value: dashboard.counts.documents, sub: `${dashboard.counts.chunks} 個片段` },
-    { label: '會議', value: dashboard.counts.meetings, sub: `即時占比 ${Math.round((dashboard.runs.liveMeetings / Math.max(dashboard.counts.meetings, 1)) * 100)}%` },
-    { label: '目標', value: dashboard.counts.goals, sub: `即時占比 ${Math.round((dashboard.runs.liveGoals / Math.max(dashboard.counts.goals, 1)) * 100)}%` },
+    { label: t('app.dashboardEmployees'), value: dashboard.counts.employees },
+    { label: t('app.dashboardDocuments'), value: dashboard.counts.documents, sub: t('app.dashboardChunksSub', { n: dashboard.counts.chunks }) },
+    { label: t('app.dashboardMeetings'), value: dashboard.counts.meetings, sub: t('app.dashboardLiveRatioSub', { pct: Math.round((dashboard.runs.liveMeetings / Math.max(dashboard.counts.meetings, 1)) * 100) }) },
+    { label: t('app.dashboardGoals'), value: dashboard.counts.goals, sub: t('app.dashboardLiveRatioSub', { pct: Math.round((dashboard.runs.liveGoals / Math.max(dashboard.counts.goals, 1)) * 100) }) },
   ];
 
   return (
@@ -537,7 +555,7 @@ function DashboardStrip({ dashboard }) {
         ))}
       </div>
       <div className="dashboard-meta muted">
-        整體即時回合比率 {Math.round((dashboard.runs.liveTurnRatio || 0) * 100)}% · 平均每份文件 {dashboard.knowledge.avgChunksPerDocument} 個片段
+        {t('app.dashboardMetaLine', { pct: Math.round((dashboard.runs.liveTurnRatio || 0) * 100), chunks: dashboard.knowledge.avgChunksPerDocument })}
       </div>
     </section>
   );
