@@ -27,6 +27,11 @@ jobs:
       - name: Test
         run: npm test
 
+      # Build the client here so build:exe embeds a fresh dist (and the exe
+      # step stays a pure bundle+inject step).
+      - name: Build client
+        run: npm run build
+
       - name: Build single-file exe
         run: npm run build:exe
 

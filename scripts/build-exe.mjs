@@ -84,7 +84,10 @@ try {
   // ── 1) client build ────────────────────────────────────────────────────────
   if (!fs.existsSync(cd('client', 'dist', 'index.html'))) {
     console.log('→ 建置前端…');
-    run(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'build']);
+    // execSync (shell) instead of execFileSync: on Windows, Node ≥22 refuses to
+    // spawn .cmd batch files without a shell (CVE-2024-27980 hardening), which
+    // breaks `npm.cmd` on CI runners.
+    execSync('npm run build', { stdio: 'inherit', cwd: root });
   }
 
   // ── 2) embed the client + the MarkItDown helper ────────────────────────────

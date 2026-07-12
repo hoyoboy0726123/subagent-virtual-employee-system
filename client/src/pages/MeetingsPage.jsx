@@ -214,7 +214,6 @@ export default function MeetingsPage({ refreshKey, onChange, onActivity, gotoMee
         setRoom((r) => (r ? { ...r, streaming: false, runId: null, phase: null } : r));
       }
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gotoMeetingId]);
 
   // Reopen a CONCLUDED meeting (mirrors the 1on1): status flips back to
