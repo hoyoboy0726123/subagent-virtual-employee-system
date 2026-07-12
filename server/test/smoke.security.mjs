@@ -105,6 +105,7 @@ try {
 
 // Hermetic suites must guarantee their own exit. The in-process fetch()
 // clients hold keep-alive sockets to the server we just closed; on Linux
-// those handles kept the event loop alive indefinitely and HUNG CI (the
-// process even resisted step-level kills). All checks are done — exit.
-process.exit(0);
+// those handles kept the event loop alive indefinitely and HUNG CI. Exit on
+// a short (non-unref'd) timer: the delay lets the close op finish first —
+// exiting in the same tick trips a libuv teardown assertion on Windows.
+setTimeout(() => process.exit(0), 500);
