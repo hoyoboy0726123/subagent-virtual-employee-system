@@ -27,12 +27,16 @@ jobs:
       # that a bare import of the app module returns. Each is tiny and bounded.
       - name: Probe environment
         run: |
+          set +e  # probes report rc themselves; expected non-zero must not kill the step
           echo "— probe 1: node runs —"
           node -e "console.log('node ok', process.version)"
           echo "— probe 2: timeout kills a sleeping node (expect rc=124) —"
-          timeout -k 5 10 node -e "setTimeout(()=>{},1e9)" </dev/null >/dev/null 2>&1; echo "rc=$?"
+          timeout -k 5 10 node -e "setTimeout(()=>{},1e9)" </dev/null >/dev/null 2>&1
+          echo "rc=$?"
           echo "— probe 3: import the app (DB in memory) —"
-          timeout -k 5 60 node -e "process.env.DB_FILE=':memory:'; const t=Date.now(); import('./server/src/app.js').then(()=>{console.log('app import ok in', Date.now()-t, 'ms'); process.exit(0);})" </dev/null; echo "rc=$?"
+          timeout -k 5 60 node -e "process.env.DB_FILE=':memory:'; const t=Date.now(); import('./server/src/app.js').then(()=>{console.log('app import ok in', Date.now()-t, 'ms'); process.exit(0);})" </dev/null
+          echo "rc=$?"
+          exit 0
 
       # One suite, bounded, with a JS-stack diagnostic if it never exits:
       # SIGUSR2 makes node write a report (full JS stack) before we SIGKILL.
