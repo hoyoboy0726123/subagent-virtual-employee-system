@@ -21,46 +21,56 @@ const server = await new Promise((resolve) => {
 });
 const base = `http://127.0.0.1:${server.address().port}`;
 
+// ALWAYS consume the response body. An unread body keeps its pooled undici
+// connection busy; enough of them exhausts the pool and the NEXT fetch awaits
+// a free connection forever — a deterministic deadlock on Linux (Windows GC
+// happened to reap abandoned bodies in time, masking it locally).
+const hit = async (url, opts) => {
+  const res = await fetch(url, opts);
+  await res.arrayBuffer().catch(() => {});
+  return res;
+};
+
 try {
   await step('security headers are present on every response', async () => {
-    const res = await fetch(`${base}/api/health`);
+    const res = await hit(`${base}/api/health`);
     assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
     assert.equal(res.headers.get('x-frame-options'), 'DENY');
     assert.ok(res.headers.get('referrer-policy'));
   });
 
   await step('no CORS headers by default (same-origin app)', async () => {
-    const res = await fetch(`${base}/api/health`, { headers: { origin: 'https://evil.example' } });
+    const res = await hit(`${base}/api/health`, { headers: { origin: 'https://evil.example' } });
     assert.equal(res.headers.get('access-control-allow-origin'), null);
   });
 
   await step('CORS allow-list reflects only configured origins', async () => {
     config.corsOrigins.push('https://ok.example');
     try {
-      const ok = await fetch(`${base}/api/health`, { headers: { origin: 'https://ok.example' } });
+      const ok = await hit(`${base}/api/health`, { headers: { origin: 'https://ok.example' } });
       assert.equal(ok.headers.get('access-control-allow-origin'), 'https://ok.example');
-      const bad = await fetch(`${base}/api/health`, { headers: { origin: 'https://evil.example' } });
+      const bad = await hit(`${base}/api/health`, { headers: { origin: 'https://evil.example' } });
       assert.equal(bad.headers.get('access-control-allow-origin'), null);
     } finally { config.corsOrigins.length = 0; }
   });
 
   await step('AUTH_TOKEN off → /api open (default local single-user)', async () => {
-    const res = await fetch(`${base}/api/health`);
+    const res = await hit(`${base}/api/health`);
     assert.equal(res.status, 200);
   });
 
   await step('AUTH_TOKEN on → 401 without, 200 with (header or cookie)', async () => {
     config.authToken = 's3cret';
     try {
-      const noTok = await fetch(`${base}/api/health`);
+      const noTok = await hit(`${base}/api/health`);
       assert.equal(noTok.status, 401);
-      const bearer = await fetch(`${base}/api/health`, { headers: { authorization: 'Bearer s3cret' } });
+      const bearer = await hit(`${base}/api/health`, { headers: { authorization: 'Bearer s3cret' } });
       assert.equal(bearer.status, 200);
-      const header = await fetch(`${base}/api/health`, { headers: { 'x-auth-token': 's3cret' } });
+      const header = await hit(`${base}/api/health`, { headers: { 'x-auth-token': 's3cret' } });
       assert.equal(header.status, 200);
-      const cookie = await fetch(`${base}/api/health`, { headers: { cookie: 'veemp_token=s3cret' } });
+      const cookie = await hit(`${base}/api/health`, { headers: { cookie: 'veemp_token=s3cret' } });
       assert.equal(cookie.status, 200);
-      const wrong = await fetch(`${base}/api/health`, { headers: { 'x-auth-token': 'nope' } });
+      const wrong = await hit(`${base}/api/health`, { headers: { 'x-auth-token': 'nope' } });
       assert.equal(wrong.status, 401);
     } finally { config.authToken = ''; }
   });
@@ -75,7 +85,7 @@ try {
       // simply hammer until we see a 429 within max+previous+1 attempts.
       let got429 = false;
       for (let i = 0; i < 20; i++) {
-        const res = await fetch(`${base}/api/health`);
+        const res = await hit(`${base}/api/health`);
         if (res.status === 429) { got429 = true; break; }
       }
       assert.ok(got429, 'expected a 429 once past the budget');

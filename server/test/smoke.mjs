@@ -43,7 +43,10 @@ const api = async (method, pathname, body) => {
     headers: { 'content-type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
   });
-  const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+  // ALWAYS consume the body — an unread body keeps its pooled undici
+  // connection busy; enough of them deadlocks the next fetch (Linux CI hang).
+  const isJson = res.headers.get('content-type')?.includes('json');
+  const json = isJson ? await res.json() : (await res.arrayBuffer().catch(() => {}), null);
   return { status: res.status, json };
 };
 
@@ -53,7 +56,8 @@ const upload = async (pathname, { filename, content, type }) => {
   const fd = new FormData();
   fd.append('file', new Blob([content], type ? { type } : undefined), filename);
   const res = await fetch(base + pathname, { method: 'POST', body: fd });
-  const json = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+  const isJson = res.headers.get('content-type')?.includes('json');
+  const json = isJson ? await res.json() : (await res.arrayBuffer().catch(() => {}), null);
   return { status: res.status, json };
 };
 
