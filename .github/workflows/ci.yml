@@ -23,18 +23,23 @@ jobs:
       - run: npm ci
 
       # Hermetic: no API keys, no network, no external services.
-      # Suites run one-by-one under `timeout` so a suite that passes its checks
-      # but never exits (stray handle) fails LOUDLY as exit 124 with its name,
-      # instead of hanging the job for 6 hours.
+      # Each suite runs under `timeout` with stdio redirected to a FILE:
+      #   • a suite whose process never exits fails loudly as rc=124 with its
+      #     name, instead of hanging the job for 6 hours;
+      #   • a LEAKED grandchild process can only hold the log-file descriptor,
+      #     not the runner's step pipe — so the step can actually end (a
+      #     pipe-holding orphan is the classic Actions forever-hang).
       - name: Test
         run: |
-          set -e
-          for f in security tools cliRunner embeddings memory providers orchestration; do
-            echo "══════ smoke.$f ══════"
-            timeout -k 5 180 node "server/test/smoke.$f.mjs"
+          rc_total=0
+          for f in security tools cliRunner embeddings memory providers orchestration mjs; do
+            file="server/test/smoke.$f.mjs"; [ "$f" = "mjs" ] && file="server/test/smoke.mjs"
+            echo "══════ $file ══════"
+            timeout -k 5 180 node "$file" > /tmp/suite.log 2>&1 < /dev/null; rc=$?
+            cat /tmp/suite.log
+            if [ $rc -ne 0 ]; then echo "✗ $file exited rc=$rc$([ $rc -eq 124 ] && echo ' (TIMED OUT / never exited)')"; rc_total=1; fi
           done
-          echo "══════ smoke.mjs ══════"
-          timeout -k 5 300 node server/test/smoke.mjs
+          exit $rc_total
 
       - name: Build client
         run: npm run build
