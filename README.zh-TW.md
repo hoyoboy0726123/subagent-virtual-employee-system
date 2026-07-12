@@ -255,10 +255,23 @@ PDF/DOCX/PPTX/XLSX/CSV 需要 PDF/DOCX 解析元件（Windows 一鍵 `start.bat`
 ### 驗證
 
 ```bash
-npm test        # 7 個 hermetic 套件（無金鑰、無網路、記憶體資料庫）
+npm test              # 8 個 hermetic 套件、61 項檢查（無金鑰、無網路、記憶體資料庫）
+npm run test:coverage # 覆蓋率報告（約 87% 行）
 npm run lint
 npm run build
 ```
+
+### 平台支援
+
+| 平台 | 應用程式 | 說明 |
+|---|---|---|
+| Windows | ✅ 第一優先 | 一鍵 `start.bat`、免安裝 `.exe`、CI 主要測試閘門 |
+| macOS / Linux | ✅ 支援 | `npm install && npm run seed && npm run serve` |
+| Docker（Linux） | ✅ 支援 | `docker compose up` |
+
+已知限制：**測試套件**（不是應用本身）在 GitHub Actions 的 ubuntu runner 上有尚未解決的
+卡住問題，Linux 的 CI job 目前僅供參考。應用在 Linux 上執行正常；若你在實機 Linux 成功
+跑完 `npm test`，歡迎回報。
 
 ---
 

@@ -103,7 +103,17 @@ Switch anytime from the top bar; the UI live-detects what's available. Subscript
 - **Orchestration** (`server/src/orchestration/`): each employee is an in-app agent (persona system prompt + own RAG grounding + per-round stance); a chair agent plans each round's speaking order in one LLM call; a synthesizer writes the decision report from the real transcript.
 - **Retrieval**: BM25 by default; optional local embeddings enable BM25+vector hybrid fused with RRF.
 - **Memory**: post-meeting distillation + threshold-triggered consolidation (LLM semantic merge with deterministic fallback, non-destructive archival).
-- **Tests**: 8 hermetic smoke suites (61 checks), CI on Node 22/24. `npm test`; coverage via `npm run test:coverage` (~87% lines).
+- **Tests**: 8 hermetic smoke suites (61 checks). `npm test`; coverage via `npm run test:coverage` (~87% lines). CI's required gate runs on Windows.
+
+### Platform support
+
+| Platform | App | Notes |
+|---|---|---|
+| Windows | ✅ first-class | one-click `start.bat`, portable `.exe`, primary test gate |
+| macOS / Linux | ✅ supported | `npm install && npm run seed && npm run serve` |
+| Docker (Linux) | ✅ supported | `docker compose up` |
+
+Known limitation: the **test suite** (not the app) has an unresolved hang on GitHub Actions' ubuntu runners — the Linux CI job is advisory for now. The app itself runs fine on Linux; if you run `npm test` successfully on real Linux, we'd love to hear about it.
 
 More: [CONTRIBUTING.md](CONTRIBUTING.md) ・ [SECURITY.md](SECURITY.md)
 
