@@ -25,21 +25,21 @@ jobs:
 
       - run: npm ci
 
-      # Detached watchdog: 7 minutes in, capture the crime scene (process
-      # tree, per-suite progress, suite log, JS stacks via SIGUSR2), push it
-      # to a ci-diag branch (independent of Actions log publishing), then
-      # SIGKILL every stray node so the blocked step can end and the job
-      # completes normally (which ALSO publishes its logs).
-      - name: Arm watchdog
+      # Watchdog script: capture the crime scene (process tree, per-suite
+      # progress, suite log, JS stacks via SIGUSR2), push it to a ci-diag
+      # branch (independent of Actions log publishing), then SIGKILL stray
+      # node processes so the blocked step can end. Launched INSIDE the Test
+      # step (a detached cross-step process did not survive on this runner).
+      - name: Write watchdog script
         run: |
           cat > /tmp/watchdog.sh <<'EOS'
           #!/bin/bash
-          sleep 420
+          sleep 360
           D=/tmp/diag; mkdir -p $D
           date -u > $D/when.txt
           ps auxww --forest > $D/ps.txt 2>&1
           cp /tmp/progress.txt $D/ 2>/dev/null || true
-          cp /tmp/suite.log $D/ 2>/dev/null || true
+          cp /tmp/suite.log $D/suite.log 2>/dev/null || true
           for pid in $(pgrep -f 'server/test/smoke' 2>/dev/null); do
             kill -USR2 $pid 2>/dev/null
           done
@@ -47,18 +47,17 @@ jobs:
           cp /tmp/report.*.json $D/ 2>/dev/null || true
           cd "$GITHUB_WORKSPACE"
           git config user.email ci@local; git config user.name ci-watchdog
-          git checkout -B "ci-diag-${MATRIX_NODE//./_}" 2>/dev/null
-          mkdir -p ci-diag && cp -r $D/* ci-diag/ 2>/dev/null
-          git add -f ci-diag && git commit -m "watchdog diagnostics" -q || true
-          git push -f origin "ci-diag-${MATRIX_NODE//./_}" 2>&1 | tail -1
-          # unblock the hung step so the job can finish and publish its logs
+          BR="ci-diag-${MATRIX_NODE//./_}"
+          git checkout -B "$BR" >/dev/null 2>&1
+          mkdir -p ci-diag && cp -r $D/. ci-diag/ 2>/dev/null
+          git add -f ci-diag >/dev/null 2>&1 && git commit -m "watchdog diagnostics" -q
+          git push -f origin "$BR" > $D/push.txt 2>&1
+          # unblock the hung harness so the job can finish and publish logs
           pkill -9 -f 'server/test/smoke' 2>/dev/null
-          pkill -9 node 2>/dev/null
+          exit 0
           EOS
           chmod +x /tmp/watchdog.sh
-          MATRIX_NODE="${{ matrix.node-version }}" GITHUB_WORKSPACE="$GITHUB_WORKSPACE" \
-            setsid nohup /tmp/watchdog.sh > /tmp/watchdog.out 2>&1 &
-          echo "watchdog armed (fires at +7min)"
+          echo ok
 
       # Staged probes: pinpoint WHICH phase hangs on this runner. Each runs in
       # the background with a hard kill — this harness pattern is the only one
@@ -94,7 +93,10 @@ jobs:
       # dump for anything that never exits. Every suite reports; job fails at
       # the end listing offenders.
       - name: Test
+        env:
+          MATRIX_NODE: ${{ matrix.node-version }}
         run: |
+          /tmp/watchdog.sh & WD=$!   # fires at +6min if we're still stuck
           run_suite() {
             local file="$1"
             echo "══════ $file ══════"
@@ -125,6 +127,7 @@ jobs:
             run_suite "$f" || { echo "✗✗ FAILED: $f"; fail=1; }
             echo "END   $f $(date -u +%H:%M:%S)" >> /tmp/progress.txt
           done
+          kill $WD 2>/dev/null || true  # disarm the watchdog on a clean finish
           exit $fail
 
       - name: Build client
