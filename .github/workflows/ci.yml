@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 35 # hard backstop — never leave a 6-hour zombie
+    timeout-minutes: 30 # hard backstop — never leave a 6-hour zombie
     strategy:
       matrix:
         node-version: ['22.x', '24.x']
@@ -23,32 +23,69 @@ jobs:
 
       - run: npm ci
 
-      # One STEP per suite, bounded by the RUNNER's step-level timeout — a
-      # shell `timeout` proved unable to bound whatever hangs here (the loop
-      # step outlived per-suite SIGKILL budgets), while the platform timeout
-      # tears the step down unconditionally. continue-on-error lets every
-      # suite report, and the Verdict step fails the job with names.
-      - { id: s_tools,   name: smoke.tools,         timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.tools.mjs }
-      - { id: s_sec,     name: smoke.security,      timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.security.mjs }
-      - { id: s_cli,     name: smoke.cliRunner,     timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.cliRunner.mjs }
-      - { id: s_emb,     name: smoke.embeddings,    timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.embeddings.mjs }
-      - { id: s_mem,     name: smoke.memory,        timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.memory.mjs }
-      - { id: s_prov,    name: smoke.providers,     timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.providers.mjs }
-      - { id: s_orch,    name: smoke.orchestration, timeout-minutes: 3, continue-on-error: true, run: node server/test/smoke.orchestration.mjs }
-      - { id: s_http,    name: smoke.http,          timeout-minutes: 5, continue-on-error: true, run: node server/test/smoke.mjs }
-
-      - name: Verdict
+      # Staged probes: pinpoint WHICH phase hangs on this runner. Each runs in
+      # the background with a hard kill — this harness pattern is the only one
+      # proven to terminate here (step-level timeout-minutes did not).
+      - name: Probe app phases
         run: |
+          probe() {
+            local label="$1"; shift
+            node --report-on-signal --report-signal=SIGUSR2 --report-directory=/tmp \
+              -e "$1" > /tmp/probe.log 2>&1 < /dev/null &
+            local pid=$!
+            for i in $(seq 1 45); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+            if kill -0 $pid 2>/dev/null; then
+              echo "✗ $label HUNG at 45s — JS stack:"
+              kill -USR2 $pid; sleep 3
+              for r in /tmp/report.*.json; do
+                [ -f "$r" ] || continue
+                node -e "const j=require('$r'); console.log(JSON.stringify(j.javascriptStack,null,1)); console.log('libuv:', (j.libuv||[]).filter(h=>h.is_active).map(h=>h.type).join(','))" 2>/dev/null || true
+                rm -f "$r"
+              done
+              kill -9 $pid 2>/dev/null; cat /tmp/probe.log; return 1
+            fi
+            wait $pid; local rc=$?
+            cat /tmp/probe.log
+            echo "· $label rc=$rc"
+            return $rc
+          }
+          set -e
+          probe "createApp" "process.env.DB_FILE=':memory:'; import('./server/src/app.js').then(m=>{console.log('import ok'); m.createApp(); console.log('createApp ok'); setTimeout(()=>process.exit(0),300);})"
+          probe "listen+fetch" "process.env.DB_FILE=':memory:'; import('./server/src/app.js').then(async (m)=>{const app=m.createApp(); const s=app.listen(0,'127.0.0.1',async()=>{const base='http://127.0.0.1:'+s.address().port; const r=await fetch(base+'/api/health'); await r.arrayBuffer(); console.log('fetch ok', r.status); s.close(); setTimeout(()=>process.exit(0),300);});})"
+
+      # All suites through the same proven bounded harness, with a JS-stack
+      # dump for anything that never exits. Every suite reports; job fails at
+      # the end listing offenders.
+      - name: Test
+        run: |
+          run_suite() {
+            local file="$1"
+            echo "══════ $file ══════"
+            node --report-on-signal --report-signal=SIGUSR2 --report-directory=/tmp \
+              "$file" > /tmp/suite.log 2>&1 < /dev/null &
+            local pid=$!
+            for i in $(seq 1 90); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+            if kill -0 $pid 2>/dev/null; then
+              echo "✗ $file STILL RUNNING at 90s — JS stack:"
+              kill -USR2 $pid; sleep 3
+              for r in /tmp/report.*.json; do
+                [ -f "$r" ] || continue
+                node -e "const j=require('$r'); console.log(JSON.stringify(j.javascriptStack,null,1)); console.log('libuv:', (j.libuv||[]).filter(h=>h.is_active).map(h=>h.type).join(','))" 2>/dev/null || true
+                rm -f "$r"
+              done
+              kill -9 $pid 2>/dev/null
+              cat /tmp/suite.log
+              return 1
+            fi
+            wait $pid; local rc=$?
+            cat /tmp/suite.log
+            echo "· $file rc=$rc"
+            return $rc
+          }
           fail=0
-          check() { if [ "$2" != "success" ]; then echo "✗ $1 → $2"; fail=1; else echo "✓ $1"; fi; }
-          check smoke.tools         "${{ steps.s_tools.outcome }}"
-          check smoke.security      "${{ steps.s_sec.outcome }}"
-          check smoke.cliRunner     "${{ steps.s_cli.outcome }}"
-          check smoke.embeddings    "${{ steps.s_emb.outcome }}"
-          check smoke.memory        "${{ steps.s_mem.outcome }}"
-          check smoke.providers     "${{ steps.s_prov.outcome }}"
-          check smoke.orchestration "${{ steps.s_orch.outcome }}"
-          check smoke.http          "${{ steps.s_http.outcome }}"
+          for f in server/test/smoke.tools.mjs server/test/smoke.security.mjs server/test/smoke.cliRunner.mjs server/test/smoke.embeddings.mjs server/test/smoke.memory.mjs server/test/smoke.providers.mjs server/test/smoke.orchestration.mjs server/test/smoke.mjs; do
+            run_suite "$f" || { echo "✗✗ FAILED: $f"; fail=1; }
+          done
           exit $fail
 
       - name: Build client
