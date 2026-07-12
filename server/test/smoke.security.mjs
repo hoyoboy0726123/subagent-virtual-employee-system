@@ -102,3 +102,9 @@ try {
 } finally {
   server.close();
 }
+
+// Hermetic suites must guarantee their own exit. The in-process fetch()
+// clients hold keep-alive sockets to the server we just closed; on Linux
+// those handles kept the event loop alive indefinitely and HUNG CI (the
+// process even resisted step-level kills). All checks are done — exit.
+process.exit(0);
