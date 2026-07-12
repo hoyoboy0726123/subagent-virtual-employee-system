@@ -50,17 +50,41 @@ export function speak(text, { rate = 1, pitch = 1, onend, onstart } = {}) {
 export function stopSpeaking() { if (ttsSupported) window.speechSynthesis.cancel(); }
 
 /**
+ * Trigger the browser's native microphone permission prompt and resolve once
+ * the user allows it. SpeechRecognition.start() alone does NOT reliably show
+ * the prompt (it just throws not-allowed when permission isn't already
+ * granted), so we request getUserMedia first — that's what pops the "Allow
+ * microphone?" dialog — then immediately release the stream (recognition opens
+ * its own). Returns { ok } or { ok:false, error } ('denied' | 'no-device' | …).
+ */
+export async function ensureMicPermission() {
+  if (!navigator.mediaDevices?.getUserMedia) return { ok: true }; // let recognition try anyway
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((tr) => tr.stop()); // permission granted; we don't need the stream
+    return { ok: true };
+  } catch (err) {
+    const name = err?.name || '';
+    if (name === 'NotAllowedError' || name === 'SecurityError') return { ok: false, error: 'denied' };
+    if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return { ok: false, error: 'no-device' };
+    return { ok: false, error: name || 'unknown' };
+  }
+}
+
+/**
  * Create an STT session. Callbacks: onInterim(text), onFinal(text), onError(code),
  * onEnd(). Returns { start, stop, abort }. One utterance per start() (continuous
  * off) so a natural pause ends the turn and we can send it.
  */
-export function createRecognizer({ lang = 'zh-TW', onInterim, onFinal, onError, onEnd } = {}) {
+export function createRecognizer({ lang = 'zh-TW', continuous = true, onInterim, onFinal, onError, onEnd } = {}) {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) return null;
   const rec = new SR();
   rec.lang = lang;
   rec.interimResults = true;
-  rec.continuous = false;
+  // continuous=true for press-and-hold: a mid-sentence pause must NOT end the
+  // turn — the user ends it by releasing the button (stop()).
+  rec.continuous = continuous;
   let finalText = '';
   rec.onresult = (e) => {
     let interim = '';

@@ -18,7 +18,10 @@ export function securityHeaders() {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-    res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    // Deny camera & geolocation (unused); ALLOW microphone for the same-origin
+    // app itself — Live 對談 (1on1 voice) uses getUserMedia/SpeechRecognition,
+    // and 'microphone=()' would block it at the document level. self only.
+    res.setHeader('Permissions-Policy', 'camera=(), microphone=(self), geolocation=()');
     next();
   };
 }

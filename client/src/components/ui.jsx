@@ -151,13 +151,14 @@ function MarkdownImpl({ text = '' }) {
 
 export const Markdown = React.memo(MarkdownImpl);
 
-export function Modal({ title, children, onClose, wide }) {
+export function Modal({ title, children, onClose, wide, action }) {
   const { t } = useI18n();
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h2>{title}</h2>
+          {action}
           <button className="icon-btn" onClick={onClose} aria-label={t('common.close')}>✕</button>
         </div>
         <div className="modal-body">{children}</div>

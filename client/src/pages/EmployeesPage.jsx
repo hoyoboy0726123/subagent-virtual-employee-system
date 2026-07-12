@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 import { fileToImagePart, imagesFromPaste, imagesFromDrop } from '../lib/image.js';
-import { speak, stopSpeaking, createRecognizer, ttsSupported, sttSupported } from '../lib/voice.js';
+import { speak, stopSpeaking, createRecognizer, ensureMicPermission, ttsSupported, sttSupported } from '../lib/voice.js';
 import { useI18n } from '../i18n.jsx';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
@@ -319,7 +319,12 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
   };
 
   return (
-    <Modal title={`${employee.name} — ${employee.roleTitle}`} onClose={onClose} wide>
+    <Modal
+      title={`${employee.name} — ${employee.roleTitle}`}
+      onClose={onClose}
+      wide
+      action={<button className="btn sm" onClick={() => setOneOnOne(true)}>{t('employees.oneOnOneBtn')}</button>}
+    >
       <div className="detail">
         <section>
           <div className="detail-meta">
@@ -460,7 +465,6 @@ function EmployeeDetail({ employee, onClose, onChange, onEdit, onDeleted }) {
       <div className="modal-actions between">
         <button className="btn-danger" onClick={remove}>{t('employees.deleteEmployeeBtn')}</button>
         <div className="actions">
-          <button className="btn-ghost" onClick={() => setOneOnOne(true)}>{t('employees.oneOnOneBtn')}</button>
           <button className="btn" onClick={onEdit}>{t('employees.editProfileBtn')}</button>
         </div>
       </div>
@@ -562,12 +566,25 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
     setLiveMode((v) => !v);
   };
 
-  const startListening = () => {
+  // Press-and-hold (walkie-talkie): a mid-sentence pause must not cut you off,
+  // so recognition is continuous and only ends when you RELEASE the button.
+  const holdingRef = useRef(false);
+  const startListening = async () => {
     if (busy || speaking || listening) return;
     stopSpeaking();
+    // Pop the native "Allow microphone?" prompt FIRST (SpeechRecognition alone
+    // won't) — the user just clicks Allow, then recognition starts.
+    const perm = await ensureMicPermission();
+    if (!perm.ok) {
+      if (perm.error === 'no-device') setErr(t('employees.micNoDevice'));
+      else if (perm.error === 'denied') setErr(t('employees.micBlocked'));
+      else setErr(t('employees.micError', { code: perm.error })); // surface the raw reason
+      return;
+    }
     setLiveInterim('');
     const rec = createRecognizer({
       lang: 'zh-TW',
+      continuous: true, // hold to talk — pauses don't end the turn
       onInterim: (txt) => setLiveInterim(txt),
       onError: (code) => {
         setListening(false);
@@ -584,8 +601,12 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
     recRef.current = rec;
     setListening(true);
     rec.start();
+    // If the user released the button before permission/start resolved (async),
+    // stop right away so a quick tap doesn't leave the mic hanging open.
+    if (!holdingRef.current) rec.stop();
   };
-  const stopListening = () => recRef.current?.stop();
+  const holdStart = (e) => { e.preventDefault(); e.currentTarget.setPointerCapture?.(e.pointerId); holdingRef.current = true; startListening(); };
+  const holdEnd = (e) => { holdingRef.current = false; try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch { /* ignore */ } recRef.current?.stop(); };
   // Stop everything when the modal unmounts.
   useEffect(() => () => { recRef.current?.abort(); stopSpeaking(); }, []);
 
@@ -698,9 +719,13 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
             <button
               type="button"
               className={`live-mic${listening ? ' live' : ''}${speaking ? ' speaking' : ''}`}
-              onClick={listening ? stopListening : startListening}
+              onPointerDown={holdStart}
+              onPointerUp={holdEnd}
+              onPointerCancel={holdEnd}
+              onContextMenu={(e) => e.preventDefault()}
               disabled={busy || speaking}
               title={t('employees.liveMicTitle')}
+              style={{ touchAction: 'none', userSelect: 'none' }}
             >
               <span className="live-mic-dot" />
               {speaking ? t('employees.liveSpeaking')
