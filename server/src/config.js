@@ -15,6 +15,19 @@ const defaultDbFile = isPackaged()
 export const config = {
   port: Number(process.env.PORT) || 3001,
 
+  // Bind address. Loopback by default — a local single-user app should not be
+  // reachable from the network unless the user opts in (HOST=0.0.0.0). The
+  // Docker image sets that env for you.
+  host: process.env.HOST || '127.0.0.1',
+
+  // Public-deploy hardening (Phase 2-1) — all optional, see security.js.
+  authToken: process.env.AUTH_TOKEN || '',
+  corsOrigins: (process.env.CORS_ORIGINS || '').split(',').map((s) => s.trim()).filter(Boolean),
+  rateLimit: {
+    max: process.env.RATE_LIMIT === undefined ? 600 : Number(process.env.RATE_LIMIT) || 0,
+    windowSec: Number(process.env.RATE_WINDOW_SEC) || 300,
+  },
+
   // SQLite database file. Overridable with DB_FILE (the smoke test points this
   // at a throwaway path so it never touches real data). ':memory:' is allowed.
   dbFile:

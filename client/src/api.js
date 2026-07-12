@@ -1,21 +1,42 @@
 // Thin API client. All calls go to the Express server (proxied in dev).
-const json = (method) => (path, body) =>
-  fetch(`/api${path}`, {
+
+// Optional access token (server started with AUTH_TOKEN=…). Kept in
+// localStorage for fetch headers AND mirrored into a cookie so plain anchor
+// downloads (which can't set headers) keep working. On the first 401 we ask
+// once, remember, and retry.
+const TOKEN_KEY = 'veemp-token';
+const getToken = () => localStorage.getItem(TOKEN_KEY) || '';
+const setToken = (t) => {
+  localStorage.setItem(TOKEN_KEY, t);
+  document.cookie = `veemp_token=${encodeURIComponent(t)}; path=/; SameSite=Strict`;
+};
+const authHeaders = () => (getToken() ? { 'x-auth-token': getToken() } : {});
+const promptForToken = () => {
+  const t = window.prompt('這台伺服器需要存取權杖（AUTH_TOKEN）。請輸入：');
+  if (t && t.trim()) { setToken(t.trim()); return true; }
+  return false;
+};
+// ensure the cookie exists on load (e.g. after localStorage survived a cookie wipe)
+if (getToken()) setToken(getToken());
+
+const json = (method) => async (path, body, _retried) => {
+  const res = await fetch(`/api${path}`, {
     method,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: body ? JSON.stringify(body) : undefined,
-  }).then(async (res) => {
-    const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
-    if (!res.ok) throw new Error(data?.error || `請求失敗（${res.status}）`);
-    return data;
   });
+  if (res.status === 401 && !_retried && promptForToken()) return json(method)(path, body, true);
+  const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
+  if (!res.ok) throw new Error(data?.error || `請求失敗（${res.status}）`);
+  return data;
+};
 
 // Multipart upload (a File/Blob) to a server endpoint. We deliberately do NOT
 // set a Content-Type header — the browser adds the multipart boundary itself.
 const uploadFile = (path, file, field = 'file') => {
   const body = new FormData();
   body.append(field, file, file.name);
-  return fetch(`/api${path}`, { method: 'POST', body }).then(async (res) => {
+  return fetch(`/api${path}`, { method: 'POST', body, headers: authHeaders() }).then(async (res) => {
     const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
     if (!res.ok) throw new Error(data?.error || `上傳失敗（${res.status}）`);
     return data;
@@ -25,12 +46,13 @@ const uploadFile = (path, file, field = 'file') => {
 // Consume a Server-Sent-Events POST endpoint (Phase 15 live progress). Calls
 // onEvent for every event; resolves with the {type:'done', ...} payload and
 // throws on {type:'error'} or transport failure.
-const stream = async (path, body, onEvent) => {
+const stream = async (path, body, onEvent, _retried) => {
   const res = await fetch(`/api${path}`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...authHeaders() },
     body: JSON.stringify(body || {}),
   });
+  if (res.status === 401 && !_retried && promptForToken()) return stream(path, body, onEvent, true);
   if (!res.ok || !res.body) {
     const data = res.headers.get('content-type')?.includes('json') ? await res.json() : null;
     throw new Error(data?.error || `請求失敗（${res.status}）`);

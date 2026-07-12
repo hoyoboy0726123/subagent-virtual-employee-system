@@ -39,7 +39,7 @@
     "start": "node server/src/index.js",
     "serve": "npm run build && npm run start",
     "lint": "eslint .",
-    "test": "node server/test/smoke.tools.mjs && node server/test/smoke.cliRunner.mjs && node server/test/smoke.embeddings.mjs && node server/test/smoke.memory.mjs && node server/test/smoke.providers.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
+    "test": "node server/test/smoke.security.mjs && node server/test/smoke.tools.mjs && node server/test/smoke.cliRunner.mjs && node server/test/smoke.embeddings.mjs && node server/test/smoke.memory.mjs && node server/test/smoke.providers.mjs && node server/test/smoke.orchestration.mjs && node server/test/smoke.mjs",
     "test:cliRunner": "node server/test/smoke.cliRunner.mjs",
     "test:embeddings": "node server/test/smoke.embeddings.mjs",
     "test:memory": "node server/test/smoke.memory.mjs",
@@ -49,7 +49,8 @@
     "test:live": "node server/test/live.agentic.mjs",
     "test:live:research": "node server/test/live.research.mjs",
     "test:markitdown": "node server/test/smoke.markitdown.mjs",
-    "build:exe": "node scripts/build-exe.mjs"
+    "build:exe": "node scripts/build-exe.mjs",
+    "test:security": "node server/test/smoke.security.mjs"
   },
   "engines": {
     "node": ">=22.5"
@@ -62,7 +63,6 @@
   },
   "dependencies": {
     "@google/genai": "^2.10.0",
-    "cors": "^2.8.5",
     "docx": "^9.7.1",
     "express": "^4.21.2",
     "multer": "^2.2.0",

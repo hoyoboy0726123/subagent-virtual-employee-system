@@ -40,7 +40,9 @@ function listenWithFallback(startPort, tries = 15) {
   return new Promise((resolve, reject) => {
     let port = startPort;
     const attempt = () => {
-      const server = app.listen(port);
+      // Loopback by default (config.host) — the network can't reach a local
+      // single-user app unless the user opts in with HOST=0.0.0.0.
+      const server = app.listen(port, config.host);
       server.once('listening', () => resolve({ server, port }));
       server.once('error', (err) => {
         if (err.code === 'EADDRINUSE' && port < startPort + tries) { port += 1; attempt(); }
@@ -89,6 +91,7 @@ if (isMain) (async () => {
     console.log(`  Storage : SQLite (${config.dbFile})`);
     console.log('  Runtime : standalone（內建多代理）');
     console.log(`  LLM     : ${llmEnabled() ? `live (${activeModelInfo().label})` : 'off (deterministic engine)'}`);
+    console.log(`  Bind    : ${config.host}${config.host !== '127.0.0.1' && !config.authToken ? '（對外開放且未設 AUTH_TOKEN——公網部署請務必設定）' : ''}`);
     if (port !== config.port) console.log(`  （埠 ${config.port} 已被佔用，改用 ${port}）`);
     console.log('');
     // Packaged exe: open the browser for the double-click user. windowsHide so

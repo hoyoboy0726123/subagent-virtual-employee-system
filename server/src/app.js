@@ -1,10 +1,11 @@
 // Express app assembly. Mounts the thin routers, serves the built client in
 // production, and installs a single error handler that maps HttpError → status.
 import express from 'express';
-import cors from 'cors';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
+
+import { securityHeaders, corsAllowList, rateLimiter, requireAuthToken } from './security.js';
 
 import { getDb } from './db/connection.js';
 import { getEmbeddedAssets } from './util/portable.js';
@@ -26,8 +27,14 @@ export function createApp() {
   getDb();
 
   const app = express();
-  app.use(cors());
+  app.use(securityHeaders());
+  app.use(corsAllowList()); // no CORS by default — same-origin app (dev uses the Vite proxy)
   app.use(express.json({ limit: '12mb' })); // headroom for pasted/dropped images (base64)
+
+  // /api hardening: per-IP rate limit + optional shared-token auth. Both are
+  // no-ops until configured (RATE_LIMIT defaults generous, AUTH_TOKEN empty).
+  app.use('/api', rateLimiter());
+  app.use('/api', requireAuthToken());
 
   app.use('/api', healthRouter);
   app.use('/api', dashboardRouter);

@@ -2,23 +2,30 @@
 
 ## ⚠️ Threat model — read before deploying
 
-This app is designed for **single-user, local-machine use**. It has **no
-authentication and no multi-tenancy**, and by default **CORS is open** and the
-server binds all interfaces. That is fine on `localhost`; it is **not safe to
-expose on the public internet as-is**.
+This app is designed for **single-user, local-machine use**. It has no
+multi-tenancy. The default posture is hardened for that use case:
 
-If a stranger can reach your instance, they can:
+- **Loopback bind by default** — the server listens on `127.0.0.1`; nothing on
+  the network can reach it unless you opt in with `HOST=0.0.0.0` (the Docker
+  image sets this, since the container boundary provides the equivalent).
+- **No CORS by default** — the client is served same-origin (dev uses the Vite
+  proxy); `CORS_ORIGINS` re-enables a strict allow-list if you truly need it.
+- **Optional shared-token auth** — set `AUTH_TOKEN=…` and every `/api` request
+  must present it (`Authorization: Bearer`, `X-Auth-Token`, or the
+  `veemp_token` cookie; the web UI prompts once and remembers). Query-string
+  tokens are deliberately NOT accepted (they leak into logs/history).
+- **Per-IP rate limiting** on `/api` (default 600 requests / 5 min,
+  `RATE_LIMIT=0` disables).
+- **Security headers** (`nosniff`, `X-Frame-Options: DENY`, referrer policy,
+  camera/mic/geolocation off).
 
-- read/write/delete all your data (employees, knowledge, meetings) — every
-  endpoint is unauthenticated;
-- trigger cost-incurring actions (autonomous research burns Tavily credits;
-  meetings/goals/dialogues burn your Gemini API or Claude/Codex subscription
-  usage).
-
-**Before exposing it beyond your own machine**, put it behind a reverse proxy
-with authentication, restrict `CORS`, and add rate limiting. The planned
-public-deploy hardening is a loopback bind, an `AUTH_TOKEN`, a `CORS`
-allow-list, rate limiting, and `helmet`.
+**If you expose it beyond your own machine** (`HOST=0.0.0.0` + port open),
+**always set `AUTH_TOKEN`** — without it, anyone who can reach the port can
+read/write/delete all your data (employees, knowledge, meetings) and trigger
+cost-incurring actions (autonomous research burns Tavily credits;
+meetings/goals/dialogues burn your Gemini API or Claude/Codex subscription
+usage). A TLS-terminating reverse proxy in front is still recommended for
+anything internet-facing.
 
 ## Subscription providers (claude-cli / codex-cli)
 

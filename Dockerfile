@@ -20,7 +20,7 @@ RUN npm run build
 FROM node:${NODE_VERSION}-slim AS runtime
 ARG WITH_MARKITDOWN=0
 WORKDIR /app
-ENV NODE_ENV=production PORT=3001
+ENV NODE_ENV=production PORT=3001 HOST=0.0.0.0
 
 # Optional: MarkItDown for binary document ingestion.
 RUN if [ "$WITH_MARKITDOWN" = "1" ]; then \
