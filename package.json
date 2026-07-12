@@ -50,7 +50,8 @@
     "test:live:research": "node server/test/live.research.mjs",
     "test:markitdown": "node server/test/smoke.markitdown.mjs",
     "build:exe": "node scripts/build-exe.mjs",
-    "test:security": "node server/test/smoke.security.mjs"
+    "test:security": "node server/test/smoke.security.mjs",
+    "test:coverage": "node --test --experimental-test-coverage server/test/smoke.security.mjs server/test/smoke.tools.mjs server/test/smoke.cliRunner.mjs server/test/smoke.embeddings.mjs server/test/smoke.memory.mjs server/test/smoke.providers.mjs server/test/smoke.orchestration.mjs server/test/smoke.mjs"
   },
   "engines": {
     "node": ">=22.5"

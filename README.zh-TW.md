@@ -80,10 +80,18 @@ npm run serve                # 建置 + 啟動 → http://localhost:3001
 ### Docker
 
 ```bash
+docker compose up          # 一行指令 → http://localhost:3001
+```
+
+或手動：
+
+```bash
 docker build -t veemp .
 docker run -p 3001:3001 -v veemp-data:/app/server/data veemp
 # 加 --build-arg WITH_MARKITDOWN=1 可支援 PDF/DOCX 上傳解析
 ```
+
+> 若把埠開放到 localhost 以外，請設定 `AUTH_TOKEN`——見 [SECURITY.md](SECURITY.md)。
 
 > **零設定即可用**：沒有任何金鑰時，系統用內建的離線推理引擎（persona + 檢索），
 > 所有流程照常運作。設定金鑰或訂閱大腦後，每個回合改由真實模型驅動（見下方教學）。

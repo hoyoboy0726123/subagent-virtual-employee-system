@@ -1,0 +1,18 @@
+{
+  "name": "veemp-dev",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" }
+  },
+  "forwardPorts": [3001, 5173],
+  "portsAttributes": {
+    "3001": { "label": "API" },
+    "5173": { "label": "Vite dev" }
+  },
+  "postCreateCommand": "npm install && npm run seed && npm run setup:markitdown || true",
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint"]
+    }
+  }
+}

@@ -7,6 +7,7 @@ Hire AI employees with personas and private knowledge bases, watch them debate i
 
 ![CI](https://github.com/hoyoboy0726123/subagent-virtual-employee-system/actions/workflows/ci.yml/badge.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D22.5-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-87%25_lines-brightgreen)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 
 ![Live demo: AI employees holding a meeting in the pixel office](.github/assets/demo.gif)
@@ -71,10 +72,18 @@ npm run serve                # build + start → http://localhost:3001
 ### Docker
 
 ```bash
+docker compose up          # one command → http://localhost:3001
+```
+
+or manually:
+
+```bash
 docker build -t veemp .
 docker run -p 3001:3001 -v veemp-data:/app/server/data veemp
 # add --build-arg WITH_MARKITDOWN=1 for PDF/DOCX upload parsing
 ```
+
+> Exposing the port beyond localhost? Set `AUTH_TOKEN` — see [SECURITY.md](SECURITY.md).
 
 ## 🧠 Brains (LLM providers)
 
@@ -94,7 +103,7 @@ Switch anytime from the top bar; the UI live-detects what's available. Subscript
 - **Orchestration** (`server/src/orchestration/`): each employee is an in-app agent (persona system prompt + own RAG grounding + per-round stance); a chair agent plans each round's speaking order in one LLM call; a synthesizer writes the decision report from the real transcript.
 - **Retrieval**: BM25 by default; optional local embeddings enable BM25+vector hybrid fused with RRF.
 - **Memory**: post-meeting distillation + threshold-triggered consolidation (LLM semantic merge with deterministic fallback, non-destructive archival).
-- **Tests**: 7 hermetic smoke suites, CI on Node 22/24. `npm test`.
+- **Tests**: 8 hermetic smoke suites (61 checks), CI on Node 22/24. `npm test`; coverage via `npm run test:coverage` (~87% lines).
 
 More: [CONTRIBUTING.md](CONTRIBUTING.md) ・ [SECURITY.md](SECURITY.md)
 

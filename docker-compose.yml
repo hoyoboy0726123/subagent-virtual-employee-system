@@ -1,0 +1,27 @@
+# One-command run: `docker compose up` → http://localhost:3001
+# Data persists in the named volume `veemp-data`. Everything is optional —
+# with no env at all the app runs fully offline (deterministic engine).
+services:
+  veemp:
+    build:
+      context: .
+      # PDF/DOCX upload parsing (adds a Python layer). Uncomment to enable:
+      # args:
+      #   WITH_MARKITDOWN: "1"
+    ports:
+      - '3001:3001'
+    volumes:
+      - veemp-data:/app/server/data
+    environment:
+      # HOST=0.0.0.0 is baked into the image (the container boundary is the
+      # equivalent of the loopback default). If you publish the port beyond
+      # localhost, set an access token:
+      # AUTH_TOKEN: change-me
+      # Bring your own brain (all optional; also settable in the UI):
+      # GOOGLE_API_KEY: ...
+      # TAVILY_API_KEY: ...
+      TZ: Asia/Taipei
+    restart: unless-stopped
+
+volumes:
+  veemp-data:
