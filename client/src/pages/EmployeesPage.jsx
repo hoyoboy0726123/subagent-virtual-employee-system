@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { Modal, Empty, Markdown, ExportButtons, Citations, ProgressBar } from '../components/ui.jsx';
 import { fileToImagePart, imagesFromPaste, imagesFromDrop } from '../lib/image.js';
+import { speak, stopSpeaking, createRecognizer, ttsSupported, sttSupported } from '../lib/voice.js';
 import { useI18n } from '../i18n.jsx';
 
 // The upload types the server accepts. Kept in sync with SUPPORTED_TYPES —
@@ -520,30 +521,73 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
     try { setDialogue(await api.post(`/dialogues/${id}/reopen`)); } catch (e) { setErr(e.message); }
   };
 
-  const send = async () => {
-    const text = draft.trim();
-    const images = pendingImages;
-    if ((!text && !images.length) || busy || !dialogue) return;
+  // send() takes an optional overrideText (used by Live 對談's speech result)
+  // and RETURNS the employee's reply string so the caller can speak it aloud.
+  const send = async (overrideText) => {
+    const text = (overrideText ?? draft).trim();
+    const images = overrideText != null ? [] : pendingImages;
+    if ((!text && !images.length) || busy || !dialogue) return null;
     setErr('');
     setBusy(true);
-    setDraft('');
-    setPendingImages([]);
+    if (overrideText == null) { setDraft(''); setPendingImages([]); }
     // Optimistic echo of the manager's message (with any images) while thinking.
     setDialogue((d) => ({ ...d, transcript: [...d.transcript, { who: 'manager', text, images }] }));
     try {
-      setDialogue(await api.post(`/dialogues/${dialogue.id}/messages`, {
+      const updated = await api.post(`/dialogues/${dialogue.id}/messages`, {
         text,
         images: images.map((im) => ({ mimeType: im.mimeType, data: im.data })),
-      }));
+      });
+      setDialogue(updated);
+      const last = updated.transcript?.[updated.transcript.length - 1];
+      return last && last.who !== 'manager' ? last.text : null; // the employee's reply
     } catch (e) {
       // Roll the optimistic echo back and give the manager their words + images
       // back — otherwise they silently vanish on the next successful send.
       setErr(e.message);
       setDialogue((d) => ({ ...d, transcript: d.transcript.slice(0, -1) }));
-      setDraft(text);
-      setPendingImages(images);
+      if (overrideText == null) { setDraft(text); setPendingImages(images); }
+      return null;
     } finally { setBusy(false); }
   };
+
+  // --- Live 對談 (half-duplex voice): press to talk → STT → send → TTS reply ---
+  const [liveMode, setLiveMode] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [liveInterim, setLiveInterim] = useState('');
+  const recRef = useRef(null);
+
+  const toggleLive = () => {
+    if (liveMode) { recRef.current?.abort(); stopSpeaking(); setListening(false); setSpeaking(false); }
+    setLiveMode((v) => !v);
+  };
+
+  const startListening = () => {
+    if (busy || speaking || listening) return;
+    stopSpeaking();
+    setLiveInterim('');
+    const rec = createRecognizer({
+      lang: 'zh-TW',
+      onInterim: (txt) => setLiveInterim(txt),
+      onError: (code) => {
+        setListening(false);
+        if (code === 'not-allowed' || code === 'service-not-allowed') setErr(t('employees.micBlocked'));
+        else if (code !== 'no-speech' && code !== 'aborted') setErr(t('employees.sttError', { code }));
+      },
+      onEnd: () => { setListening(false); setLiveInterim(''); },
+      onFinal: async (finalText) => {
+        const reply = await send(finalText); // send the recognized speech
+        if (reply && ttsSupported) { setSpeaking(true); speak(reply, { onend: () => setSpeaking(false) }); }
+      },
+    });
+    if (!rec) { setErr(t('employees.sttUnsupported')); return; }
+    recRef.current = rec;
+    setListening(true);
+    rec.start();
+  };
+  const stopListening = () => recRef.current?.stop();
+  // Stop everything when the modal unmounts.
+  useEffect(() => () => { recRef.current?.abort(); stopSpeaking(); }, []);
 
   // Which close action is in flight: null | 'save' | 'discard'. Saving runs an
   // LLM distillation server-side (10–30s) — the UI must show honest progress or
@@ -650,6 +694,20 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
               ))}
             </div>
           )}
+          {liveMode && (
+            <button
+              type="button"
+              className={`live-mic${listening ? ' live' : ''}${speaking ? ' speaking' : ''}`}
+              onClick={listening ? stopListening : startListening}
+              disabled={busy || speaking}
+              title={t('employees.liveMicTitle')}
+            >
+              <span className="live-mic-dot" />
+              {speaking ? t('employees.liveSpeaking')
+                : listening ? (liveInterim || t('employees.liveListening'))
+                  : busy ? t('employees.liveThinking') : t('employees.liveTapToTalk')}
+            </button>
+          )}
           <div className="interject-row">
             <input
               placeholder={t('employees.chatInputPlaceholder', { name: employee.name })}
@@ -658,10 +716,20 @@ function OneOnOneModal({ employee, onClose, onSaved }) {
               onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
               disabled={busy || !dialogue}
             />
-            <button className="btn sm" onClick={send} disabled={busy || (!draft.trim() && !pendingImages.length) || !dialogue}>{t('employees.sendBtn')}</button>
+            <button className="btn sm" onClick={() => send()} disabled={busy || (!draft.trim() && !pendingImages.length) || !dialogue}>{t('employees.sendBtn')}</button>
           </div>
           <div className="row end">
             <ExportButtons path={`/dialogues/${dialogue.id}`} compact />
+            {(ttsSupported || sttSupported) && (
+              <button
+                className={`btn-ghost sm${liveMode ? ' live-on' : ''}`}
+                onClick={toggleLive}
+                disabled={busy}
+                title={sttSupported ? t('employees.liveToggleTitle') : t('employees.liveTtsOnlyTitle')}
+              >
+                {liveMode ? t('employees.liveOn') : t('employees.liveOff')}
+              </button>
+            )}
             <button className="btn-ghost sm" onClick={() => setClosing(true)} disabled={busy || !dialogue}>
               {t('employees.endDialogueBtn')}
             </button>
