@@ -23,8 +23,18 @@ jobs:
       - run: npm ci
 
       # Hermetic: no API keys, no network, no external services.
+      # Suites run one-by-one under `timeout` so a suite that passes its checks
+      # but never exits (stray handle) fails LOUDLY as exit 124 with its name,
+      # instead of hanging the job for 6 hours.
       - name: Test
-        run: npm test
+        run: |
+          set -e
+          for f in security tools cliRunner embeddings memory providers orchestration; do
+            echo "══════ smoke.$f ══════"
+            timeout -k 5 180 node "server/test/smoke.$f.mjs"
+          done
+          echo "══════ smoke.mjs ══════"
+          timeout -k 5 300 node server/test/smoke.mjs
 
       - name: Build client
         run: npm run build
